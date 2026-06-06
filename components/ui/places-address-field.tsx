@@ -41,7 +41,7 @@ let mapsPromise: Promise<unknown> | null = null;
 function loadGoogleMaps(key: string): Promise<unknown> {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
   const w = window as MapsNamespace;
-  if (w.google?.maps?.places) return Promise.resolve(w.google);
+  if (w.google?.maps?.places) return Promise.resolve(w);
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise((resolve, reject) => {
     // With `loading=async` the script's `load` event fires BEFORE google.maps.places is populated, so
@@ -51,9 +51,9 @@ function loadGoogleMaps(key: string): Promise<unknown> {
     const awaitPlaces = () => {
       const g = w.google;
       if (g?.maps?.importLibrary) {
-        Promise.resolve(g.maps.importLibrary('places')).then(() => resolve(g)).catch(reject);
+        Promise.resolve(g.maps.importLibrary('places')).then(() => resolve(w)).catch(reject);
       } else if (g?.maps?.places) {
-        resolve(g);
+        resolve(w);
       } else {
         reject(new Error('Google Maps loaded without Places'));
       }
