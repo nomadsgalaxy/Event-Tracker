@@ -7,14 +7,14 @@ import { getNotifications, getTravelReminders } from '@/lib/notifications';
 import { rankOf, DEFAULT_ROLES } from '@/lib/rbac';
 import { TopNav } from './top-nav';
 import { UserMenu } from './user-menu';
-import { SyncChip } from './sync-chip';
+import { DbStatus } from './db-status';
 import { InstallButton } from './install-button';
 
 // top-bar.tsx — the sticky h-14 desktop app bar (Server Component). It resolves the live auth state
 // once and lays out the three zones:
 //   LEFT   wordmark "EVENT TRACKER" (EVENT white, TRACKER orange) → Home (/)
 //   CENTER the workflow nav (client TopNav: orange-pill active + ⋯ overflow), md+ only
-//   RIGHT  [Read-only badge when signed out] · SyncChip · NotificationBell · Install · UserMenu / Sign in
+//   RIGHT  [Read-only badge when signed out] · DbStatus · NotificationBell · Install · UserMenu / Sign in
 //
 // Auth wiring is intentionally read HERE (not in the root layout) so the bar owns its own data and
 // the layout stays a thin frame. getCurrentUser is the non-redirecting guard (the bar renders over
@@ -36,7 +36,7 @@ export async function TopBar() {
   const roleDef = user ? ROLE_BY_ID[user.role] : undefined;
 
   // The company chip label comes from the admin-set branding store (default name, or the per-domain
-  // override mapped from the signed-in email). Empty ⇒ the SyncChip default 'EVENT TRACKER'. Read
+  // override mapped from the signed-in email). Empty ⇒ the DbStatus default 'EVENT TRACKER'. Read
   // server-side here so the chip needs no client-only fetch (the mount-gate rule).
   const company = (await companyForEmail(user?.email)) || undefined;
 
@@ -64,7 +64,7 @@ export async function TopBar() {
           </span>
         )}
 
-        <SyncChip company={company} />
+        <DbStatus company={company} />
 
         {user && notif && (
           <NotificationBell
