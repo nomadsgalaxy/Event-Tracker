@@ -38,42 +38,36 @@ type MapsNamespace = typeof globalThis & {
 };
 let mapsPromise: Promise<unknown> | null = null;
 
+function placesReady(w: MapsNamespace): boolean {
+  return typeof (w.google?.maps?.places as { Autocomplete?: unknown } | undefined)?.Autocomplete === 'function';
+}
+
 function loadGoogleMaps(key: string): Promise<unknown> {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
   const w = window as MapsNamespace;
-  if (w.google?.maps?.places) return Promise.resolve(w);
+  if (placesReady(w)) return Promise.resolve(w);
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise((resolve, reject) => {
-    // With `loading=async` the script's `load` event fires BEFORE google.maps.places is populated, so
-    // reading google.maps.places here would bail too early and the widget would never bind. Await the
-    // bootstrap's importLibrary('places') instead — it resolves once the Places library is actually
-    // ready (the Google-recommended async pattern). Fall back to a direct check for a legacy/sync load.
-    const awaitPlaces = () => {
-      const g = w.google;
-      if (g?.maps?.importLibrary) {
-        Promise.resolve(g.maps.importLibrary('places')).then(() => resolve(w)).catch(reject);
-      } else if (g?.maps?.places) {
-        resolve(w);
-      } else {
-        reject(new Error('Google Maps loaded without Places'));
-      }
+    // With `loading=async` the script's `load` event fires BEFORE google.maps.places is populated, and
+    // mixing it with `libraries=places` makes both the load event and importLibrary-at-load unreliable
+    // for knowing when the widget can bind. So we POLL for google.maps.places.Autocomplete (the thing
+    // we actually need) and resolve once it exists — robust to whichever load path Google takes. We
+    // resolve the WINDOW (not window.google) because the binding effect reads `(resolved).google.maps`.
+    const start = Date.now();
+    const poll = () => {
+      if (placesReady(w)) return resolve(w);
+      if (Date.now() - start > 15000) return reject(new Error('Google Maps Places timed out'));
+      setTimeout(poll, 120);
     };
-    const existing = document.getElementById('eit-gmaps-sdk') as HTMLScriptElement | null;
-    if (existing) {
-      if (w.google?.maps) awaitPlaces();
-      else {
-        existing.addEventListener('load', awaitPlaces, { once: true });
-        existing.addEventListener('error', () => reject(new Error('Google Maps failed to load')), { once: true });
-      }
-      return;
+    if (!document.getElementById('eit-gmaps-sdk')) {
+      const s = document.createElement('script');
+      s.id = 'eit-gmaps-sdk';
+      s.async = true;
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&loading=async`;
+      s.addEventListener('error', () => reject(new Error('Google Maps failed to load')), { once: true });
+      document.head.appendChild(s);
     }
-    const s = document.createElement('script');
-    s.id = 'eit-gmaps-sdk';
-    s.async = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&loading=async`;
-    s.addEventListener('load', awaitPlaces, { once: true });
-    s.addEventListener('error', () => reject(new Error('Google Maps failed to load')), { once: true });
-    document.head.appendChild(s);
+    poll();
   });
   return mapsPromise;
 }
