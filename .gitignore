@@ -1,0 +1,14 @@
+# deps + build
+/node_modules
+/.next
+/out
+/build
+
+# env — NEVER commit real creds (live-DB MONGO_URI). Use .env.example.
+.env
+.env*.local
+
+# misc
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store

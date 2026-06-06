@@ -1,0 +1,2 @@
+# Keeps public/ present so the standalone Docker build's `COPY ... public ./public` succeeds even when
+# the app ships no static assets (Next 13+ serves icons/favicon from app/, not public/).

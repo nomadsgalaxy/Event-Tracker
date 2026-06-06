@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env*
+npm-debug.log*
+*.tsbuildinfo
+README.md
+DESIGN_*.md
+REBUILD_STATUS.md
+scripts

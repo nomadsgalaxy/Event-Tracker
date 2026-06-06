@@ -1,0 +1,1506 @@
+'use client';
+
+import * as React from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useFormContext,
+  useFieldArray,
+  useWatch,
+  Controller,
+  type FieldPath,
+} from 'react-hook-form';
+import { Plus, Trash2, Lock, X, Plane } from 'lucide-react';
+import {
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { TagChip } from '@/components/ui/tag-chip';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
+import { PlacesAddressField, type ParsedPlace } from '@/components/ui/places-address-field';
+import { cn } from '@/lib/utils';
+import type { DashTag } from '@/lib/types-dashboard';
+import { lookupFlightAction, type FlightLeg } from '@/app/event/flight-actions';
+import { EVENT_STATES, type EventFormValues } from './schema';
+import { useEditorContext } from './editor-context';
+
+// app/event/[id]/edit/editor-fields.tsx — the editor's field components (full 1:1 parity pass).
+//
+// #90 GUARANTEE (focus loss / remount is structurally impossible): EVERY component here lives at
+// MODULE SCOPE and is a real React component. None is defined inside another component's render body,
+// so React keeps a STABLE element identity across re-renders and reconciles each <input> in place — a
+// re-render (on any keystroke, on a tab switch, on a useFieldArray mutation) can never tear down and
+// remount the focused input. (RHF further isolates re-renders per field via Controller/register.)
+//
+// State lives in ONE react-hook-form store. Inputs read/write that store via Controller/register, so
+// there is NO panel-local draft to lose on a tab switch — combined with the editor's forceMount tabs
+// (#93), a half-typed value in any tab survives switching away and back. (This is strictly BETTER
+// than the Python, which needed an onBlur local-draft hack to dodge its remount bug — RHF makes the
+// hack unnecessary because the field identity is stable.)
+
+type Name = FieldPath<EventFormValues>;
+
+// ── Group heading ─────────────────────────────────────────────────────────────
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+function FieldGroup({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <GroupLabel>{title}</GroupLabel>
+        {action}
+      </div>
+      <div className="grid gap-4">{children}</div>
+    </section>
+  );
+}
+
+// ── Generic text field bound to a form path ───────────────────────────────────
+export function TextField({
+  name,
+  label,
+  placeholder,
+  type = 'text',
+  mono,
+  description,
+  className,
+}: {
+  name: Name;
+  label: string;
+  placeholder?: string;
+  type?: string;
+  mono?: boolean;
+  description?: string;
+  className?: string;
+}) {
+  const { control } = useFormContext<EventFormValues>();
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className={className}>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              type={type}
+              placeholder={placeholder}
+              className={cn(mono && 'font-mono')}
+              {...field}
+              value={typeof field.value === 'string' ? field.value : ''}
+            />
+          </FormControl>
+          {description && <FormDescription>{description}</FormDescription>}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+// A bare text input bound to a path (no FormItem chrome) — for grid rows where the label is implicit.
+function BareInput({
+  name,
+  placeholder,
+  type = 'text',
+  mono,
+  ariaLabel,
+}: {
+  name: Name;
+  placeholder?: string;
+  type?: string;
+  mono?: boolean;
+  ariaLabel?: string;
+}) {
+  const { control } = useFormContext<EventFormValues>();
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <Input
+          type={type}
+          placeholder={placeholder}
+          aria-label={ariaLabel}
+          className={cn(mono && 'font-mono')}
+          {...field}
+          value={typeof field.value === 'string' ? field.value : ''}
+        />
+      )}
+    />
+  );
+}
+
+// ── State select ──────────────────────────────────────────────────────────────
+const STATE_LABELS: Record<string, string> = {
+  draft: 'Draft',
+  upcoming: 'Upcoming',
+  packing: 'Packing',
+  ready: 'Ready to ship',
+  in_transit: 'In transit',
+  onsite: 'On site',
+  returning: 'Returning',
+  unpacking: 'Unpacking',
+  closed: 'Closed',
+};
+
+export function StateField() {
+  const { control } = useFormContext<EventFormValues>();
+  return (
+    <FormField
+      control={control}
+      name="state"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>State</FormLabel>
+          <Select value={field.value} onValueChange={field.onChange}>
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {EVENT_STATES.map((st) => (
+                <SelectItem key={st} value={st}>
+                  {STATE_LABELS[st] ?? st}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+// ── A datetime-local "range" (setup/teardown) ──────────────────────────────────
+function DateTimeRange({
+  startName,
+  endName,
+  label,
+  description,
+  startPlaceholder,
+  endPlaceholder,
+}: {
+  startName: Name;
+  endName: Name;
+  label: string;
+  description?: string;
+  startPlaceholder?: string;
+  endPlaceholder?: string;
+}) {
+  return (
+    <FormItem>
+      <FormLabel>{label}</FormLabel>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <BareInput name={startName} type="datetime-local" ariaLabel={startPlaceholder || `${label} begins`} />
+        <BareInput name={endName} type="datetime-local" ariaLabel={endPlaceholder || `${label} ends`} />
+      </div>
+      {description && <FormDescription>{description}</FormDescription>}
+    </FormItem>
+  );
+}
+
+// ── Places-backed address field bound to a set of venue/hotel paths ─────────────
+// Writes the street to `addressName` on every keystroke; on a place pick, fans out city/state/zip/
+// lat/lng via setValue. Faithful to the Python PlacesAddressField + its onPlace fan-out.
+function PlacesField({
+  addressName,
+  cityName,
+  stateName,
+  zipName,
+  latName,
+  lngName,
+  label,
+  placeholder,
+  description,
+  onPlacePicked,
+}: {
+  addressName: Name;
+  cityName: Name;
+  stateName: Name;
+  zipName: Name;
+  latName?: Name;
+  lngName?: Name;
+  label: string;
+  placeholder?: string;
+  description?: string;
+  onPlacePicked?: (p: ParsedPlace) => void;
+}) {
+  const { control, setValue } = useFormContext<EventFormValues>();
+  const { placesAvailable } = useEditorContext();
+  const handlePlace = useCallback(
+    (p: ParsedPlace) => {
+      // Order: fan out the multi-field update so a street-only onChange can't clobber it (Python rule).
+      if (p.address) setValue(addressName, p.address, { shouldDirty: true });
+      if (p.city) setValue(cityName, p.city, { shouldDirty: true });
+      if (p.state) setValue(stateName, p.state, { shouldDirty: true });
+      if (p.zip) setValue(zipName, p.zip, { shouldDirty: true });
+      if (latName && typeof p.lat === 'number') setValue(latName, p.lat as never, { shouldDirty: true });
+      if (lngName && typeof p.lng === 'number') setValue(lngName, p.lng as never, { shouldDirty: true });
+      onPlacePicked?.(p);
+    },
+    [addressName, cityName, stateName, zipName, latName, lngName, setValue, onPlacePicked]
+  );
+  return (
+    <FormField
+      control={control}
+      name={addressName}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <PlacesAddressField
+              value={typeof field.value === 'string' ? field.value : ''}
+              onChange={(v) => field.onChange(v)}
+              onPlace={handlePlace}
+              placeholder={placeholder}
+              placesAvailable={placesAvailable}
+              aria-label={label}
+            />
+          </FormControl>
+          {description && <FormDescription>{description}</FormDescription>}
+        </FormItem>
+      )}
+    />
+  );
+}
+
+// ── Amenities list editor (add/remove rows) ────────────────────────────────────
+function AmenitiesEditor() {
+  const { control } = useFormContext<EventFormValues>();
+  const { fields, append, remove } = useFieldArray({ control, name: 'venue.amenities' as never });
+  return (
+    <FormItem>
+      <FormLabel>Amenities</FormLabel>
+      <FormDescription>Wi-Fi, power, loading dock, forklift, etc.</FormDescription>
+      <div className="grid gap-2">
+        {fields.map((f, i) => (
+          <div key={f.id} className="flex items-center gap-2">
+            <BareInput name={`venue.amenities.${i}` as Name} placeholder="Amenity" ariaLabel={`Amenity ${i + 1}`} />
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon-sm"
+              onClick={() => remove(i)}
+              aria-label={`Remove amenity ${i + 1}`}
+            >
+              <Trash2 aria-hidden />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div>
+        <Button type="button" size="sm" variant="secondary" onClick={() => append('' as never)}>
+          <Plus aria-hidden />
+          Add amenity
+        </Button>
+      </div>
+    </FormItem>
+  );
+}
+
+// ── Timezone field + "Use mine" ────────────────────────────────────────────────
+function TimezoneField() {
+  const { control, setValue } = useFormContext<EventFormValues>();
+  const { viewerTimezone } = useEditorContext();
+  return (
+    <FormField
+      control={control}
+      name="venue.timezone"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Timezone</FormLabel>
+          <div className="flex items-center gap-2">
+            <FormControl>
+              <Input
+                {...field}
+                value={typeof field.value === 'string' ? field.value : ''}
+                placeholder={viewerTimezone || 'America/New_York'}
+                className="font-mono"
+              />
+            </FormControl>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="whitespace-nowrap"
+              disabled={!viewerTimezone}
+              onClick={() => setValue('venue.timezone', viewerTimezone, { shouldDirty: true })}
+            >
+              Use mine
+            </Button>
+          </div>
+          <FormDescription>
+            Auto-filled from the address. Event times show in the venue&rsquo;s time and each viewer&rsquo;s local time.
+            IANA name, e.g. America/New_York.
+          </FormDescription>
+        </FormItem>
+      )}
+    />
+  );
+}
+
+// ── Overview panel ────────────────────────────────────────────────────────────
+export function OverviewPanel() {
+  return (
+    <div>
+      <FieldGroup title="Basics">
+        <TextField name="name" label="Name" placeholder="e.g. RAPID + TCT 2026" />
+        <StateField />
+      </FieldGroup>
+
+      <FieldGroup title="Schedule">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField name="startDate" label="Start date" type="date" />
+          <TextField name="endDate" label="End date" type="date" />
+          <TextField name="doorsOpen" label="Doors open" type="time" />
+          <TextField name="doorsClose" label="Doors close" type="time" />
+        </div>
+        <DateTimeRange
+          startName="setup.start"
+          endName="setup.end"
+          label="Setup"
+          description="When booth setup begins and ends."
+          startPlaceholder="Setup begins"
+          endPlaceholder="Setup ends"
+        />
+        <DateTimeRange
+          startName="teardown.start"
+          endName="teardown.end"
+          label="Teardown"
+          description="When tear-down begins and ends."
+          startPlaceholder="Teardown begins"
+          endPlaceholder="Teardown ends"
+        />
+      </FieldGroup>
+
+      <FieldGroup title="Venue">
+        <TextField name="venue.name" label="Venue name" placeholder="e.g. Cobo Center" />
+        <TextField
+          name="website"
+          label="Website"
+          type="url"
+          placeholder="https://example.com/event"
+          description="Show registration page, venue website, or any URL the team should reference."
+        />
+        <PlacesField
+          addressName="venue.address"
+          cityName="venue.city"
+          stateName="venue.state"
+          zipName="venue.zip"
+          latName={'venue.lat' as Name}
+          lngName={'venue.lng' as Name}
+          label="Street address"
+          placeholder="3150 Paradise Rd"
+          description="Start typing — pick a suggestion to autofill city / state / ZIP."
+        />
+        <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
+          <TextField name="venue.city" label="City" placeholder="Las Vegas" />
+          <TextField name="venue.state" label="State" placeholder="NV" />
+          <TextField name="venue.zip" label="ZIP" mono placeholder="89109" />
+        </div>
+        <TimezoneField />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField name="venue.booth" label="Booth #" mono />
+          <TextField name="venue.boothSize" label="Booth size" placeholder="e.g. 20×20 ft" />
+        </div>
+        <AmenitiesEditor />
+      </FieldGroup>
+
+      <FieldGroup title="Point of contact (venue)">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField name="venue.contact.name" label="Name" />
+          <TextField name="venue.contact.role" label="Role" placeholder="e.g. Exhibitor services" />
+          <TextField name="venue.contact.email" label="Email" type="email" mono />
+          <TextField name="venue.contact.phone" label="Phone" type="tel" mono />
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Tags">
+        <TagsField />
+      </FieldGroup>
+    </div>
+  );
+}
+
+// ── Tags field (apply / remove + primary radio) ────────────────────────────────
+function TagsField() {
+  const { control, setValue } = useFormContext<EventFormValues>();
+  const { tags, canApplyTags } = useEditorContext();
+  const radioName = useId();
+
+  return (
+    <Controller
+      control={control}
+      name="tagIds"
+      render={({ field: tagIdsField }) => (
+        <Controller
+          control={control}
+          name="primaryTagId"
+          render={({ field: primaryField }) => {
+            const appliedIds: string[] = Array.isArray(tagIdsField.value) ? tagIdsField.value : [];
+            const appliedTags = appliedIds
+              .map((id) => tags.find((t) => t.id === id))
+              .filter((t): t is DashTag => !!t);
+            const primary = primaryField.value as string | null;
+            const apply = (id: string) => {
+              if (appliedIds.includes(id)) return;
+              tagIdsField.onChange([...appliedIds, id]);
+            };
+            const unapply = (id: string) => {
+              tagIdsField.onChange(appliedIds.filter((x) => x !== id));
+              if (primary === id) setValue('primaryTagId', null, { shouldDirty: true });
+            };
+            const unapplied = tags.filter((t) => !appliedIds.includes(t.id));
+            return (
+              <div className="grid gap-3">
+                {canApplyTags && unapplied.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 text-xs text-muted-foreground">Apply:</span>
+                    {unapplied.map((t) => (
+                      <TagChip key={t.id} tag={t} onClick={() => apply(t.id)} />
+                    ))}
+                  </div>
+                )}
+                {appliedTags.length > 0 ? (
+                  <div className="grid gap-2">
+                    {appliedTags.length > 1 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Primary tag — shown on narrow preview cards (Dashboard timeline). Pick it with the radio.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {appliedTags.map((t) => (
+                        <div key={t.id} className="flex items-center gap-1.5">
+                          <input
+                            type="radio"
+                            name={radioName}
+                            value={t.id}
+                            checked={primary === t.id}
+                            disabled={!canApplyTags}
+                            onChange={() => setValue('primaryTagId', t.id, { shouldDirty: true })}
+                            aria-label={`Make ${t.label} the primary tag`}
+                            title="Make this the primary tag (shown on narrow Dashboard cards)"
+                          />
+                          <span className="inline-flex items-center gap-1">
+                            <TagChip tag={t} />
+                            {canApplyTags && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="size-5 text-muted-foreground"
+                                onClick={() => unapply(t.id)}
+                                aria-label={`Remove tag ${t.label}`}
+                              >
+                                <X aria-hidden className="size-3" />
+                              </Button>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] italic text-muted-foreground">
+                    {canApplyTags ? 'No tags applied yet. Click a tag above to apply it.' : 'No tags applied.'}
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        />
+      )}
+    />
+  );
+}
+
+// ── Team & Travel panel (PII) ─────────────────────────────────────────────────
+export function TeamPanel({ piiEditable }: { piiEditable: boolean }) {
+  const { control, setValue } = useFormContext<EventFormValues>();
+  const { fields, append, remove } = useFieldArray({ control, name: 'staff' });
+  const { directory } = useEditorContext();
+
+  // Watch staff emails to compute the available directory + the lead options (reactive).
+  const staffWatch = useWatch({ control, name: 'staff' }) as EventFormValues['staff'] | undefined;
+  const staffList = staffWatch ?? [];
+  const lead = useWatch({ control, name: 'lead' }) as string | undefined;
+
+  const assignedEmails = useMemo(
+    () => new Set(staffList.map((s) => (s.email || '').toLowerCase()).filter(Boolean)),
+    [staffList]
+  );
+  const available = useMemo(
+    () => directory.filter((u) => !assignedEmails.has(u.email.toLowerCase())),
+    [directory, assignedEmails]
+  );
+
+  // Lead options from ALL assigned staff (email preferred, name fallback for legacy email-less staff).
+  const leadOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const s of staffList) {
+      const val = (s.email || s.name || '').trim();
+      if (!val || seen.has(val)) continue;
+      seen.add(val);
+      const u = s.email ? directory.find((d) => d.email.toLowerCase() === s.email.toLowerCase()) : null;
+      opts.push({ value: val, label: (u && u.name) || s.name || s.email || '(no name)' });
+    }
+    return opts;
+  }, [staffList, directory]);
+
+  // Normalize the stored lead (legacy name OR email) to an option value.
+  const currentLeadStaffer = staffList.find((s) => lead && (lead === s.email || lead === s.name));
+  const currentLeadValue = currentLeadStaffer ? currentLeadStaffer.email || currentLeadStaffer.name : lead || '';
+
+  const addFromDirectory = (email: string) => {
+    if (!email) return;
+    const u = directory.find((d) => d.email.toLowerCase() === email.toLowerCase());
+    const row = piiEditable
+      ? { name: u?.name || '', email, role: '', onsiteStart: '', onsiteEnd: '', hotel: {}, travel: {} }
+      : { name: u?.name || '', email, role: '', onsiteStart: '', onsiteEnd: '' };
+    append(row);
+  };
+
+  return (
+    <div>
+      <FieldGroup title="Team">
+        <FormItem>
+          <FormLabel>Lead</FormLabel>
+          <Select
+            value={currentLeadValue || undefined}
+            onValueChange={(v) => setValue('lead', v, { shouldDirty: true })}
+          >
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="— choose a lead —" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {leadOptions.length === 0 ? (
+                <SelectItem value="__none__" disabled>
+                  Add a staffer first
+                </SelectItem>
+              ) : (
+                leadOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <FormDescription>The lead may edit this event and see everyone&rsquo;s travel &amp; hotel.</FormDescription>
+        </FormItem>
+      </FieldGroup>
+
+      <FieldGroup title={`Staff · ${fields.length} assigned`}>
+        {fields.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            No staff yet. Add a team member from the directory below.
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {fields.map((f, i) => (
+              <StaffRow key={f.id} index={i} piiEditable={piiEditable} onRemove={() => remove(i)} />
+            ))}
+          </div>
+        )}
+
+        <Separator />
+
+        {available.length > 0 ? (
+          <FormItem>
+            <FormLabel>Add team member</FormLabel>
+            <Select value="" onValueChange={addFromDirectory}>
+              <FormControl>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="+ Add team member from directory…" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {available.map((u) => (
+                  <SelectItem key={u.email} value={u.email}>
+                    {u.name ? `${u.name} (${u.email})` : u.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              {directory.length} {directory.length === 1 ? 'user' : 'users'} in directory · pick one to add.
+            </FormDescription>
+          </FormItem>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">
+            All directory users are already assigned. New users appear here after they sign in for the first time,
+            or after an admin pre-creates them on the Config screen.
+          </p>
+        )}
+      </FieldGroup>
+    </div>
+  );
+}
+
+// One staffer row — its OWN module-scope component, so editing staffer N's role can't remount
+// staffer M's inputs. Field paths are computed from the row index. Shows the directory avatar/name +
+// onsite range, then (when piiEditable) the travel + hotel sub-editors.
+function StaffRow({
+  index,
+  piiEditable,
+  onRemove,
+}: {
+  index: number;
+  piiEditable: boolean;
+  onRemove: () => void;
+}) {
+  const base = `staff.${index}` as const;
+  const { control } = useFormContext<EventFormValues>();
+  const { directory } = useEditorContext();
+  const email = useWatch({ control, name: `${base}.email` as Name }) as string | undefined;
+  const nameVal = useWatch({ control, name: `${base}.name` as Name }) as string | undefined;
+  const u = email ? directory.find((d) => d.email.toLowerCase() === email.toLowerCase()) : null;
+  const display = u || { name: nameVal || '', email: email || '', picture: '' };
+  const initials =
+    (display.name || display.email || '?')
+      .split(/\s+/)
+      .map((p) => p[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '?';
+  const isLegacy = !email && !!nameVal;
+
+  return (
+    <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4">
+      <div className="grid items-center gap-3 sm:grid-cols-[auto_1fr_1fr_auto]">
+        <Avatar size="sm">
+          {display.picture ? <AvatarImage src={display.picture} alt="" referrerPolicy="no-referrer" /> : null}
+          <AvatarFallback className="text-[10px] font-bold">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <div className="truncate text-sm text-foreground">
+            {display.name || display.email || <span className="italic text-muted-foreground">not yet picked</span>}
+          </div>
+          <div className="truncate font-mono text-[10px] text-muted-foreground">
+            {display.email}
+            {isLegacy ? ' · legacy entry' : ''}
+          </div>
+        </div>
+        <BareInput name={`${base}.role` as Name} placeholder="Role (Lead, Booth ops, …)" ariaLabel={`Role for staffer ${index + 1}`} />
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={onRemove}
+          aria-label={`Remove staffer ${index + 1}`}
+        >
+          <Trash2 aria-hidden />
+          <span className="hidden sm:inline">Remove</span>
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormItem>
+          <FormLabel>Onsite arrives</FormLabel>
+          <BareInput name={`${base}.onsiteStart` as Name} type="datetime-local" ariaLabel="Onsite arrives" />
+        </FormItem>
+        <FormItem>
+          <FormLabel>Onsite leaves</FormLabel>
+          <BareInput name={`${base}.onsiteEnd` as Name} type="datetime-local" ariaLabel="Onsite leaves" />
+        </FormItem>
+      </div>
+
+      {piiEditable ? (
+        <>
+          <TravelEditor base={base} />
+          <HotelEditor base={base} index={index} />
+        </>
+      ) : (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Lock aria-hidden className="size-3.5" />
+          Travel &amp; hotel are private — only a manager, this staffer, or the event lead can edit them.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Hotel sub-editor (PII) ─────────────────────────────────────────────────────
+// Collapsible. On first expand, seeds default check-in/out from the onsite range (Python parity).
+function HotelEditor({ base, index }: { base: string; index: number }) {
+  const h = `${base}.hotel` as const;
+  const { control, getValues, setValue } = useFormContext<EventFormValues>();
+  const hotel = useWatch({ control, name: h as Name }) as Record<string, unknown> | undefined;
+  const hasAny = !!(
+    hotel &&
+    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes)
+  );
+  const [expanded, setExpanded] = useState(hasAny);
+
+  const seedDefaults = useCallback(() => {
+    const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+    const onsiteStart = getValues(`${base}.onsiteStart` as Name) as string;
+    const onsiteEnd = getValues(`${base}.onsiteEnd` as Name) as string;
+    const startDate = getValues('startDate');
+    const endDate = getValues('endDate');
+    const next = { ...cur };
+    let mutated = false;
+    const baseInDate = (onsiteStart || (startDate ? `${startDate}T09:00` : '')).slice(0, 10);
+    const baseOutDate = (onsiteEnd || (endDate ? `${endDate}T17:00` : '')).slice(0, 10);
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (!next.checkInAt && baseInDate) {
+      const d = new Date(baseInDate + 'T00:00:00');
+      d.setDate(d.getDate() - 1);
+      next.checkInAt = `${ymd(d)}T15:00`;
+      mutated = true;
+    }
+    if (!next.checkOutAt && baseOutDate) {
+      const d = new Date(baseOutDate + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      next.checkOutAt = `${ymd(d)}T11:00`;
+      mutated = true;
+    }
+    if (mutated) setValue(h as Name, next as never, { shouldDirty: true });
+  }, [base, h, getValues, setValue]);
+
+  const clear = () => {
+    setValue(h as Name, {} as never, { shouldDirty: true });
+    setExpanded(false);
+  };
+
+  // Places fan-out for the hotel address writes onto the hotel sub-object.
+  const onHotelPlace = useCallback(
+    (p: ParsedPlace) => {
+      const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+      const next = { ...cur };
+      if (p.address) next.address = p.address;
+      if (p.city) next.city = p.city;
+      if (p.state) next.state = p.state;
+      if (p.zip) next.zip = p.zip;
+      if (typeof p.lat === 'number') next.lat = p.lat;
+      if (typeof p.lng === 'number') next.lng = p.lng;
+      setValue(h as Name, next as never, { shouldDirty: true });
+    },
+    [h, getValues, setValue]
+  );
+
+  const phone = (hotel?.phone as string) || '';
+
+  if (!expanded) {
+    return (
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="w-fit text-muted-foreground"
+        onClick={() => {
+          setExpanded(true);
+          seedDefaults();
+        }}
+      >
+        <Plus aria-hidden />
+        Add hotel info
+      </Button>
+    );
+  }
+  return (
+    <fieldset className="grid gap-3 rounded-md border border-border bg-card p-3">
+      <legend className="flex w-full items-center justify-between px-1">
+        <GroupLabel>Hotel</GroupLabel>
+      </legend>
+      <div className="flex items-center justify-end -mt-2">
+        <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
+          Clear
+        </Button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
+        <BareInput name={`${h}.name` as Name} placeholder="Hotel name (e.g. Marriott Marquis)" ariaLabel="Hotel name" />
+        <BareInput name={`${h}.room` as Name} placeholder="Room #" ariaLabel="Room number" />
+        <BareInput name={`${h}.confirmation` as Name} placeholder="Confirmation #" ariaLabel="Confirmation number" />
+      </div>
+      <PlacesField
+        addressName={`${h}.address` as Name}
+        cityName={`${h}.city` as Name}
+        stateName={`${h}.state` as Name}
+        zipName={`${h}.zip` as Name}
+        latName={`${h}.lat` as Name}
+        lngName={`${h}.lng` as Name}
+        label="Hotel address"
+        placeholder="1331 Pennsylvania Ave NW"
+        onPlacePicked={onHotelPlace}
+      />
+      <div className="grid items-end gap-3 sm:grid-cols-2">
+        <BareInput name={`${h}.phone` as Name} type="tel" placeholder="Front desk phone (tap-to-call)" mono ariaLabel="Front desk phone" />
+        {phone ? (
+          <a
+            href={`tel:${phone}`}
+            className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm text-primary hover:bg-accent"
+          >
+            Call front desk
+          </a>
+        ) : (
+          <span className="self-center text-[11px] text-muted-foreground">Add a phone for one-tap dial.</span>
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormItem>
+          <FormLabel>Check-in</FormLabel>
+          <BareInput name={`${h}.checkInAt` as Name} type="datetime-local" ariaLabel="Hotel check-in" />
+        </FormItem>
+        <FormItem>
+          <FormLabel>Check-out</FormLabel>
+          <BareInput name={`${h}.checkOutAt` as Name} type="datetime-local" ariaLabel="Hotel check-out" />
+        </FormItem>
+      </div>
+      <BareInput name={`${h}.notes` as Name} placeholder="Notes (e.g. rooming with M. Kovář, late check-in)" ariaLabel="Hotel notes" />
+      {/* keep `index` referenced for a stable per-row id space if needed later */}
+      <span className="sr-only">Hotel for staffer {index + 1}</span>
+    </fieldset>
+  );
+}
+
+// ── Travel sub-editor (PII) — mode radios + two legs + flight lookup ───────────
+function TravelEditor({ base }: { base: string }) {
+  const t = `${base}.travel` as const;
+  const { control, getValues, setValue } = useFormContext<EventFormValues>();
+  const travel = useWatch({ control, name: t as Name }) as Record<string, unknown> | undefined;
+  const mode = (travel?.mode as string) || '';
+  const hasAny = !!(mode || travel?.outbound || travel?.return);
+  const [expanded, setExpanded] = useState(hasAny);
+  const radioName = useId();
+
+  const setMode = (m: string) => setValue(`${t}.mode` as Name, m as never, { shouldDirty: true });
+  const clear = () => {
+    setValue(t as Name, {} as never, { shouldDirty: true });
+    setExpanded(false);
+  };
+
+  if (!expanded) {
+    return (
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="w-fit text-muted-foreground"
+        onClick={() => setExpanded(true)}
+      >
+        <Plane aria-hidden />
+        Add travel info
+      </Button>
+    );
+  }
+
+  return (
+    <fieldset className="grid gap-3 rounded-md border border-border bg-card p-3">
+      <legend className="px-1">
+        <GroupLabel>Travel</GroupLabel>
+      </legend>
+      <div className="flex items-center justify-between -mt-2">
+        <div className="flex flex-wrap gap-4">
+          {[
+            { value: 'flight', label: 'Flight' },
+            { value: 'train', label: 'Train' },
+            { value: 'drive', label: 'Drive' },
+          ].map((m) => (
+            <label key={m.value} className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground">
+              <input type="radio" name={radioName} value={m.value} checked={mode === m.value} onChange={() => setMode(m.value)} />
+              {m.label}
+            </label>
+          ))}
+        </div>
+        <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
+          Clear
+        </Button>
+      </div>
+      {mode && (
+        <>
+          <TravelLeg base={`${t}.outbound`} label="Outbound" mode={mode} legKey="outbound" travelPath={t} getValues={getValues} setValue={setValue} />
+          <TravelLeg base={`${t}.return`} label="Return" mode={mode} legKey="return" travelPath={t} getValues={getValues} setValue={setValue} />
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+// One travel leg. Module-scope identity keeps focus (no local-draft-on-blur hack needed — RHF holds
+// the value). Flight mode shows a "Look up flight" button (when the provider is wired) that calls the
+// server proxy + fills blanks; when NOT wired, it flags the key. Auto-lookup on a plausible flight #.
+function TravelLeg({
+  base,
+  label,
+  mode,
+  legKey,
+  travelPath,
+  getValues,
+  setValue,
+}: {
+  base: string;
+  label: string;
+  mode: string;
+  legKey: 'outbound' | 'return';
+  travelPath: string;
+  getValues: ReturnType<typeof useFormContext<EventFormValues>>['getValues'];
+  setValue: ReturnType<typeof useFormContext<EventFormValues>>['setValue'];
+}) {
+  const { control } = useFormContext<EventFormValues>();
+  const { flightLookupAvailable } = useEditorContext();
+  const isDrive = mode === 'drive';
+  const isFlight = mode === 'flight';
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const lastAutoNum = useRef('');
+
+  const legNumber = useWatch({ control, name: `${base}.number` as Name }) as string | undefined;
+  const legCarrier = useWatch({ control, name: `${base}.carrier` as Name }) as string | undefined;
+  const legDepartLoc = useWatch({ control, name: `${base}.departLocation` as Name }) as string | undefined;
+  const legArriveLoc = useWatch({ control, name: `${base}.arriveLocation` as Name }) as string | undefined;
+  const legDepartAt = useWatch({ control, name: `${base}.departAt` as Name }) as string | undefined;
+
+  const carrierLabel = isFlight ? 'Airline' : mode === 'train' ? 'Operator' : 'Vehicle / driver';
+  const numberLabel = isFlight ? 'Flight #' : mode === 'train' ? 'Train #' : 'Plate / vehicle';
+  const locLabel = (isFlight ? 'airport' : mode === 'train' ? 'station' : 'location');
+
+  const applyLeg = useCallback(
+    (looked: FlightLeg, auto: boolean) => {
+      const curLeg = (getValues(base as Name) as Record<string, unknown>) || {};
+      let next: Record<string, unknown>;
+      if (auto) {
+        // Fill only blanks — preserve everything the user already entered.
+        next = { ...curLeg };
+        for (const k of Object.keys(looked) as (keyof FlightLeg)[]) {
+          if (next[k] == null || next[k] === '') next[k] = looked[k];
+        }
+      } else {
+        // Manual: replace with looked-up values, keep the user's confirmation #.
+        next = { ...looked, confirmation: (curLeg.confirmation as string) || looked.confirmation || '' };
+      }
+      setValue(`${travelPath}.${legKey}` as Name, next as never, { shouldDirty: true });
+    },
+    [base, legKey, travelPath, getValues, setValue]
+  );
+
+  const doLookup = useCallback(
+    async (auto: boolean) => {
+      const num = (legNumber || '').trim();
+      if (!num) {
+        if (!auto) setNote('Enter a flight number first.');
+        return;
+      }
+      const date = (legDepartAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+      setBusy(true);
+      setNote('');
+      try {
+        const r = await lookupFlightAction(num, date);
+        if (!r.available) {
+          if (!auto) setNote('Flight lookup is not configured.');
+          return;
+        }
+        if (!r.leg) {
+          if (!auto) setNote('No matching flight for that number + date.');
+          return;
+        }
+        applyLeg(r.leg, auto);
+        setNote(auto ? `Auto-filled ${num.toUpperCase()}.` : `Filled ${num.toUpperCase()} from flight data.`);
+      } catch (e) {
+        if (!auto) setNote('Flight lookup failed: ' + (e instanceof Error ? e.message : String(e)));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [legNumber, legDepartAt, applyLeg]
+  );
+
+  // Auto flight lookup (#15): debounced, fill-blanks-only, fires once per plausible flight number,
+  // skipped when the leg already looks complete (so we never clobber typed data or make a needless call).
+  useEffect(() => {
+    if (!isFlight || !flightLookupAvailable) return;
+    if (legCarrier && legDepartLoc && legArriveLoc) return; // already filled
+    const num = (legNumber || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!/^[A-Z0-9]{2}\d{1,4}$/.test(num)) return;
+    if (num === lastAutoNum.current) return;
+    const tmr = setTimeout(() => {
+      lastAutoNum.current = num;
+      void doLookup(true);
+    }, 1200);
+    return () => clearTimeout(tmr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legNumber, legDepartAt, isFlight, flightLookupAvailable]);
+
+  return (
+    <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <GroupLabel>{label}</GroupLabel>
+        {isFlight && flightLookupAvailable && (
+          <span className="inline-flex items-center gap-2">
+            {busy && <span className="text-[10px] text-muted-foreground">looking up…</span>}
+            <Button type="button" variant="secondary" size="xs" disabled={busy} onClick={() => doLookup(false)}>
+              Look up flight
+            </Button>
+          </span>
+        )}
+        {isFlight && !flightLookupAvailable && (
+          <span className="text-[10px] text-muted-foreground" title="No flight-lookup key configured">
+            Set AERODATABOX_API_KEY to auto-fill flights
+          </span>
+        )}
+      </div>
+      {!isDrive && (
+        <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr]">
+          <BareInput name={`${base}.carrier` as Name} placeholder={carrierLabel} ariaLabel={`${label} ${carrierLabel}`} />
+          <BareInput name={`${base}.number` as Name} placeholder={numberLabel} ariaLabel={`${label} ${numberLabel}`} />
+          <BareInput name={`${base}.confirmation` as Name} placeholder="Confirmation #" ariaLabel={`${label} confirmation`} />
+        </div>
+      )}
+      {/* #92: ONE grid in ROW order so DOM order == Tab order (locations row, then dates row). */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <BareInput name={`${base}.departLocation` as Name} placeholder={`Depart from (${locLabel})`} ariaLabel={`${label} depart from`} />
+        <BareInput name={`${base}.arriveLocation` as Name} placeholder={`Arrive at (${locLabel})`} ariaLabel={`${label} arrive at`} />
+        <BareInput name={`${base}.departAt` as Name} type="datetime-local" ariaLabel={`${label} depart date`} />
+        <BareInput name={`${base}.arriveAt` as Name} type="datetime-local" ariaLabel={`${label} arrive date`} />
+      </div>
+      <BareInput name={`${base}.notes` as Name} placeholder="Notes (e.g. seat, layover, parking)" ariaLabel={`${label} notes`} />
+      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
+    </div>
+  );
+}
+
+// ── Packing panel — assigned cases grid + pallets ──────────────────────────────
+export function PackingPanel() {
+  return (
+    <div>
+      <FieldGroup title="Road cases">
+        <FormItem>
+          <FormLabel>Assigned cases</FormLabel>
+          <FormDescription>Pick from the case catalog. Item-level contents come from scan-pack.</FormDescription>
+          <CasesGrid />
+        </FormItem>
+      </FieldGroup>
+      <PalletsSection />
+    </div>
+  );
+}
+
+// The assigned-cases checkbox grid — reuses the Manifest assign-cases availability logic (the lock).
+function CasesGrid() {
+  const { control, setValue, getValues } = useFormContext<EventFormValues>();
+  const { cases } = useEditorContext();
+  const assigned = (useWatch({ control, name: 'cases' }) as string[] | undefined) ?? [];
+  const assignedSet = new Set(assigned);
+
+  // Retired cases are excluded unless already assigned to THIS event (Python parity).
+  const visible = cases.filter((c) => !c.retired || assignedSet.has(c.id));
+
+  const toggle = (id: string, on: boolean) => {
+    const next = on ? [...assigned, id] : assigned.filter((x) => x !== id);
+    // Prune any now-removed case from its pallet (the #24 FK cleanup; also enforced server-side).
+    const pallets = (getValues('pallets') as EventFormValues['pallets']) || [];
+    const validSet = new Set(next);
+    const prunedPallets = pallets.map((p) => ({ ...p, caseIds: (p.caseIds || []).filter((cid) => validSet.has(cid)) }));
+    setValue('cases', next, { shouldDirty: true });
+    setValue('pallets', prunedPallets, { shouldDirty: true });
+  };
+
+  if (visible.length === 0) {
+    return <p className="text-sm text-muted-foreground">No cases in the catalog yet.</p>;
+  }
+
+  return (
+    <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+      {visible.map((c) => {
+        const sel = assignedSet.has(c.id);
+        const locked = c.unavailable && !sel;
+        return (
+          <label
+            key={c.id}
+            className={cn(
+              'flex items-center gap-2 rounded-md border px-2.5 py-2 transition-colors',
+              locked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+              sel ? 'border-primary bg-primary/8' : 'border-border bg-muted/30 hover:bg-muted'
+            )}
+          >
+            <Checkbox
+              checked={sel}
+              disabled={locked}
+              onCheckedChange={(v) => !locked && toggle(c.id, v === true)}
+              aria-label={`Assign ${c.label}`}
+            />
+            <div className="min-w-0 flex-1">
+              {c.slug ? <div className="truncate font-mono text-[10px] text-muted-foreground">{c.slug}</div> : null}
+              <div className="truncate text-xs text-foreground">{c.label}</div>
+              {locked && (
+                <div className="mt-0.5 flex items-center gap-1 text-[10px]" style={{ color: 'var(--warning)' }}>
+                  <Lock aria-hidden className="size-2.5" /> {c.statusLabel}
+                </div>
+              )}
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Pallets editor — add/rename/remove, assign cases (select + drag-drop), tracking ─────────────
+function newPalletId(): string {
+  return 'pallet-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function PalletsSection() {
+  const { control, setValue } = useFormContext<EventFormValues>();
+  const { caseLabelById } = useEditorContext();
+  const pallets = (useWatch({ control, name: 'pallets' }) as EventFormValues['pallets'] | undefined) ?? [];
+  const cases = (useWatch({ control, name: 'cases' }) as string[] | undefined) ?? [];
+
+  const palletForCase = (cid: string) => pallets.find((p) => (p.caseIds || []).includes(cid)) || null;
+  const looseCaseIds = cases.filter((cid) => !palletForCase(cid));
+
+  const writePallets = (next: EventFormValues['pallets']) => setValue('pallets', next, { shouldDirty: true });
+
+  const addPallet = () => {
+    writePallets([
+      ...pallets,
+      { id: newPalletId(), label: `Pallet ${pallets.length + 1}`, caseIds: [], tracking: '', notes: '' },
+    ]);
+  };
+  const removePallet = (id: string) => writePallets(pallets.filter((p) => p.id !== id));
+  const renamePallet = (id: string, label: string) =>
+    writePallets(pallets.map((p) => (p.id === id ? { ...p, label } : p)));
+  const setTracking = (id: string, tracking: string) =>
+    writePallets(pallets.map((p) => (p.id === id ? { ...p, tracking } : p)));
+  const assignCaseToPallet = (cid: string, palletId: string | null) => {
+    const next = pallets.map((p) => ({ ...p, caseIds: (p.caseIds || []).filter((x) => x !== cid) }));
+    if (palletId) {
+      const target = next.find((p) => p.id === palletId);
+      if (target && !target.caseIds.includes(cid)) target.caseIds.push(cid);
+    }
+    writePallets(next);
+  };
+
+  const summary = `${pallets.length} ${pallets.length === 1 ? 'pallet' : 'pallets'} · ${looseCaseIds.length} loose ${looseCaseIds.length === 1 ? 'case' : 'cases'}`;
+  const labelOf = (cid: string) => caseLabelById[cid] || cid;
+
+  // HTML5 drag-drop (a desktop progressive enhancement; the <select> rows are the keyboard/touch fallback).
+  const onDragStart = (e: React.DragEvent, cid: string) => {
+    e.dataTransfer.setData('text/plain', cid);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const dropTo = (palletId: string | null) => (e: React.DragEvent) => {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).style.outline = '';
+    const cid = e.dataTransfer.getData('text/plain');
+    if (cid) assignCaseToPallet(cid, palletId);
+  };
+  const dragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  const dragEnter = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).style.outline = '2px dashed var(--primary)';
+    (e.currentTarget as HTMLElement).style.outlineOffset = '2px';
+  };
+  const dragLeave = (e: React.DragEvent) => {
+    const el = e.currentTarget as HTMLElement;
+    if (!el.contains(e.relatedTarget as Node)) el.style.outline = '';
+  };
+
+  return (
+    <FieldGroup
+      title="Pallets"
+      action={
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">{summary}</span>
+          {cases.length > 0 && (
+            <Button type="button" size="sm" variant="secondary" onClick={addPallet}>
+              <Plus aria-hidden />
+              Add pallet
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <FormDescription>
+        Group roadcases into pallets for the carrier. Logistics only — item contents are unchanged. Unpalletized cases
+        ship loose. Drag a case chip between pallets (desktop), or use the menus below.
+      </FormDescription>
+
+      {cases.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Assign roadcases to this event first, then group them into pallets here.</p>
+      ) : (
+        <div className="grid gap-2">
+          {pallets.map((p) => (
+            <div
+              key={p.id}
+              onDragOver={dragOver}
+              onDragEnter={dragEnter}
+              onDragLeave={dragLeave}
+              onDrop={dropTo(p.id)}
+              className="grid gap-2 rounded-md border border-border bg-muted/30 p-3"
+            >
+              <div className="grid items-center gap-2 sm:grid-cols-[1fr_auto_auto]">
+                <Input
+                  value={p.label}
+                  placeholder="Pallet label"
+                  aria-label="Pallet label"
+                  onChange={(e) => renamePallet(p.id, e.target.value)}
+                />
+                <span className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                  {(p.caseIds || []).length} {(p.caseIds || []).length === 1 ? 'case' : 'cases'}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  className="border-destructive text-destructive hover:bg-destructive/10"
+                  title="Remove pallet (its cases become loose)"
+                  aria-label="Remove pallet"
+                  onClick={() => removePallet(p.id)}
+                >
+                  <Trash2 aria-hidden />
+                </Button>
+              </div>
+              <FormItem>
+                <FormLabel className="text-[11px]">Tracking #</FormLabel>
+                <Input
+                  value={p.tracking}
+                  placeholder="Optional — per-pallet LTL / freight #"
+                  aria-label="Pallet tracking number"
+                  className="font-mono"
+                  onChange={(e) => setTracking(p.id, e.target.value)}
+                />
+              </FormItem>
+              <div className="flex flex-wrap gap-1.5">
+                {(p.caseIds || []).length === 0 ? (
+                  <span className="text-[11px] italic text-muted-foreground">No cases yet — assign below.</span>
+                ) : (
+                  (p.caseIds || []).map((cid) => (
+                    <span
+                      key={cid}
+                      draggable
+                      onDragStart={(e) => onDragStart(e, cid)}
+                      className="inline-flex cursor-grab items-center gap-1 rounded border border-border bg-background py-0.5 pl-2 pr-1 text-[11px] text-foreground"
+                    >
+                      {labelOf(cid)}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="size-4 text-muted-foreground"
+                        title="Make loose"
+                        aria-label={`Make ${labelOf(cid)} loose`}
+                        onClick={() => assignCaseToPallet(cid, null)}
+                      >
+                        <X aria-hidden className="size-3" />
+                      </Button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Loose drop zone */}
+          <div
+            onDragOver={dragOver}
+            onDragEnter={dragEnter}
+            onDragLeave={dragLeave}
+            onDrop={dropTo(null)}
+            className="rounded-md border border-dashed border-border bg-muted/30 p-3"
+          >
+            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Loose (unpalletized) · {looseCaseIds.length}
+            </div>
+            {looseCaseIds.length === 0 ? (
+              <span className="text-[11px] italic text-muted-foreground">All cases are on a pallet.</span>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {looseCaseIds.map((cid) => (
+                  <span
+                    key={cid}
+                    draggable
+                    onDragStart={(e) => onDragStart(e, cid)}
+                    className="cursor-grab rounded border border-border bg-background px-2 py-0.5 text-[11px] text-foreground"
+                  >
+                    {labelOf(cid)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Menu fallback (keyboard / touch) — assign each case to a pallet via a select. */}
+          <details className="mt-1">
+            <summary className="cursor-pointer text-[11px] text-muted-foreground">
+              Assign cases with menus (keyboard / no-drag)
+            </summary>
+            <div className="mt-2 grid gap-1.5">
+              {cases.map((cid) => {
+                const cur = palletForCase(cid);
+                return (
+                  <div key={cid} className="grid items-center gap-2 sm:grid-cols-[1fr_180px]">
+                    <span className="truncate text-xs text-foreground">{labelOf(cid)}</span>
+                    <Select
+                      value={cur ? cur.id : '__loose__'}
+                      onValueChange={(v) => assignCaseToPallet(cid, v === '__loose__' ? null : v)}
+                    >
+                      <SelectTrigger className="w-full" aria-label={`Pallet for ${labelOf(cid)}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__loose__">— Loose —</SelectItem>
+                        {pallets.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.label || 'Pallet'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        </div>
+      )}
+    </FieldGroup>
+  );
+}
+
+// ── Shipping panel ────────────────────────────────────────────────────────────
+export function ShippingPanel() {
+  return (
+    <div>
+      <FieldGroup title="Outbound shipping">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField name="outbound.carrier" label="Carrier" />
+          <TextField name="outbound.tracking" label="Tracking #" mono />
+        </div>
+        <FormItem>
+          <FormLabel>Pickup</FormLabel>
+          <FormDescription>When the carrier picks up from the warehouse.</FormDescription>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <BareInput name="outbound.pickupDate" type="date" ariaLabel="Outbound pickup date" />
+            <BareInput name="outbound.pickupTime" type="time" ariaLabel="Outbound pickup time" />
+          </div>
+        </FormItem>
+        <NotesField name="outbound.notes" placeholder="Loading dock instructions, special handling, etc." />
+      </FieldGroup>
+
+      <FieldGroup title="Return shipping">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField name="return.carrier" label="Carrier" />
+          <TextField name="return.tracking" label="Tracking #" mono />
+        </div>
+        <FormItem>
+          <FormLabel>Arrival</FormLabel>
+          <FormDescription>When the cases should land back at the warehouse.</FormDescription>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <BareInput name="return.arrivalDate" type="date" ariaLabel="Return arrival date" />
+            <BareInput name="return.arrivalTime" type="time" ariaLabel="Return arrival time" />
+          </div>
+        </FormItem>
+        <NotesField name="return.notes" placeholder="Return logistics, reconciliation deadline, etc." />
+      </FieldGroup>
+    </div>
+  );
+}
+
+function NotesField({ name, placeholder }: { name: Name; placeholder?: string }) {
+  const { control } = useFormContext<EventFormValues>();
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Notes</FormLabel>
+          <FormControl>
+            <Textarea
+              {...field}
+              value={typeof field.value === 'string' ? field.value : ''}
+              placeholder={placeholder}
+              rows={2}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
+  );
+}
+
+// ── Side events panel ─────────────────────────────────────────────────────────
+export function SidePanel() {
+  const { control } = useFormContext<EventFormValues>();
+  const { fields, append, remove } = useFieldArray({ control, name: 'sideEvents' });
+  return (
+    <FieldGroup title="Side events">
+      <FormDescription>
+        Optional after-parties / community events — welcome receptions, meet-ups, dinners.
+      </FormDescription>
+      {fields.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          No side events yet.
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {fields.map((f, i) => (
+            <div key={f.id} className="grid gap-2 rounded-md border border-border bg-muted/30 p-3">
+              <div className="grid items-center gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
+                <BareInput name={`sideEvents.${i}.name` as Name} placeholder="Name (e.g. Welcome reception)" ariaLabel={`Side event ${i + 1} name`} />
+                <BareInput name={`sideEvents.${i}.date` as Name} type="date" ariaLabel={`Side event ${i + 1} date`} />
+                <BareInput name={`sideEvents.${i}.time` as Name} type="time" ariaLabel={`Side event ${i + 1} time`} />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon-sm"
+                  onClick={() => remove(i)}
+                  aria-label={`Remove side event ${i + 1}`}
+                >
+                  <Trash2 aria-hidden />
+                </Button>
+              </div>
+              <BareInput name={`sideEvents.${i}.venue` as Name} placeholder="Venue" ariaLabel={`Side event ${i + 1} venue`} />
+              <BareInput name={`sideEvents.${i}.notes` as Name} placeholder="Notes" ariaLabel={`Side event ${i + 1} notes`} />
+            </div>
+          ))}
+        </div>
+      )}
+      <div>
+        <Button type="button" size="sm" variant="secondary" onClick={() => append({ name: '', date: '', time: '', venue: '', notes: '' })}>
+          <Plus aria-hidden />
+          Add side event
+        </Button>
+      </div>
+    </FieldGroup>
+  );
+}

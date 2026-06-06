@@ -1,0 +1,41 @@
+# Demo stack — the public, self-resetting sandbox build of the Next.js app.
+#
+#   ET_SESSION_SECRET=<32+ random chars> BUILD_ID=$(git rev-parse --short HEAD) \
+#     docker compose -f docker-compose.demo.yml up -d --build
+#
+# Each visitor gets a private demo_<sid> database, cloned from `demo_seed`, which you populate once from
+# the existing demo data (mongorestore/mongoimport into the `mongo` volume's demo_seed db). Admin/config
+# writes are locked; visitors auto-enter as the demo user. ET_SESSION_SECRET is REQUIRED (signs the
+# sandbox sid + sessions). No Cloudflare Access on the demo URL — open/public by design.
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - demo-mongo:/data/db
+    # No published port — only the app reaches it on the compose network.
+
+  app:
+    build:
+      context: .
+      args:
+        EIT_DEMO_MODE: "1" # inlines NEXT_PUBLIC_DEMO_MODE at build (banner + disabled controls)
+        BUILD_ID: "${BUILD_ID:-}"
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      EIT_DEMO_MODE: "1"
+      ET_SESSION_SECRET: "${ET_SESSION_SECRET:?set ET_SESSION_SECRET to 16+ random chars}"
+      EIT_DEMO_SEED_DB: "demo_seed"
+      EIT_DEMO_USER: "${EIT_DEMO_USER:-demo@eventtracker.dev}"
+      EIT_ADMIN_EMAILS: "${EIT_DEMO_USER:-demo@eventtracker.dev}" # demo user is admin → sees the (locked) Config console
+      MONGO_URI: "mongodb://mongo:27017"
+      MONGO_DB: "demo_seed" # unused in demo (getDb routes to demo_<sid>), but a sane default
+      # Optional — the demo runs without these; set to light up Places/Weather/flight/tracking:
+      GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+    ports:
+      - "3100:3100"
+
+volumes:
+  demo-mongo:
