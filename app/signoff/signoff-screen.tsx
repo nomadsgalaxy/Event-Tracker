@@ -16,7 +16,7 @@ import {
   Box as BoxIcon,
 } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -47,8 +47,8 @@ import { Eyebrow } from '@/components/ui/eyebrow';
 import { ManifestCaseCard, type ManifestRowActions } from '../manifest/manifest-case-card';
 import { ItemDetailsModal } from '@/components/inventory/item-details-modal';
 import { FlagItemModal, ResolveFlagModal } from '@/components/inventory/flag-modals';
-import { itemOpenFlag, type ItemFlag } from '@/lib/inventory-shape';
-import type { ManifestSnapshot } from '@/lib/types';
+import { itemOpenFlag, type ItemFlag } from '@/lib/views/inventory-shape';
+import type { ManifestSnapshot } from '@/lib/types/types';
 import type { SignoffDetailSeed } from './page';
 import type {
   SignoffVariant,

@@ -37,7 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ITEM_KINDS } from '@/lib/inventory-shape';
+import { ITEM_KINDS } from '@/lib/views/inventory-shape';
 import { saveItemAction, deleteItemAction } from '../actions';
 import { useUnsavedGuard, UnsavedChangesDialog } from '@/components/hooks/use-unsaved-guard';
 

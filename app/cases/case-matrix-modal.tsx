@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // case-matrix-modal.tsx — the CaseMatrixModal / MatrixPrintModal port (the case-label print path). A
 // faithful port of index.html MatrixPrintModal kind:'case' (~L18601): a size picker — 1″ (Matrix

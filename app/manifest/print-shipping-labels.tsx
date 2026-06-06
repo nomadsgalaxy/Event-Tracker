@@ -3,7 +3,7 @@
 import { Tag } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { EventManifest, ManifestEventListRow } from '@/lib/manifest-view';
+import type { EventManifest, ManifestEventListRow } from '@/lib/views/manifest-view';
 
 // print-shipping-labels.tsx — the per-case 4″×6″ SHIPPING-LABEL print (in addition to the manifest
 // print), a faithful port of the Python MatrixPrintModal 'shipping' size (index.html ~L18540): one

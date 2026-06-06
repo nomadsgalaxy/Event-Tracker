@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { WeatherChip } from '@/components/ui/weather-chip';
 import { TagChip } from '@/components/ui/tag-chip';
 import { SegmentChip } from '@/components/calendar/segment-chip';
@@ -17,7 +17,7 @@ import {
   type MonthGrid,
   WEEKDAYS,
 } from '@/app/calendar/cal-utils';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // MonthView — the 6×7 ARIA month grid, upgraded to 1:1 parity with index.html CalMonth (~L22990):
 //   • multi-day event BARS, lane-packed, spanning days + broken at week boundaries (buildMonthBars),

@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { NotificationBell } from '@/components/notifications/notification-bell';
-import { getCurrentUser } from '@/lib/auth';
-import { companyForEmail } from '@/lib/settings-store';
-import { getNotifications, getTravelReminders } from '@/lib/notifications';
-import { rankOf, DEFAULT_ROLES } from '@/lib/rbac';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { companyForEmail } from '@/lib/auth/settings-store';
+import { getNotifications, getTravelReminders } from '@/lib/views/notifications';
+import { rankOf, DEFAULT_ROLES } from '@/lib/auth/rbac';
 import { TopNav } from './top-nav';
 import { UserMenu } from './user-menu';
 import { DbStatus } from './db-status';

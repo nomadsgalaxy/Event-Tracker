@@ -6,7 +6,7 @@ import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CsvImportModal, type MapRowResult } from '@/app/cases/csv-import-modal';
 import { importInventoryAction, type InventoryCsvRow } from './actions';
-import { ITEM_KINDS } from '@/lib/inventory-shape';
+import { ITEM_KINDS } from '@/lib/views/inventory-shape';
 
 // inventory-csv-import.tsx — the inventory-specific binding of the generic CsvImportModal (reuses the
 // case CsvImportModal pattern). The column map for the inventory Export headers (id · name · sku · qr

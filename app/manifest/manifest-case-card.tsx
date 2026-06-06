@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import type { ManifestCaseGroup, ManifestItemRow, ManifestLooseGroup } from '@/lib/manifest-view';
+import { cn } from '@/lib/util/utils';
+import type { ManifestCaseGroup, ManifestItemRow, ManifestLooseGroup } from '@/lib/views/manifest-view';
 
 // ManifestCaseCard — one roadcase (or the loose-inventory pseudo-case) on the event manifest
 // (DESIGN_ALIGNMENT §4.3). A faithful port of the shared window.ManifestCaseCard (index.html

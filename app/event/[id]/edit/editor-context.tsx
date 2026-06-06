@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // app/event/[id]/edit/editor-context.tsx — the NON-form data the editor's panels need (the
 // directory, the case catalog + per-case availability, the visible tag library, and the keyed-

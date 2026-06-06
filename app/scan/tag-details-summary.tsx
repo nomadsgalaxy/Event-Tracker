@@ -1,7 +1,7 @@
 'use client';
 
 import { Eyebrow } from '@/components/ui/eyebrow';
-import type { NfcTagEntry } from '@/lib/nfc-decoders';
+import type { NfcTagEntry } from '@/lib/integrations/nfc-decoders';
 
 // app/scan/tag-details-summary.tsx — the domain-aware NFC tag preview card. Faithful port of
 // index.html TagDetailsSummary (~L18255): gated on a non-generic category WITH parsed data, it shows

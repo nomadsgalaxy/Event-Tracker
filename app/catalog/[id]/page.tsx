@@ -10,18 +10,18 @@ import {
   AlertTriangle,
   Flag,
 } from 'lucide-react';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { getInventoryItem, getCaseLabels, getEventNames } from '@/lib/inventory';
-import { getCases, getInventory, getTags, getUserDisplayName } from '@/lib/data';
-import { isCaseRetired } from '@/lib/case-view';
-import { itemCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { getInventoryItem, getCaseLabels, getEventNames } from '@/lib/views/inventory';
+import { getCases, getInventory, getTags, getUserDisplayName } from '@/lib/db/data';
+import { isCaseRetired } from '@/lib/views/case-view';
+import { itemCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
 import { ItemDetailActions } from './item-detail-actions';
 import type { ItemDetailsCase, KitCandidateItem } from '@/components/inventory/item-details-modal';
-import type { DashTag } from '@/lib/types-dashboard';
-import type { PartRefTag } from '@/lib/inventory-shape';
+import type { DashTag } from '@/lib/types/types-dashboard';
+import type { PartRefTag } from '@/lib/views/inventory-shape';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import {
   itemIsSerial,
   itemUnits,
@@ -54,7 +54,7 @@ import {
   type KindIconName,
   type InventoryPayload,
   type DistributionRow,
-} from '@/lib/inventory-shape';
+} from '@/lib/views/inventory-shape';
 
 // app/catalog/[id] — the inventory item DETAIL. Server Component: reads the item LIVE on every
 // request. Renders BOTH item shapes faithfully — a bulk item's distribution[] rows and a serial

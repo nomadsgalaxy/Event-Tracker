@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { withKey, apiOk, apiErr, auditKeyWrite } from '@/lib/api-v1';
-import { deleteRecord, DbMirrorError } from '@/lib/api-v1-db';
+import { withKey, apiOk, apiErr, auditKeyWrite } from '@/lib/api/api-v1';
+import { deleteRecord, DbMirrorError } from '@/lib/api/api-v1-db';
 
 export const dynamic = 'force-dynamic';
 

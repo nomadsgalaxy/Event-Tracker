@@ -12,7 +12,7 @@ import {
   type FieldValues,
 } from "react-hook-form"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/util/utils"
 import { Label } from "@/components/ui/label"
 
 // Standard shadcn/ui Form bindings — a thin react-hook-form integration that wires

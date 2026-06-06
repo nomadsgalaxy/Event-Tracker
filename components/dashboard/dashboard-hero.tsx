@@ -1,5 +1,5 @@
 import { Eyebrow } from '@/components/ui/eyebrow';
-import type { DashKpis } from '@/lib/types-dashboard';
+import type { DashKpis } from '@/lib/types/types-dashboard';
 
 // DashboardHero — the editorial "SEASON AT A GLANCE" headline (DESIGN_ALIGNMENT §4.1, matched 1:1 to
 // the Python app's DashHybrid hero, index.html ~L15495-15506).

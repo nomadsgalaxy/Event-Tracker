@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole, type CurrentUser } from '@/lib/auth';
-import { setUserRole, WriteForbiddenError } from '@/lib/write';
-import { VALID_ROLES } from '@/lib/rbac';
+import { requireRole, type CurrentUser } from '@/lib/auth/auth';
+import { setUserRole, WriteForbiddenError } from '@/lib/db/write';
+import { VALID_ROLES } from '@/lib/auth/rbac';
 
 // app/config/actions.ts — the privilege-management Server Action for Config > Users.
 //

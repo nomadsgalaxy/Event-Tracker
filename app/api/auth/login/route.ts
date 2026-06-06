@@ -1,12 +1,12 @@
 import { type NextRequest } from 'next/server';
-import { login } from '@/lib/auth';
-import { finishFullLogin } from '@/lib/auth-store';
+import { login } from '@/lib/auth/auth';
+import { finishFullLogin } from '@/lib/auth/auth-store';
 import {
   issueSessionToken,
   issueStageToken,
   setSessionCookie,
-} from '@/lib/session';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+} from '@/lib/auth/session';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

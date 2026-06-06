@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { resolveFeedToken } from '@/lib/calendar-feed';
-import { generateIcs } from '@/lib/ical';
+import { resolveFeedToken } from '@/lib/integrations/calendar-feed';
+import { generateIcs } from '@/lib/integrations/ical';
 
 export const dynamic = 'force-dynamic';
 

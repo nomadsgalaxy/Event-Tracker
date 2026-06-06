@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { googleApiKey } from '@/lib/integrations';
+import { getSession } from '@/lib/auth/session';
+import { googleApiKey } from '@/lib/integrations/integrations';
 
 // GET /api/maps-key — hand the Google Maps/Places BROWSER key to a signed-in client.
 //

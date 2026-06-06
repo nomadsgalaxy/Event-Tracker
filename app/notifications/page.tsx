@@ -1,5 +1,5 @@
-import { requireUser } from '@/lib/auth';
-import { getNotifications } from '@/lib/notifications';
+import { requireUser } from '@/lib/auth/auth';
+import { getNotifications } from '@/lib/views/notifications';
 import { NotificationsList } from './notifications-list';
 
 // app/notifications — the full notification feed. Server Component: reads the signed-in user's

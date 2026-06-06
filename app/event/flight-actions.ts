@@ -1,7 +1,7 @@
 'use server';
 
-import { requireUser } from '@/lib/auth';
-import { flightApiKey } from '@/lib/integrations';
+import { requireUser } from '@/lib/auth/auth';
+import { flightApiKey } from '@/lib/integrations/integrations';
 
 // app/event/flight-actions.ts — the server-side flight-lookup proxy (a faithful port of the Python
 // POST /auth/flight-lookup, index.html ~L2392). The AeroDataBox / RapidAPI key NEVER reaches the

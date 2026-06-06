@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { RotateCcw } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { WeatherChip } from '@/components/ui/weather-chip';
 import { TagChip } from '@/components/ui/tag-chip';
 import { SegmentChip } from '@/components/calendar/segment-chip';
@@ -25,7 +25,7 @@ import {
   type CalEvent,
   type WeekGrid,
 } from '@/app/calendar/cal-utils';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // WeekView — the HOUR GRID (7am–9pm) with timed event/setup/teardown blocks (DESIGN_ALIGNMENT §4.2;
 // faithful port of index.html CalWeek ~L23161). Each day column is a relative hour grid: the show

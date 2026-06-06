@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { buildGoogleAuthUrl, googleConfigured, newFlow, signFlow, OAUTH_FLOW_COOKIE, publicOrigin } from '@/lib/oidc';
+import { buildGoogleAuthUrl, googleConfigured, newFlow, signFlow, OAUTH_FLOW_COOKIE, publicOrigin } from '@/lib/auth/oidc';
 
 export const dynamic = 'force-dynamic';
 

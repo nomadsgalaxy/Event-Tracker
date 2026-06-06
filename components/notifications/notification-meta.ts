@@ -1,4 +1,4 @@
-import type { NotificationItem } from '@/lib/notifications';
+import type { NotificationItem } from '@/lib/views/notifications';
 
 // notification-meta.ts — client-safe (no `server-only`) render helpers shared by the bell and the
 // full list. The lib/notifications module is server-only; the NotificationItem TYPE it exports is
@@ -6,7 +6,7 @@ import type { NotificationItem } from '@/lib/notifications';
 // server module. Mirrors the current app's NotifRow copy (index.html ~L30623) so the two stacks
 // read the same way.
 
-export type { NotificationItem, TravelReminder } from '@/lib/notifications';
+export type { NotificationItem, TravelReminder } from '@/lib/views/notifications';
 
 /** Format an event start date (ISO 'YYYY-MM-DD') as a short local date for the reminder line. Pure,
  *  locale-light. Constructed as a LOCAL date (split + new Date(y,m,d)) so it never shifts a day across

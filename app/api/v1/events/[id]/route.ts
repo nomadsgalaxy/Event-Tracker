@@ -1,9 +1,9 @@
 import { type NextRequest } from 'next/server';
-import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, auditKeyWrite } from '@/lib/api-v1';
-import { getEvent, getInventory } from '@/lib/data';
-import { saveEvent, softDeleteEvent, setEventCases, type EventPatch } from '@/lib/write';
-import { stripEventForKey, eventManifest } from '@/lib/api-v1-serialize';
-import type { VerifiedKey } from '@/lib/api-keys';
+import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, auditKeyWrite } from '@/lib/api/api-v1';
+import { getEvent, getInventory } from '@/lib/db/data';
+import { saveEvent, softDeleteEvent, setEventCases, type EventPatch } from '@/lib/db/write';
+import { stripEventForKey, eventManifest } from '@/lib/api/api-v1-serialize';
+import type { VerifiedKey } from '@/lib/api/api-keys';
 
 export const dynamic = 'force-dynamic';
 

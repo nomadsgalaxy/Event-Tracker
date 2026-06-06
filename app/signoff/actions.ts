@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole } from '@/lib/auth';
-import { getUserDisplayName } from '@/lib/data';
+import { requireRole } from '@/lib/auth/auth';
+import { getUserDisplayName } from '@/lib/db/data';
 import {
   setCaseSignoff,
   commitEventReady,
@@ -15,14 +15,14 @@ import {
   upsertItem,
   WriteForbiddenError,
   type ItemPatch,
-} from '@/lib/write';
+} from '@/lib/db/write';
 import {
   addFlag as buildAddFlag,
   resolveFlag as buildResolveFlag,
   type InventoryPayload,
   type ItemFlag,
-} from '@/lib/inventory-shape';
-import type { ManifestSnapshot } from '@/lib/types';
+} from '@/lib/views/inventory-shape';
+import type { ManifestSnapshot } from '@/lib/types/types';
 
 // app/signoff/actions.ts — the Server Action boundary for the Sign-Off pool.
 //

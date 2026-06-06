@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Eyebrow } from '@/components/ui/eyebrow';
 
 // ScreenHeader — the universal screen header pattern shared by BOTH layout archetypes

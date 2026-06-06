@@ -66,7 +66,7 @@ import {
   saveUserAccommodationsAction,
 } from './admin-actions';
 import { AccommodationsEditor } from '@/components/account/accommodations-editor';
-import type { AccommodationsProfile } from '@/lib/types';
+import type { AccommodationsProfile } from '@/lib/types/types';
 
 // users-table.tsx — the Config > Users directory manager. The interactive admin surface over the
 // server-read directory rows. The role <Select> still drives the SEPARATELY red-teamed

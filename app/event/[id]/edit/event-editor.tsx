@@ -19,7 +19,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import type { EventPayload } from '@/lib/types';
+import type { EventPayload } from '@/lib/types/types';
 import { saveEventAction, createEventAction, deleteEventAction } from '@/app/event/actions';
 import { eventFormSchema, toFormValues, toPatch, type EventFormValues } from './schema';
 import { OverviewPanel, TeamPanel, PackingPanel, ShippingPanel, SidePanel } from './editor-fields';

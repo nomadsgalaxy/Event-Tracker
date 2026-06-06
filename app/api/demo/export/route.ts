@@ -1,5 +1,5 @@
-import { getDb } from '@/lib/mongo';
-import { DEMO_MODE } from '@/lib/demo';
+import { getDb } from '@/lib/db/mongo';
+import { DEMO_MODE } from '@/lib/db/demo';
 
 export const dynamic = 'force-dynamic';
 

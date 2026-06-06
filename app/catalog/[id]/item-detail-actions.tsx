@@ -11,9 +11,9 @@ import {
   saveItemDetailsAction,
   saveItemServiceAction,
 } from '../actions';
-import type { InventoryPayload, ItemFlag, PartRefTag } from '@/lib/inventory-shape';
-import type { ItemPatch } from '@/lib/write';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { InventoryPayload, ItemFlag, PartRefTag } from '@/lib/views/inventory-shape';
+import type { ItemPatch } from '@/lib/db/write';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // item-detail-actions.tsx — the detail page's "Edit" + "Print Matrix" launchers, reusing the SHARED
 // ItemDetailsModal (the full tracking/SKU/distribution/units/tags/flags/service/repair/kit-BOM editor)

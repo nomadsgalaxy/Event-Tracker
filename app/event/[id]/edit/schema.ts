@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { EventPayload, Staffer } from '@/lib/types';
+import type { EventPayload, Staffer } from '@/lib/types/types';
 
 // app/event/[id]/edit/schema.ts — the editor's zod schema (the react-hook-form contract).
 //

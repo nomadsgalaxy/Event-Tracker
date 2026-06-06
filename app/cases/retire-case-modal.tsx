@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { CaseDeleteClassification } from '@/lib/case-view';
+import type { CaseDeleteClassification } from '@/lib/views/case-view';
 import { retireOrDeleteCaseAction } from './actions';
 
 // retire-case-modal.tsx — the SHARED RetireCaseModal (DELETE vs RETIRE confirmation flow). A faithful

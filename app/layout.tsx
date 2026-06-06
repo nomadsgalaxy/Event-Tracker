@@ -1,7 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Geist } from 'next/font/google';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { TopBar } from '@/components/shell/top-bar';

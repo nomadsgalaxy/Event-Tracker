@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { withKey, apiOk, apiErr, requireScope, readBody, auditKeyWrite } from '@/lib/api-v1';
-import { setStaffPii } from '@/lib/write';
+import { withKey, apiOk, apiErr, requireScope, readBody, auditKeyWrite } from '@/lib/api/api-v1';
+import { setStaffPii } from '@/lib/db/write';
 
 export const dynamic = 'force-dynamic';
 

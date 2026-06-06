@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStepUp } from '@/components/config/step-up';
-import { IS_DEMO, DEMO_LOCK_NOTE } from '@/lib/demo-flag';
+import { IS_DEMO, DEMO_LOCK_NOTE } from '@/lib/util/demo-flag';
 
 // integration-keys-card.tsx — the Config > Databases & API integration-key editor. The server stores
 // each key AES-256-GCM-ENCRYPTED in the off-data-plane __settings__ doc and NEVER echoes a secret

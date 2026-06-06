@@ -1,7 +1,7 @@
-import { getCurrentUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { themeById, DEFAULT_UI_THEME, type UiTheme } from '@/lib/themes';
-import type { UserDoc } from '@/lib/types';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { themeById, DEFAULT_UI_THEME, type UiTheme } from '@/lib/util/themes';
+import type { UserDoc } from '@/lib/types/types';
 
 // ThemeStyle — a Server Component that resolves the SIGNED-IN user's saved UI theme (payload.uiTheme,
 // a dark-only accent variant) and emits an inline <style> overriding the accent token family on :root.

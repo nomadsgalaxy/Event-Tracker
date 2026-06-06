@@ -7,7 +7,7 @@ import {
   Package,
   type LucideIcon,
 } from 'lucide-react';
-import type { ItemKind } from '@/lib/inventory-shape';
+import type { ItemKind } from '@/lib/views/inventory-shape';
 
 // Map an inventory item KIND -> a lucide icon for the manifest table. This replaces the old
 // custom Icon/kindIcon path (which returned bespoke glyph names tied to a deleted primitive).

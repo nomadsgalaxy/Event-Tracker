@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser } from '@/lib/auth';
-import { markNotificationsRead, createTravelRequest, decideTravelRequest } from '@/lib/notifications';
-import { getEvent } from '@/lib/data';
+import { requireUser } from '@/lib/auth/auth';
+import { markNotificationsRead, createTravelRequest, decideTravelRequest } from '@/lib/views/notifications';
+import { getEvent } from '@/lib/db/data';
 
 // app/notifications/actions.ts — the Server Action boundary for the notification feed.
 //

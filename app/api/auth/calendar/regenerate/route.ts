@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
-import { requireUser } from '@/lib/auth';
-import { regenerateFeed } from '@/lib/calendar-feed';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { requireUser } from '@/lib/auth/auth';
+import { regenerateFeed } from '@/lib/integrations/calendar-feed';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

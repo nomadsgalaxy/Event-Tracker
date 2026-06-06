@@ -1,8 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { getSession } from '@/lib/session';
-import { itemCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
+import { getSession } from '@/lib/auth/session';
+import { itemCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
 
 export const dynamic = 'force-dynamic';
 

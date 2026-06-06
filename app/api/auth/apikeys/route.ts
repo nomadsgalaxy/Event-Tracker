@@ -1,6 +1,6 @@
-import { getSession } from '@/lib/session';
-import { listApiKeys } from '@/lib/api-keys';
-import { jsonOk, jsonErr } from '@/lib/api-response';
+import { getSession } from '@/lib/auth/session';
+import { listApiKeys } from '@/lib/api/api-keys';
+import { jsonOk, jsonErr } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

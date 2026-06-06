@@ -1,7 +1,7 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import type { DashTag } from '@/lib/types-dashboard';
+import { cn } from '@/lib/util/utils';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // TagChip + FlairGlyph — the SHARED reusable tag/flair chip (DESIGN_ALIGNMENT.md §5; reused later

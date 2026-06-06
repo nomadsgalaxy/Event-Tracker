@@ -7,8 +7,8 @@ import {
   OAUTH_FLOW_COOKIE,
   publicOrigin,
   type GoogleProfile,
-} from '@/lib/oidc';
-import { issueSessionToken, COOKIE_NAME, SSO_COOKIE_OPTS } from '@/lib/session';
+} from '@/lib/auth/oidc';
+import { issueSessionToken, COOKIE_NAME, SSO_COOKIE_OPTS } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 

@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { TagChip } from '@/components/ui/tag-chip';
 import { ItemMatrixModal } from './item-matrix-modal';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import {
   itemTotalQty,
   itemInStorage,
@@ -48,9 +48,9 @@ import {
   type ItemFlag,
   type KitRequirement,
   type PartRefTag,
-} from '@/lib/inventory-shape';
-import type { ItemPatch } from '@/lib/write';
-import type { DashTag } from '@/lib/types-dashboard';
+} from '@/lib/views/inventory-shape';
+import type { ItemPatch } from '@/lib/db/write';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // components/inventory/item-details-modal.tsx — the SHARED ItemDetailsModal (the full item
 // detail/editor), reused by Manifest, Catalog, Inventory, Sign-off. A faithful port of index.html

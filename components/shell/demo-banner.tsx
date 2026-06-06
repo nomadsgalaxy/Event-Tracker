@@ -1,5 +1,5 @@
 import { Download, FlaskConical } from 'lucide-react';
-import { IS_DEMO } from '@/lib/demo-flag';
+import { IS_DEMO } from '@/lib/util/demo-flag';
 
 // components/shell/demo-banner.tsx — a thin top strip shown ONLY in the demo build. It tells visitors
 // this is a sandbox: their edits are private + reset when they clear their browser, and the admin/

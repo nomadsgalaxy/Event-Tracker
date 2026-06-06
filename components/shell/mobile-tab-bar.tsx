@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { isNavActive, mobileNav } from './nav-model';
 
 // mobile-tab-bar.tsx — the fixed bottom navigation shown BELOW the md breakpoint (it replaces the

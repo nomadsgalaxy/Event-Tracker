@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { IS_DEMO } from '@/lib/demo-flag';
+import { IS_DEMO } from '@/lib/util/demo-flag';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';

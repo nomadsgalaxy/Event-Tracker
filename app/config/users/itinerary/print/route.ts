@@ -1,10 +1,10 @@
 import { type NextRequest } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { getEvents } from '@/lib/data';
-import { can } from '@/lib/rbac';
-import { buildItinerarySnapshot, renderItineraryHtml, type ItineraryTraveler } from '@/lib/itinerary';
-import type { UserDoc, AccommodationsProfile } from '@/lib/types';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { getEvents } from '@/lib/db/data';
+import { can } from '@/lib/auth/rbac';
+import { buildItinerarySnapshot, renderItineraryHtml, type ItineraryTraveler } from '@/lib/views/itinerary';
+import type { UserDoc, AccommodationsProfile } from '@/lib/types/types';
 
 // GET /config/users/itinerary/print?email=<subject> — print ANOTHER staffer's all-events itinerary
 // (the Users tab "Print itinerary"). Mirrors the source's manager+ "print someone else's travel".

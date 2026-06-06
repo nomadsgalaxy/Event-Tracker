@@ -1,4 +1,4 @@
-import { requireRole } from '@/lib/auth';
+import { requireRole } from '@/lib/auth/auth';
 import { ConfigHeader } from './config-header';
 
 // app/config — the CONFIG / ADMIN area. The WHOLE area is admin-only: this layout gates every

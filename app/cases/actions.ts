@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole, requireUser, type CurrentUser } from '@/lib/auth';
-import { getUserDisplayName } from '@/lib/data';
+import { requireRole, requireUser, type CurrentUser } from '@/lib/auth/auth';
+import { getUserDisplayName } from '@/lib/db/data';
 import {
   saveCase,
   createCase,
@@ -18,14 +18,14 @@ import {
   type CasePatch,
   type ItemPatch,
   type CaseCsvRow,
-} from '@/lib/write';
+} from '@/lib/db/write';
 import {
   addFlag as buildAddFlag,
   resolveFlag as buildResolveFlag,
   type InventoryPayload,
   type ItemFlag,
-} from '@/lib/inventory-shape';
-import type { CaseSize } from '@/lib/types';
+} from '@/lib/views/inventory-shape';
+import type { CaseSize } from '@/lib/types/types';
 import { createItemAction } from '../catalog/actions';
 
 // app/cases/actions.ts — the case CRUD + warehouse-transfer + contents-editing + CSV-import Server

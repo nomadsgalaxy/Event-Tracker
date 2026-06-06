@@ -1,6 +1,6 @@
-import { withKey, apiOk, apiErr, keyCan } from '@/lib/api-v1';
-import { getInventory } from '@/lib/data';
-import { itemInStorage } from '@/lib/inventory-shape';
+import { withKey, apiOk, apiErr, keyCan } from '@/lib/api/api-v1';
+import { getInventory } from '@/lib/db/data';
+import { itemInStorage } from '@/lib/views/inventory-shape';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,6 +1,6 @@
-import { requireRole } from '@/lib/auth';
-import { getEvents, getInventory, getCases, getTags, getUserDisplayName, type TagDoc } from '@/lib/data';
-import { getCaseLabels } from '@/lib/inventory';
+import { requireRole } from '@/lib/auth/auth';
+import { getEvents, getInventory, getCases, getTags, getUserDisplayName, type TagDoc } from '@/lib/db/data';
+import { getCaseLabels } from '@/lib/views/inventory';
 import {
   eventCaseSignoffProgress,
   eventSignoffProgress,
@@ -10,25 +10,25 @@ import {
   buildManifestSnapshot,
   buildCheckinSweep,
   type CheckinSweep,
-} from '@/lib/signoff-view';
+} from '@/lib/views/signoff-view';
 import {
   buildEventManifest,
   type ManifestCaseGroup,
-} from '@/lib/manifest-view';
+} from '@/lib/views/manifest-view';
 import {
   itemIsSerial,
   itemUnits,
   itemOpenFlag,
   rowDispositionKind,
   type InventoryPayload,
-} from '@/lib/inventory-shape';
-import { viewerLeadsEvent } from '@/lib/event-view';
-import { can } from '@/lib/rbac';
-import { itemCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
-import type { CasePayload, EventPayload, ManifestSnapshot } from '@/lib/types';
-import type { DashTag } from '@/lib/types-dashboard';
+} from '@/lib/views/inventory-shape';
+import { viewerLeadsEvent } from '@/lib/views/event-view';
+import { can } from '@/lib/auth/rbac';
+import { itemCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
+import type { CasePayload, EventPayload, ManifestSnapshot } from '@/lib/types/types';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import type { ItemDetailsCase } from '@/components/inventory/item-details-modal';
 import { SignoffScreen } from './signoff-screen';
 import type {

@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole, requireUser, type CurrentUser } from '@/lib/auth';
-import { getUserDisplayName } from '@/lib/data';
+import { requireRole, requireUser, type CurrentUser } from '@/lib/auth/auth';
+import { getUserDisplayName } from '@/lib/db/data';
 import {
   saveInventoryItem,
   deleteInventoryItem,
@@ -18,8 +18,8 @@ import {
   type InventoryPatch,
   type ItemPatch,
   type InventoryCsvRowInput,
-} from '@/lib/write';
-import type { SkuOption } from '@/lib/inventory-shape';
+} from '@/lib/db/write';
+import type { SkuOption } from '@/lib/views/inventory-shape';
 import {
   ITEM_KINDS,
   addFlag as buildAddFlag,
@@ -27,10 +27,10 @@ import {
   type InventoryPayload,
   type ItemFlag,
   type KitRequirement,
-} from '@/lib/inventory-shape';
-import { generateId } from '@/lib/id';
-import { getDb } from '@/lib/mongo';
-import type { InventoryDoc } from '@/lib/inventory-shape';
+} from '@/lib/views/inventory-shape';
+import { generateId } from '@/lib/util/id';
+import { getDb } from '@/lib/db/mongo';
+import type { InventoryDoc } from '@/lib/views/inventory-shape';
 
 // app/catalog/actions.ts — the Server Action boundary for catalog edits.
 //

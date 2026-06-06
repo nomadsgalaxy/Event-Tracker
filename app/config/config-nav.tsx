@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Users, ShieldCheck, ScrollText, UserCog, Tags, Database, RefreshCw, Settings2, Warehouse } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // config-nav.tsx — the Config sub-navigation (Users / Permissions / Audit) + the current admin's
 // identity chip. Client Component only so it can mark the active tab via usePathname (aria-current

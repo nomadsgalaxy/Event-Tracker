@@ -1,20 +1,20 @@
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { getEvents, getCases, getInventory, getTags, type TagDoc } from '@/lib/data';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { getEvents, getCases, getInventory, getTags, type TagDoc } from '@/lib/db/data';
 import {
   buildEventManifest,
   type EventManifest,
   type ManifestEventListRow,
   type ManifestRowTag,
-} from '@/lib/manifest-view';
-import { itemQtyLooseAtEvent, itemOpenFlag, type InventoryPayload } from '@/lib/inventory-shape';
-import { viewerLeadsEvent } from '@/lib/event-view';
-import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/case-view';
-import { caseCode, itemCode, eventCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
-import type { CasePayload, EventPayload } from '@/lib/types';
-import type { DashTag } from '@/lib/types-dashboard';
+} from '@/lib/views/manifest-view';
+import { itemQtyLooseAtEvent, itemOpenFlag, type InventoryPayload } from '@/lib/views/inventory-shape';
+import { viewerLeadsEvent } from '@/lib/views/event-view';
+import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/views/case-view';
+import { caseCode, itemCode, eventCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
+import type { CasePayload, EventPayload } from '@/lib/types/types';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import { getWarehouses, getEmergencyContact, caseReturnAndContact } from '../warehouses/warehouse-data';
 import { ManifestScreen } from './manifest-screen';
 import type { ManifestCodes } from './print-manifest';

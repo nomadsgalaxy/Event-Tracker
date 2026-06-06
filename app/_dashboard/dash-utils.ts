@@ -4,7 +4,7 @@
 // (a single source of truth — drift between the badge count and the rendered list is the bug
 // this avoids).
 
-import type { DashEvent, DashTimelineEvent } from '@/lib/types-dashboard';
+import type { DashEvent, DashTimelineEvent } from '@/lib/types/types-dashboard';
 
 export type DashFilter = 'overview' | 'drafts' | 'active' | 'upcoming' | 'past' | 'flags';
 

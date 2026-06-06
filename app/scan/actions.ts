@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole } from '@/lib/auth';
-import { getUserDisplayName } from '@/lib/data';
+import { requireRole } from '@/lib/auth/auth';
+import { getUserDisplayName } from '@/lib/db/data';
 import {
   packItemIntoCase,
   addItemToCase,
@@ -14,7 +14,7 @@ import {
   adoptProductCode,
   updateItemTagData,
   WriteForbiddenError,
-} from '@/lib/write';
+} from '@/lib/db/write';
 
 // app/scan/actions.ts — the Server Action boundary for the Scan-Pack screen (DESIGN_ALIGNMENT.md
 // §4.4). Every action re-resolves the LIVE directory role via requireRole BEFORE any write (a

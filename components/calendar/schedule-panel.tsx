@@ -3,13 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { MapPin } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { WeatherChip } from '@/components/ui/weather-chip';
 import { TagChip } from '@/components/ui/tag-chip';
 import { MONTHS_SHORT, eventTags, type CalEvent } from '@/app/calendar/cal-utils';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { DashTag } from '@/lib/types/types-dashboard';
 
 // SchedulePanel — the right-side "<year> SCHEDULE · N SHOWS" list beside the Year view (faithful
 // port of index.html CalYear's sidebar ~L22943). Each row: a small month/day date rail, the name +

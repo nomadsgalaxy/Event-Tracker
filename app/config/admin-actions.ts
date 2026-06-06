@@ -1,25 +1,25 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole, type CurrentUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
+import { requireRole, type CurrentUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
 import {
   adminCreateLocalAccount,
   adminResetPassword,
   adminClear2fa,
   deleteDirectoryUser,
   AdminActionError,
-} from '@/lib/auth-store';
-import { can } from '@/lib/rbac';
-import { writeAudit } from '@/lib/data';
+} from '@/lib/auth/auth-store';
+import { can } from '@/lib/auth/rbac';
+import { writeAudit } from '@/lib/db/data';
 import {
   ACCOMMODATION_DIETARY,
   ACCOMMODATION_ACCESSIBILITY,
   ACCOMMODATION_SEVERITY,
-} from '@/lib/accommodations';
-import { createTag, saveTag, deleteTag, WriteForbiddenError, type TagPatch } from '@/lib/write';
-import { DEMO_MODE, demoDenied } from '@/lib/demo';
-import type { UserDoc, AccommodationsProfile, EmergencyContact } from '@/lib/types';
+} from '@/lib/views/accommodations';
+import { createTag, saveTag, deleteTag, WriteForbiddenError, type TagPatch } from '@/lib/db/write';
+import { DEMO_MODE, demoDenied } from '@/lib/db/demo';
+import type { UserDoc, AccommodationsProfile, EmergencyContact } from '@/lib/types/types';
 
 // app/config/admin-actions.ts — the Config > Users + Tags privilege-management Server Actions.
 //

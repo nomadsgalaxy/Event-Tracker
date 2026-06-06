@@ -4,7 +4,7 @@ import { Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import type { EventManifest, ManifestEventListRow, ManifestItemRow } from '@/lib/manifest-view';
+import type { EventManifest, ManifestEventListRow, ManifestItemRow } from '@/lib/views/manifest-view';
 
 // PrintManifest — the print-friendly manifest section + the Print button (DESIGN_ALIGNMENT §4.3:
 // "a clean printable section + a Print button using window.print + a @media print stylesheet").

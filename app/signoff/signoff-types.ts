@@ -2,7 +2,7 @@
 // client screen renders. Kept separate from the page (a Server Component) so the client island can
 // import the TYPES without dragging server-only code across the boundary.
 
-import type { ManifestCaseGroup } from '@/lib/manifest-view';
+import type { ManifestCaseGroup } from '@/lib/views/manifest-view';
 
 export type SignoffVariant = 'packing' | 'unpacking';
 

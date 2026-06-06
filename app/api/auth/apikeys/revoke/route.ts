@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
-import { getSession } from '@/lib/session';
-import { revokeApiKey } from '@/lib/api-keys';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { getSession } from '@/lib/auth/session';
+import { revokeApiKey } from '@/lib/api/api-keys';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

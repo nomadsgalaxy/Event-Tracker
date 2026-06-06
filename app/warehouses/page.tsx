@@ -1,7 +1,7 @@
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { getCases } from '@/lib/data';
-import { integrationStatus } from '@/lib/integrations';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { getCases } from '@/lib/db/data';
+import { integrationStatus } from '@/lib/integrations/integrations';
 import {
   getWarehouses,
   getEmergencyContact,

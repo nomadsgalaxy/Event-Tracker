@@ -14,14 +14,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import {
   itemMatchesQuery,
   itemTotalQty,
   itemCaseIds,
   itemIsOutOfService,
   type InventoryPayload,
-} from '@/lib/inventory-shape';
+} from '@/lib/views/inventory-shape';
 
 // components/inventory/add-item-to-case-modal.tsx — the SHARED searchable item picker (AddItemToCaseModal),
 // reused by the Manifest loose-add path + (later) the Case "+ Add item" flow. A faithful port of

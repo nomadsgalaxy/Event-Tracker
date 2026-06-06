@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft, ShieldAlert } from 'lucide-react';
-import { getEvent } from '@/lib/data';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { viewerLeadsEvent, stripEventPii } from '@/lib/event-view';
+import { getEvent } from '@/lib/db/data';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { viewerLeadsEvent, stripEventPii } from '@/lib/views/event-view';
 import { Button } from '@/components/ui/button';
 import { EventEditor } from './event-editor';
 import { assembleEditorData } from './editor-data';

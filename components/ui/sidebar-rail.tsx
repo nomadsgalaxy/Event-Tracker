@@ -2,7 +2,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Eyebrow } from '@/components/ui/eyebrow';
 
 // SidebarRail + SidebarSection + SidebarItem — the contextual LEFT sidebar of Archetype-A screens

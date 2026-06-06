@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import {
   itemCaseIds,
   itemRollupState,
@@ -41,7 +41,7 @@ import {
   type KindIconName,
   type ItemStateTone,
   type InventoryPayload,
-} from '@/lib/inventory-shape';
+} from '@/lib/views/inventory-shape';
 
 // catalog-list.tsx — the interactive half of the catalog: live search + kind/status filter over
 // the server-read rows in a dense shadcn Table. The server already excluded soft-deleted docs;

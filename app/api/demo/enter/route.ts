@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { issueSessionToken, COOKIE_NAME, COOKIE_OPTS } from '@/lib/session';
-import { DEMO_MODE } from '@/lib/demo';
-import type { Role } from '@/lib/types';
+import { issueSessionToken, COOKIE_NAME, COOKIE_OPTS } from '@/lib/auth/session';
+import { DEMO_MODE } from '@/lib/db/demo';
+import type { Role } from '@/lib/types/types';
 
 export const dynamic = 'force-dynamic';
 

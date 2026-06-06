@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { ManifestSnapshot } from '@/lib/types';
+import type { ManifestSnapshot } from '@/lib/types/types';
 
 // print-signoff-manifest.tsx — Print Manifest on the Sign-Off screen. Renders the MANIFEST OF RECORD
 // (event.signoff.manifestSnapshot) when frozen, else a LIVE preview built server-side; both arrive as

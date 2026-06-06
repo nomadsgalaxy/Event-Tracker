@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Plus, X } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -23,8 +23,8 @@ import {
   toAccommodationsDraft,
   fromAccommodationsDraft,
   type AccommodationsDraft,
-} from '@/lib/accommodations';
-import type { AccommodationsProfile } from '@/lib/types';
+} from '@/lib/views/accommodations';
+import type { AccommodationsProfile } from '@/lib/types/types';
 
 // AccommodationsEditor — sensitive-PII profile editor (dietary / allergies / accessibility / medical
 // context / emergency contacts / notes). Faithful port of the Python AccommodationsEditor in EMBEDDED

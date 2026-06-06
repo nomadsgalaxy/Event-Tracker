@@ -10,7 +10,7 @@
 // (always LOCAL midnight) and compare by the integer day-key, so server and client agree regardless
 // of timezone (no hydration drift) and a single-day event never bleeds into the neighbouring cell.
 
-import type { DashEvent, DashTag, WeatherForecastDay } from '@/lib/types-dashboard';
+import type { DashEvent, DashTag, WeatherForecastDay } from '@/lib/types/types-dashboard';
 
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 /** Single-letter weekday headers — the mini-month grids in the Year view (matches CAL_DOW_S). */

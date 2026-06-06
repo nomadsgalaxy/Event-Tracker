@@ -1,10 +1,10 @@
-import { getCurrentUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { getEvent } from '@/lib/data';
-import { buildItinerarySnapshot, renderItineraryHtml, type ItineraryTraveler } from '@/lib/itinerary';
-import { canSeeStaffPii } from '@/lib/event-view';
-import { activeGrantsFor } from '@/lib/grants';
-import type { UserDoc, AccommodationsProfile } from '@/lib/types';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { getEvent } from '@/lib/db/data';
+import { buildItinerarySnapshot, renderItineraryHtml, type ItineraryTraveler } from '@/lib/views/itinerary';
+import { canSeeStaffPii } from '@/lib/views/event-view';
+import { activeGrantsFor } from '@/lib/auth/grants';
+import type { UserDoc, AccommodationsProfile } from '@/lib/types/types';
 
 // GET /event/[id]/itinerary/print?staff=<email> — the EVENT-VIEW "Print my itinerary" (#86), now the
 // SAME rich, boarding-pass-styled, Data-Matrix-coded document as "Print all my travel", scoped to ONE

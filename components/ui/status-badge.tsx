@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // Single source of truth for event/case status color. Maps a state -> its --st-<state> token.
 // Features import THIS, never inline a status color (DESIGN_SYSTEM.md §3).

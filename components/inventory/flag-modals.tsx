@@ -15,8 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
-import type { InventoryPayload, ItemFlag } from '@/lib/inventory-shape';
+import { cn } from '@/lib/util/utils';
+import type { InventoryPayload, ItemFlag } from '@/lib/views/inventory-shape';
 
 // components/inventory/flag-modals.tsx — the SHARED FlagItemModal + ResolveFlagModal (reused by
 // Manifest, Catalog, Inventory, Sign-off). Faithful ports of index.html FlagItemModal (~L22079) and

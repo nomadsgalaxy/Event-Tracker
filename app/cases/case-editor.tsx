@@ -24,10 +24,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { cn } from '@/lib/utils';
-import { weightInUnit, parseWeightToKg, weightUnitLabel } from '@/lib/weight';
-import type { CasePayload } from '@/lib/types';
-import type { CaseEffectiveTransit, CaseDeleteClassification } from '@/lib/case-view';
+import { cn } from '@/lib/util/utils';
+import { weightInUnit, parseWeightToKg, weightUnitLabel } from '@/lib/util/weight';
+import type { CasePayload } from '@/lib/types/types';
+import type { CaseEffectiveTransit, CaseDeleteClassification } from '@/lib/views/case-view';
 import {
   saveCaseAction,
   createCaseAction,

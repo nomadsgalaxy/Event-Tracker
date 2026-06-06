@@ -1,7 +1,7 @@
-import { getSession } from '@/lib/session';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { getUserDisplayName } from '@/lib/data';
-import { jsonOk, jsonErr } from '@/lib/api-response';
+import { getSession } from '@/lib/auth/session';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { getUserDisplayName } from '@/lib/db/data';
+import { jsonOk, jsonErr } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

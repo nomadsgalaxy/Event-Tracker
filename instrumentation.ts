@@ -8,8 +8,8 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   if (process.env.EIT_DEMO_MODE !== '1') return;
 
-  const { mongoClient } = await import('@/lib/mongo');
-  const { gcDemoSandboxes, DEMO_SEED_DB } = await import('@/lib/demo');
+  const { mongoClient } = await import('@/lib/db/mongo');
+  const { gcDemoSandboxes, DEMO_SEED_DB } = await import('@/lib/db/demo');
 
   // Populate the read-only demo_seed DB on first boot (if empty) from the bundled seed, so every
   // per-visitor sandbox has content to clone. Idempotent: skips when demo_seed already has events.

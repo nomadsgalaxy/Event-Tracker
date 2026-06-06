@@ -1,6 +1,6 @@
-import { requireUser } from '@/lib/auth';
-import { getEvents, getCases, getInventory, getUserWeightUnit } from '@/lib/data';
-import { activeGrantsFor } from '@/lib/grants';
+import { requireUser } from '@/lib/auth/auth';
+import { getEvents, getCases, getInventory, getUserWeightUnit } from '@/lib/db/data';
+import { activeGrantsFor } from '@/lib/auth/grants';
 import {
   buildInventoryReport,
   buildEventsReport,
@@ -9,7 +9,7 @@ import {
   type ItemEntry,
   type EventEntry,
   type CaseEntry,
-} from '@/lib/reports';
+} from '@/lib/views/reports';
 import { ReportsScreen } from './reports-screen';
 
 // app/reports — the REPORTS screen (DESIGN_ALIGNMENT §4.9). Archetype B: a ScreenHeader

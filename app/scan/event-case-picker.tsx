@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { cn } from '@/lib/utils';
-import type { ScanCaseLean, ScanEventLean } from '@/lib/scan';
+import { cn } from '@/lib/util/utils';
+import type { ScanCaseLean, ScanEventLean } from '@/lib/views/scan';
 
 // app/scan/event-case-picker.tsx — the manual case picker. Faithful port of index.html
 // EventCasePicker (~L17411): a three-tab full-screen picker — Packing / Returning / Unassigned —

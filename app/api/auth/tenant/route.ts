@@ -1,11 +1,11 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStepupToken } from '@/lib/session';
-import { resolveLiveRole } from '@/lib/auth';
-import { rankOf } from '@/lib/rbac';
-import { activeTenantId, getTenantOverride, saveTenantOverride } from '@/lib/settings-store';
-import { tenantHash36 } from '@/lib/eitm';
-import { writeAudit } from '@/lib/data';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { getSession, verifyStepupToken } from '@/lib/auth/session';
+import { resolveLiveRole } from '@/lib/auth/auth';
+import { rankOf } from '@/lib/auth/rbac';
+import { activeTenantId, getTenantOverride, saveTenantOverride } from '@/lib/auth/settings-store';
+import { tenantHash36 } from '@/lib/integrations/eitm';
+import { writeAudit } from '@/lib/db/data';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

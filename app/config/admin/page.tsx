@@ -1,8 +1,8 @@
-import { requireRole } from '@/lib/auth';
-import { getBranding, envAccessPolicy, getPolicyOverlay, getTenantOverride, activeTenantId } from '@/lib/settings-store';
-import { tenantHash36 } from '@/lib/eitm';
-import { dbStatus } from '@/lib/mongo';
-import { effectiveRoles } from '@/lib/rbac';
+import { requireRole } from '@/lib/auth/auth';
+import { getBranding, envAccessPolicy, getPolicyOverlay, getTenantOverride, activeTenantId } from '@/lib/auth/settings-store';
+import { tenantHash36 } from '@/lib/integrations/eitm';
+import { dbStatus } from '@/lib/db/mongo';
+import { effectiveRoles } from '@/lib/auth/rbac';
 import { BrandingCard } from './branding-card';
 import { TenantCard } from './tenant-card';
 import { AccessPolicyCard } from './access-policy-card';

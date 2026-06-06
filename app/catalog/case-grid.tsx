@@ -28,8 +28,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import { formatWeight } from '@/lib/weight';
+import { cn } from '@/lib/util/utils';
+import { formatWeight } from '@/lib/util/weight';
 import type { CatalogCaseRow, CatalogCardExtras } from './catalog-screen';
 import type { WarehouseLite } from '@/app/cases/case-editor';
 import { CaseEditorDialog } from '@/app/cases/case-editor';

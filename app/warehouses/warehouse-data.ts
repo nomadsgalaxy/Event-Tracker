@@ -1,7 +1,7 @@
 import 'server-only';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import type { Envelope, CaseDoc } from '@/lib/types';
-import { itemCaseIds, type InventoryDoc } from '@/lib/inventory-shape';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import type { Envelope, CaseDoc } from '@/lib/types/types';
+import { itemCaseIds, type InventoryDoc } from '@/lib/views/inventory-shape';
 
 // app/warehouses/warehouse-data.ts — LIVE warehouse reads + the homed-here derivation.
 //

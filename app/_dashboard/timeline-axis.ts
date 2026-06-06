@@ -14,7 +14,7 @@
 // plain lexicographic strings (they're zero-padded + big-endian), so chronological SORTING uses
 // string compare and only the AXIS positioning needs real timestamps.
 
-import type { DashTimelineEvent } from '@/lib/types-dashboard';
+import type { DashTimelineEvent } from '@/lib/types/types-dashboard';
 
 const DAY_MS = 86_400_000;
 

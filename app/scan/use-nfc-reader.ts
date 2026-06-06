@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { decodeNdef, type NdefRecordLike, type NfcTagEntry } from '@/lib/nfc-decoders';
-import { deriveTagCategory } from '@/lib/scan';
+import { decodeNdef, type NdefRecordLike, type NfcTagEntry } from '@/lib/integrations/nfc-decoders';
+import { deriveTagCategory } from '@/lib/views/scan';
 
 // app/scan/use-nfc-reader.ts — the Web NFC reader hook. Faithful port of index.html useNfcReader
 // (~L18190): NDEFReader.scan(), per-tap reading → decodeNdef (the OPT/OpenSpool/OpenTag3D/TigerTag/

@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStageToken, issueSessionToken, setSessionCookie } from '@/lib/session';
-import { confirmTotpSetup, finishFullLogin } from '@/lib/auth-store';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { getSession, verifyStageToken, issueSessionToken, setSessionCookie } from '@/lib/auth/session';
+import { confirmTotpSetup, finishFullLogin } from '@/lib/auth/auth-store';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

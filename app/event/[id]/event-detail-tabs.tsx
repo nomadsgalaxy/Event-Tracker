@@ -35,8 +35,8 @@ import {
 } from '@/components/ui/dialog';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { WeatherChip } from '@/components/ui/weather-chip';
-import { cn } from '@/lib/utils';
-import type { EventForecastRow } from '@/lib/types-dashboard';
+import { cn } from '@/lib/util/utils';
+import type { EventForecastRow } from '@/lib/types/types-dashboard';
 import type {
   EventPayload,
   EventState,
@@ -44,8 +44,8 @@ import type {
   TravelInfo,
   TravelLeg,
   AccommodationsProfile,
-} from '@/lib/types';
-import type { EventDetailView, StaffCardView } from '@/lib/types-event-detail';
+} from '@/lib/types/types';
+import type { EventDetailView, StaffCardView } from '@/lib/types/types-event-detail';
 import { toast } from 'sonner';
 import { deleteEventAction, markEventOnsiteAction } from '@/app/event/actions';
 import { requestTravelInfoAction } from '@/app/notifications/actions';

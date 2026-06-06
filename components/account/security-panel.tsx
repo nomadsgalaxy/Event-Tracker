@@ -27,7 +27,7 @@ import { Eyebrow } from '@/components/ui/eyebrow';
 import { DetailRow } from '@/components/ui/detail-row';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { effectiveTable } from '@/lib/rbac';
+import { effectiveTable } from '@/lib/auth/rbac';
 import {
   Dialog,
   DialogContent,

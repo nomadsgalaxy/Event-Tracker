@@ -1,5 +1,5 @@
-import { requireRole } from '@/lib/auth';
-import { syncPerms } from '@/lib/perms-store';
+import { requireRole } from '@/lib/auth/auth';
+import { syncPerms } from '@/lib/auth/perms-store';
 import { PermissionsMatrix } from './permissions-matrix';
 
 // app/config/permissions — the EDITABLE role × capability matrix (Config > Permissions). Server

@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // components/inventory/item-matrix-modal.tsx — the ItemMatrixModal (the item Data-Matrix label print).
 // A faithful port of index.html MatrixPrintModal kind:'item' (~L18601/18837): a size picker — 1″

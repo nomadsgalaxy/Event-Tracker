@@ -1,9 +1,9 @@
 import { type NextRequest } from 'next/server';
-import { getSession } from '@/lib/session';
-import { resolveLiveRole } from '@/lib/auth';
-import { rankOf } from '@/lib/rbac';
-import { getIntegrationKey } from '@/lib/settings-store';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { getSession } from '@/lib/auth/session';
+import { resolveLiveRole } from '@/lib/auth/auth';
+import { rankOf } from '@/lib/auth/rbac';
+import { getIntegrationKey } from '@/lib/auth/settings-store';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

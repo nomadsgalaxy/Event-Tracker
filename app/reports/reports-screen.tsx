@@ -9,7 +9,7 @@ import {
   Download,
 } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Button } from '@/components/ui/button';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Eyebrow } from '@/components/ui/eyebrow';
@@ -24,13 +24,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatWeight, type WeightUnit } from '@/lib/weight';
+import { formatWeight, type WeightUnit } from '@/lib/util/weight';
 import type {
   InventoryReport,
   EventsReport,
   ConditionReport,
   PeopleReport,
-} from '@/lib/reports';
+} from '@/lib/views/reports';
 
 // reports-screen.tsx — the client island for the Reports screen. Owns the active tab (controlled
 // TabStrip, the #93-safe all-panels-mounted pattern) mirrored to a sessionStorage key + the global

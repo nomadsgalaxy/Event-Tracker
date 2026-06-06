@@ -1,9 +1,9 @@
-import { getCurrentUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { getEvents } from '@/lib/data';
-import { buildItinerarySnapshot, renderItineraryHtml, type ItineraryTraveler } from '@/lib/itinerary';
-import type { UserDoc } from '@/lib/types';
-import type { AccommodationsProfile } from '@/lib/types';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { getEvents } from '@/lib/db/data';
+import { buildItinerarySnapshot, renderItineraryHtml, type ItineraryTraveler } from '@/lib/views/itinerary';
+import type { UserDoc } from '@/lib/types/types';
+import type { AccommodationsProfile } from '@/lib/types/types';
 
 // GET /account/itinerary/print — "Print all my travel" (#34): a boarding-pass-styled HTML itinerary
 // of the SIGNED-IN user's flights/hotels/event credentials across every show they're staffed on. The

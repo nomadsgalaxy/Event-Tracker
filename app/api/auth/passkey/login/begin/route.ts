@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { passkeyLoginBegin } from '@/lib/passkeys';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { passkeyLoginBegin } from '@/lib/auth/passkeys';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

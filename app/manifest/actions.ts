@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole, requireUser } from '@/lib/auth';
-import { getUserDisplayName } from '@/lib/data';
+import { requireRole, requireUser } from '@/lib/auth/auth';
+import { getUserDisplayName } from '@/lib/db/data';
 import {
   setEventCases,
   upsertItem,
@@ -10,13 +10,13 @@ import {
   createLooseItem,
   WriteForbiddenError,
   type ItemPatch,
-} from '@/lib/write';
+} from '@/lib/db/write';
 import {
   addFlag as buildAddFlag,
   resolveFlag as buildResolveFlag,
   type InventoryPayload,
   type ItemFlag,
-} from '@/lib/inventory-shape';
+} from '@/lib/views/inventory-shape';
 
 // app/manifest/actions.ts — the Server Action boundary for the Manifest pool's writes.
 //

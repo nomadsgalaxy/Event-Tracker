@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole, type CurrentUser } from '@/lib/auth';
+import { requireRole, type CurrentUser } from '@/lib/auth/auth';
 import {
   createWarehouse,
   saveWarehouse,
@@ -10,7 +10,7 @@ import {
   WriteForbiddenError,
   type WarehousePatch,
   type EmergencyContactPayload,
-} from '@/lib/write';
+} from '@/lib/db/write';
 
 // app/warehouses/actions.ts — the warehouse CRUD + emergency-contact Server Actions.
 //

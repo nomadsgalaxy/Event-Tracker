@@ -35,9 +35,9 @@ import { InventoryView, type InventoryItemRow, type InventoryEventOption } from 
 import { InventoryCsvImportButton } from './inventory-csv-import';
 import type { CatalogRow } from './catalog-list';
 import type { ItemDetailsCase, KitCandidateItem } from '@/components/inventory/item-details-modal';
-import type { DashTag } from '@/lib/types-dashboard';
-import type { CaseListStatus, CaseDeleteClassification, CaseManifestSnapshot } from '@/lib/case-view';
-import type { EventState, CasePayload } from '@/lib/types';
+import type { DashTag } from '@/lib/types/types-dashboard';
+import type { CaseListStatus, CaseDeleteClassification, CaseManifestSnapshot } from '@/lib/views/case-view';
+import type { EventState, CasePayload } from '@/lib/types/types';
 import type { WarehouseLite } from '@/app/cases/case-editor';
 import { NewCaseButton } from '@/app/cases/case-editor';
 import { CaseCsvImportButton } from '@/app/cases/case-csv-import';
@@ -45,7 +45,7 @@ import {
   itemCaseIds,
   itemRollupState,
   type InventoryPayload,
-} from '@/lib/inventory-shape';
+} from '@/lib/views/inventory-shape';
 
 // catalog-screen.tsx — the Archetype-A shell of the MERGED Catalog (DESIGN_ALIGNMENT §4.6). The
 // contextual LEFT SidebarRail carries three sections — CATALOG (Roadcases | Inventory toggle, the

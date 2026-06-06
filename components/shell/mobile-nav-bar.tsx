@@ -1,5 +1,5 @@
-import { getCurrentUser } from '@/lib/auth';
-import { rankOf } from '@/lib/rbac';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { rankOf } from '@/lib/auth/rbac';
 import { MobileTabBar } from './mobile-tab-bar';
 
 // mobile-nav-bar.tsx — the server wrapper that resolves the live auth state and feeds the client

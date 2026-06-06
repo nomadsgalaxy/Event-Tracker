@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ActivityFeedRow } from '@/lib/activity';
+import type { ActivityFeedRow } from '@/lib/views/activity';
 
 // activity-feed.tsx — the interactive half of the OPERATIONAL activity log (/activity, user-menu only).
 // Faithful to the Python ActivityScreen (index.html ~L29797): a reverse-chronological feed GROUPED BY
@@ -19,7 +19,7 @@ import type { ActivityFeedRow } from '@/lib/activity';
 // badge (flag = warning, else accent), then "itemLabel · eventName · [severity] · note · actor (email)
 // · time". Read-only — there is no write path to the feed from any client.
 
-export type { ActivityFeedRow } from '@/lib/activity';
+export type { ActivityFeedRow } from '@/lib/views/activity';
 
 const ALL = 'all';
 

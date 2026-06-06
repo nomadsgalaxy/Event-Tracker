@@ -1,8 +1,8 @@
-import { requireUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { DEFAULT_ROLES } from '@/lib/rbac';
-import { clampThemeId } from '@/lib/themes';
-import type { UserDoc, AccommodationsProfile } from '@/lib/types';
+import { requireUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { DEFAULT_ROLES } from '@/lib/auth/rbac';
+import { clampThemeId } from '@/lib/util/themes';
+import type { UserDoc, AccommodationsProfile } from '@/lib/types/types';
 import { getWarehouses } from '@/app/warehouses/warehouse-data';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { AccountTabs, type AccountInitial } from './account-tabs';

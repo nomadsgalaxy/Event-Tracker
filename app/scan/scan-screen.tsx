@@ -8,9 +8,9 @@ import { Box, Check, ChevronRight, Circle, Layers, QrCode, ScanLine, Search, Tri
 import { Button } from '@/components/ui/button';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { useIsMobile } from './use-is-mobile';
-import { decodeScanPayload, findInventoryByScan } from '@/lib/case-view';
+import { decodeScanPayload, findInventoryByScan } from '@/lib/views/case-view';
 import {
   caseContents,
   caseEventContext,
@@ -23,9 +23,9 @@ import {
   type ScanEventLean,
   type ScanItemLean,
   type ScanPolicy,
-} from '@/lib/scan';
-import type { InventoryPayload } from '@/lib/inventory-shape';
-import type { NfcTagEntry } from '@/lib/nfc-decoders';
+} from '@/lib/views/scan';
+import type { InventoryPayload } from '@/lib/views/inventory-shape';
+import type { NfcTagEntry } from '@/lib/integrations/nfc-decoders';
 import { ScannerView } from './scanner-view';
 import { useNfcReader } from './use-nfc-reader';
 import { TagDetailsSummary } from './tag-details-summary';

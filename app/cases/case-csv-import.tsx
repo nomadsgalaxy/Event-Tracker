@@ -6,7 +6,7 @@ import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CsvImportModal, type MapRowResult } from './csv-import-modal';
 import { importCasesAction } from './actions';
-import type { CaseCsvRow } from '@/lib/write';
+import type { CaseCsvRow } from '@/lib/db/write';
 
 // case-csv-import.tsx — the case-specific binding of the generic CsvImportModal: the column map for
 // the catalog "roadcases" Export headers (ID · Label · Size · Zone · Kit · Weight (kg)), validation,

@@ -1,5 +1,5 @@
-import { withKey, apiOk, apiErr, keyCan } from '@/lib/api-v1';
-import { getEvents } from '@/lib/data';
+import { withKey, apiOk, apiErr, keyCan } from '@/lib/api/api-v1';
+import { getEvents } from '@/lib/db/data';
 
 export const dynamic = 'force-dynamic';
 

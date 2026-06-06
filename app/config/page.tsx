@@ -1,7 +1,7 @@
-import { requireRole } from '@/lib/auth';
-import { getUsers } from '@/lib/data';
-import { getAccountPostures } from '@/lib/auth-store';
-import { normalizeRole, effectiveRoles, can } from '@/lib/rbac';
+import { requireRole } from '@/lib/auth/auth';
+import { getUsers } from '@/lib/db/data';
+import { getAccountPostures } from '@/lib/auth/auth-store';
+import { normalizeRole, effectiveRoles, can } from '@/lib/auth/rbac';
 import { UsersTable, type UserRow, type RoleOption } from './users-table';
 
 // app/config (Users) — the directory user-management panel. Server Component: reads the live

@@ -1,8 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { requireRole } from '@/lib/auth';
-import { upsertItem, WriteForbiddenError } from '@/lib/write';
-import type { ItemFlag } from '@/lib/inventory-shape';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { requireRole } from '@/lib/auth/auth';
+import { upsertItem, WriteForbiddenError } from '@/lib/db/write';
+import type { ItemFlag } from '@/lib/views/inventory-shape';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

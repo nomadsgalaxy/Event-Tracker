@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { LogOut, Settings2, ScrollText, ChevronDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,

@@ -11,10 +11,10 @@ import {
   PackageOpen,
   Boxes,
 } from 'lucide-react';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { getCases, getEvents, getInventory } from '@/lib/data';
-import { caseAssignment, caseStatusLabel } from '@/lib/case-view';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { getCases, getEvents, getInventory } from '@/lib/db/data';
+import { caseAssignment, caseStatusLabel } from '@/lib/views/case-view';
 import { ConfigHeader } from '@/app/config/config-header';
 import {
   getWarehouse,

@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // DetailRow — a label -> value row for the Archetype-B stacked sections (Event detail, Account,
 // Config), the body of a FieldGroup/eit-card (DESIGN_ALIGNMENT.md §5 "DetailRow label/value pairs

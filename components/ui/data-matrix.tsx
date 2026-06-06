@@ -1,8 +1,8 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import { eitmCode, type EitmKind } from '@/lib/eitm';
-import { dataMatrixSvg } from '@/lib/data-matrix';
+import { cn } from '@/lib/util/utils';
+import { eitmCode, type EitmKind } from '@/lib/integrations/eitm';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
 
 // components/ui/data-matrix.tsx — renders a scannable Data Matrix for an `eitm:` code (the ENCODE +
 // RENDER side of the feature; the scan screen already DECODES). Server Component: the SVG is built

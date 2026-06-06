@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,8 +33,8 @@ import { TabStrip } from '@/components/ui/layout';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { AccommodationsEditor } from '@/components/account/accommodations-editor';
 import { SecurityPanel as SecurityPanelImpl } from '@/components/account/security-panel';
-import { UI_THEMES, applyTheme, themeById } from '@/lib/themes';
-import type { AccommodationsProfile } from '@/lib/types';
+import { UI_THEMES, applyTheme, themeById } from '@/lib/util/themes';
+import type { AccommodationsProfile } from '@/lib/types/types';
 import { saveProfileAction, savePreferencesAction } from './actions';
 import { useUnsavedGuard, UnsavedChangesDialog } from '@/components/hooks/use-unsaved-guard';
 

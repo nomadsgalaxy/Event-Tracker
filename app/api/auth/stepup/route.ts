@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
-import { getSession, issueStepupToken, STEPUP_TTL_SECONDS } from '@/lib/session';
-import { checkStepupPassword, getAuthRecord } from '@/lib/auth-store';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { getSession, issueStepupToken, STEPUP_TTL_SECONDS } from '@/lib/auth/session';
+import { checkStepupPassword, getAuthRecord } from '@/lib/auth/auth-store';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

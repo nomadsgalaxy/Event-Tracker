@@ -1,6 +1,6 @@
-import { requireRole } from '@/lib/auth';
-import { integrationKeyStatuses, settingsMeta } from '@/lib/settings-store';
-import { dbStatus } from '@/lib/mongo';
+import { requireRole } from '@/lib/auth/auth';
+import { integrationKeyStatuses, settingsMeta } from '@/lib/auth/settings-store';
+import { dbStatus } from '@/lib/db/mongo';
 import { IntegrationKeysCard } from './integration-keys-card';
 import { StorageCard } from './storage-card';
 

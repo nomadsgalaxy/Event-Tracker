@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { CAL_DOW_S, type MiniMonth } from '@/app/calendar/cal-utils';
 
 // YearView — the grid of 12 mini-month calendars (DESIGN_ALIGNMENT §4.2 "YEAR = a grid of 12 mini-

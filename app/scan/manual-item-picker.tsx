@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import { itemCaseIds, type InventoryPayload } from '@/lib/inventory-shape';
-import { itemMatchesManualQuery, type ScanItemLean } from '@/lib/scan';
+import { cn } from '@/lib/util/utils';
+import { itemCaseIds, type InventoryPayload } from '@/lib/views/inventory-shape';
+import { itemMatchesManualQuery, type ScanItemLean } from '@/lib/views/scan';
 
 // app/scan/manual-item-picker.tsx — the "Find item" picker. Faithful port of index.html
 // ManualItemPicker (~L17610): a full-screen search over name / SKU / kind / serial, with All /

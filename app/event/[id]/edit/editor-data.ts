@@ -1,9 +1,9 @@
 import 'server-only';
-import { getCases, getEvents, getTags, getUsers, type TagDoc } from '@/lib/data';
-import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/case-view';
-import { can } from '@/lib/rbac';
-import { integrationStatus } from '@/lib/integrations';
-import type { DashTag } from '@/lib/types-dashboard';
+import { getCases, getEvents, getTags, getUsers, type TagDoc } from '@/lib/db/data';
+import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/views/case-view';
+import { can } from '@/lib/auth/rbac';
+import { integrationStatus } from '@/lib/integrations/integrations';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import type { DirectoryUser, EditorCase } from './editor-context';
 
 // app/event/[id]/edit/editor-data.ts — assemble the editor's NON-form reference data server-side.

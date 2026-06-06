@@ -1,7 +1,7 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import type { WeatherForecastDay } from '@/lib/types-dashboard';
+import { cn } from '@/lib/util/utils';
+import type { WeatherForecastDay } from '@/lib/types/types-dashboard';
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // WeatherChip — the SHARED compact per-day forecast chip (DESIGN_ALIGNMENT.md §5; reused later by

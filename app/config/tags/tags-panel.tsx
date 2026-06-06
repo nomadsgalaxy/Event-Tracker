@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Pencil, Plus, Trash2, X, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Eyebrow } from '@/components/ui/eyebrow';

@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Tabs as TabsPrimitive } from 'radix-ui';
 import type { LucideIcon } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // TabStrip — the Archetype-B underline tab strip (DESIGN_ALIGNMENT.md §3 "Archetype B" + §4
 // Event detail/editor, Reports, Account, Config). Visuals mirror app/config/config-nav.tsx: the

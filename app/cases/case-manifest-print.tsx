@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { CaseManifestSnapshot } from '@/lib/case-view';
+import type { CaseManifestSnapshot } from '@/lib/views/case-view';
 
 // case-manifest-print.tsx — the per-case INTERNAL manifest print (the packing list that lives inside
 // the case). A faithful port of buildCaseManifestSnapshot + renderCaseManifestHtml (index.html

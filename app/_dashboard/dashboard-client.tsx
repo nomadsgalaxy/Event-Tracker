@@ -34,7 +34,7 @@ import { KpiStrip, KpiCard } from '@/components/ui/kpi-strip';
 import { FindCommand } from '@/components/dashboard/find-command';
 import { DashboardHero } from '@/components/dashboard/dashboard-hero';
 import { DashboardTimeline } from '@/components/dashboard/dashboard-timeline';
-import type { DashboardData } from '@/lib/types-dashboard';
+import type { DashboardData } from '@/lib/types/types-dashboard';
 import { FILTER_TABS, matchesFilter, toDashEvents, type DashFilter } from './dash-utils';
 
 export interface DashboardClientProps {

@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { ChevronLeft, ShieldAlert } from 'lucide-react';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
 import { Button } from '@/components/ui/button';
 import { EventEditor } from '../[id]/edit/event-editor';
 import { assembleEditorData } from '../[id]/edit/editor-data';
-import type { EventPayload } from '@/lib/types';
+import type { EventPayload } from '@/lib/types/types';
 
 // app/event/new/page.tsx — the event CREATE route (Server Component).
 //

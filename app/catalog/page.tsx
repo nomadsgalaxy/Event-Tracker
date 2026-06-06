@@ -1,11 +1,11 @@
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { getCases, getEvents, getInventory, getUserWeightUnit, getTags, getUserDisplayName } from '@/lib/data';
-import { getCaseLabels, getEventNames } from '@/lib/inventory';
-import { itemCode } from '@/lib/eitm';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { getCases, getEvents, getInventory, getUserWeightUnit, getTags, getUserDisplayName } from '@/lib/db/data';
+import { getCaseLabels, getEventNames } from '@/lib/views/inventory';
+import { itemCode } from '@/lib/integrations/eitm';
 import type { ItemDetailsCase, KitCandidateItem } from '@/components/inventory/item-details-modal';
 import type { InventoryEventOption } from './inventory-view';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import {
   getWarehouses,
   getEmergencyContact,
@@ -25,12 +25,12 @@ import {
   buildCaseManifestSnapshot,
   isCaseRetired,
   buildCaseManifest,
-} from '@/lib/case-view';
-import { caseLoadedWeightKg } from '@/lib/weight';
-import { caseCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
-import { itemCaseIds } from '@/lib/inventory-shape';
+} from '@/lib/views/case-view';
+import { caseLoadedWeightKg } from '@/lib/util/weight';
+import { caseCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
+import { itemCaseIds } from '@/lib/views/inventory-shape';
 import type { WarehouseLite } from '@/app/cases/case-editor';
 import {
   CatalogScreen,

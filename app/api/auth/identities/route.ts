@@ -1,6 +1,6 @@
-import { getSession } from '@/lib/session';
-import { twoFactorStatus } from '@/lib/auth-store';
-import { jsonOk, jsonErr } from '@/lib/api-response';
+import { getSession } from '@/lib/auth/session';
+import { twoFactorStatus } from '@/lib/auth/auth-store';
+import { jsonOk, jsonErr } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

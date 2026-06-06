@@ -5,7 +5,7 @@ import { useId, useState } from 'react';
 import { Check, Minus, Lock, Plus, Trash2, Loader2, RotateCcw, Save, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { EffectiveTable } from '@/lib/rbac';
+import type { EffectiveTable } from '@/lib/auth/rbac';
 import { useUnsavedGuard, UnsavedChangesDialog } from '@/components/hooks/use-unsaved-guard';
 
 // permissions-matrix.tsx — the EDITABLE role × capability matrix (Config > Permissions). The client

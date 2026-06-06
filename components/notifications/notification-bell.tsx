@@ -8,7 +8,7 @@ import { Bell, Plane, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { markReadAction, decideTravelRequestAction } from '@/app/notifications/actions';
 import {
   renderNotification,

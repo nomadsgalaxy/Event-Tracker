@@ -1,7 +1,7 @@
-import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, qParam, intParam, matches, auditKeyWrite } from '@/lib/api-v1';
-import { getCases, getCase, getInventory } from '@/lib/data';
-import { createCase, type CasePatch } from '@/lib/write';
-import { serializeCase } from '@/lib/api-v1-serialize';
+import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, qParam, intParam, matches, auditKeyWrite } from '@/lib/api/api-v1';
+import { getCases, getCase, getInventory } from '@/lib/db/data';
+import { createCase, type CasePatch } from '@/lib/db/write';
+import { serializeCase } from '@/lib/api/api-v1-serialize';
 
 export const dynamic = 'force-dynamic';
 

@@ -44,9 +44,9 @@ import {
   itemOpenFlag,
   type InventoryPayload,
   type ItemFlag,
-} from '@/lib/inventory-shape';
-import type { ItemPatch } from '@/lib/write';
-import type { DashTag } from '@/lib/types-dashboard';
+} from '@/lib/views/inventory-shape';
+import type { ItemPatch } from '@/lib/db/write';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import { kindLucide } from '../kind-icon';
 import { ItemDetailsModal } from '@/components/inventory/item-details-modal';
 import { FlagItemModal, ResolveFlagModal } from '@/components/inventory/flag-modals';

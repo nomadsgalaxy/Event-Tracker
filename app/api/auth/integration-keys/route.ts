@@ -1,16 +1,16 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStepupToken } from '@/lib/session';
-import { resolveLiveRole } from '@/lib/auth';
-import { rankOf } from '@/lib/rbac';
+import { getSession, verifyStepupToken } from '@/lib/auth/session';
+import { resolveLiveRole } from '@/lib/auth/auth';
+import { rankOf } from '@/lib/auth/rbac';
 import {
   integrationKeyStatuses,
   saveIntegrationKeys,
   settingsMeta,
   INTEGRATION_KEY_NAMES,
   type IntegrationKeyName,
-} from '@/lib/settings-store';
-import { writeAudit } from '@/lib/data';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+} from '@/lib/auth/settings-store';
+import { writeAudit } from '@/lib/db/data';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

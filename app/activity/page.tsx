@@ -1,5 +1,5 @@
-import { requireUser } from '@/lib/auth';
-import { getActivityFeed } from '@/lib/activity';
+import { requireUser } from '@/lib/auth/auth';
+import { getActivityFeed } from '@/lib/views/activity';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { ActivityFeed } from './activity-feed';
 

@@ -1,6 +1,6 @@
-import { getCalendarData } from '@/lib/calendar-data';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
+import { getCalendarData } from '@/lib/views/calendar-data';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
 import CalendarClient from './calendar-client';
 import { parseMonthKey, parseView } from './cal-utils';
 

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth/auth';
 
 // app/cases — the standalone Cases list is now FOLDED into the merged Catalog (DESIGN_ALIGNMENT §4.6:
 // one nav destination, Roadcases | Inventory split via the left rail). The canonical roadcases surface

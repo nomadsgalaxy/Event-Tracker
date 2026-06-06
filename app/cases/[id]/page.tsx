@@ -9,11 +9,11 @@ import {
   MapPin,
   ScanLine,
 } from 'lucide-react';
-import { getCase, getEvents, getInventory, getTags, getUserWeightUnit, type TagDoc } from '@/lib/data';
-import { getInventory as getInventoryDocs, getCaseLabels } from '@/lib/inventory';
+import { getCase, getEvents, getInventory, getTags, getUserWeightUnit, type TagDoc } from '@/lib/db/data';
+import { getInventory as getInventoryDocs, getCaseLabels } from '@/lib/views/inventory';
 import { getWarehouses, getEmergencyContact, caseReturnAndContact } from '@/app/warehouses/warehouse-data';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
 import {
   buildCaseManifest,
   buildCaseManifestSnapshot,
@@ -25,13 +25,13 @@ import {
   getCaseScheduleConflicts,
   classifyCaseDelete,
   isCaseRetired,
-} from '@/lib/case-view';
-import { itemCaseIds } from '@/lib/inventory-shape';
-import type { DashTag } from '@/lib/types-dashboard';
-import { formatWeight, caseLoadedWeightKg, caseContentsWeightKg } from '@/lib/weight';
-import { caseCode, itemCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
+} from '@/lib/views/case-view';
+import { itemCaseIds } from '@/lib/views/inventory-shape';
+import type { DashTag } from '@/lib/types/types-dashboard';
+import { formatWeight, caseLoadedWeightKg, caseContentsWeightKg } from '@/lib/util/weight';
+import { caseCode, itemCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
 import {
   Card,
   CardContent,

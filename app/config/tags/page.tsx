@@ -1,6 +1,6 @@
-import { requireRole } from '@/lib/auth';
-import { getTags, getEvents, getInventory } from '@/lib/data';
-import { can } from '@/lib/rbac';
+import { requireRole } from '@/lib/auth/auth';
+import { getTags, getEvents, getInventory } from '@/lib/db/data';
+import { can } from '@/lib/auth/rbac';
 import { TagsPanel, type TagLibRow } from './tags-panel';
 
 // app/config/tags — the tag-library manager (Config > Tags). Server Component: reads the live `tags`

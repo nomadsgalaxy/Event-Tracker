@@ -1,7 +1,7 @@
-import { requireRole } from '@/lib/auth';
-import { getAuditPage, AUDIT_DEFAULT_LIMIT } from '@/lib/data';
-import { getEvents, getInventory } from '@/lib/data';
-import { buildActivityFeed } from '@/lib/activity';
+import { requireRole } from '@/lib/auth/auth';
+import { getAuditPage, AUDIT_DEFAULT_LIMIT } from '@/lib/db/data';
+import { getEvents, getInventory } from '@/lib/db/data';
+import { buildActivityFeed } from '@/lib/views/activity';
 import { AuditTable, type AuditRow, type ActivityRow } from './audit-table';
 
 // app/config/audit — the security AUDIT LOG with advanced filters + pagination + an optional

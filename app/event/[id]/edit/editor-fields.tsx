@@ -33,8 +33,8 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { PlacesAddressField, type ParsedPlace } from '@/components/ui/places-address-field';
-import { cn } from '@/lib/utils';
-import type { DashTag } from '@/lib/types-dashboard';
+import { cn } from '@/lib/util/utils';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import { lookupFlightAction, type FlightLeg } from '@/app/event/flight-actions';
 import { EVENT_STATES, type EventFormValues } from './schema';
 import { useEditorContext } from './editor-context';

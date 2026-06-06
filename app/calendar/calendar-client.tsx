@@ -30,7 +30,7 @@ import { SidebarRail, SidebarSection, SidebarItem } from '@/components/ui/sideba
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Eyebrow } from '@/components/ui/eyebrow';
-import type { DashTag } from '@/lib/types-dashboard';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import { TagChip } from '@/components/ui/tag-chip';
 import { MonthView } from '@/components/calendar/month-view';
 import { YearView } from '@/components/calendar/year-view';

@@ -1,4 +1,4 @@
-import { withKey, apiOk } from '@/lib/api-v1';
+import { withKey, apiOk } from '@/lib/api/api-v1';
 
 export const dynamic = 'force-dynamic';
 

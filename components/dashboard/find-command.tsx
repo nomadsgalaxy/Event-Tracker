@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { matchesQuery } from '@/app/_dashboard/dash-utils';
-import type { DashEvent } from '@/lib/types-dashboard';
+import type { DashEvent } from '@/lib/types/types-dashboard';
 
 // Find — a shadcn Command palette over the server-fetched event list. Pure client-side
 // filtering of an already-loaded list (a keystroke never costs a round-trip), ported from the

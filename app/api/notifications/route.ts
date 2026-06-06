@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
-import { getNotifications, getTravelReminders } from '@/lib/notifications';
+import { getCurrentUser } from '@/lib/auth/auth';
+import { getNotifications, getTravelReminders } from '@/lib/views/notifications';
 
 // GET /api/notifications — the bell's POLL endpoint (60s refresh, mirrors the Python
 // NotificationBell's setInterval(load, 60000) hitting /auth/notifications).

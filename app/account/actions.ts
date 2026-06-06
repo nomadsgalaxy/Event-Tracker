@@ -1,15 +1,15 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser, type CurrentUser } from '@/lib/auth';
-import { getDb, NOT_DELETED } from '@/lib/mongo';
-import { clampThemeId } from '@/lib/themes';
+import { requireUser, type CurrentUser } from '@/lib/auth/auth';
+import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { clampThemeId } from '@/lib/util/themes';
 import {
   ACCOMMODATION_DIETARY,
   ACCOMMODATION_ACCESSIBILITY,
   ACCOMMODATION_SEVERITY,
-} from '@/lib/accommodations';
-import type { UserDoc, AccommodationsProfile, EmergencyContact } from '@/lib/types';
+} from '@/lib/views/accommodations';
+import type { UserDoc, AccommodationsProfile, EmergencyContact } from '@/lib/types/types';
 
 // app/account/actions.ts — the SELF-SCOPED Account & Preferences writes.
 //

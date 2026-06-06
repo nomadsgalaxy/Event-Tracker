@@ -8,8 +8,8 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { WeatherChip } from '@/components/ui/weather-chip';
 import { TagChip } from '@/components/ui/tag-chip';
-import { cn } from '@/lib/utils';
-import type { DashTimelineEvent } from '@/lib/types-dashboard';
+import { cn } from '@/lib/util/utils';
+import type { DashTimelineEvent } from '@/lib/types/types-dashboard';
 import {
   buildTimelineAxis,
   countdownLabel,

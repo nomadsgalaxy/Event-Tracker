@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { DEFAULT_ROLES } from '@/lib/rbac';
+import { cn } from '@/lib/util/utils';
+import { DEFAULT_ROLES } from '@/lib/auth/rbac';
 
 // role-badge.tsx — a small chip that maps a directory ROLE id to its color + label from the rbac
 // role table (lib/rbac DEFAULT_ROLES). This is NOT an event/case STATUS — those are owned solely

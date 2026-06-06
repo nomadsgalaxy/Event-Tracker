@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // audit-table.tsx — the AUDIT log view with advanced filters + pagination + the optional operational-
 // activity interleave. The filters are URL-reflected: changing one pushes the next querystring (the

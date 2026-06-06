@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { clearSessionCookie } from '@/lib/session';
+import { clearSessionCookie } from '@/lib/auth/session';
 
 // app/actions/auth.ts — the logout Server Action.
 //

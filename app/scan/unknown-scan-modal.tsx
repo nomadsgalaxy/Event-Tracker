@@ -5,9 +5,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Eyebrow } from '@/components/ui/eyebrow';
-import { cn } from '@/lib/utils';
-import { isCodeAdopted, scanPolicy, type ScanItemLean } from '@/lib/scan';
-import type { InventoryPayload } from '@/lib/inventory-shape';
+import { cn } from '@/lib/util/utils';
+import { isCodeAdopted, scanPolicy, type ScanItemLean } from '@/lib/views/scan';
+import type { InventoryPayload } from '@/lib/views/inventory-shape';
 
 // app/scan/unknown-scan-modal.tsx — the adoption flow with guard. Faithful port of index.html
 // UnknownScanModal (~L17503). A scan that didn't resolve to a single exact item surfaces here with:

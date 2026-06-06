@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // app/manifest/assign-cases-modal.tsx — the Assign-cases modal (DESIGN_ALIGNMENT §4.3 + the Python
 // ManifestPool case editor, index.html ~L16436). A checkbox grid of EVERY case (retired excluded,

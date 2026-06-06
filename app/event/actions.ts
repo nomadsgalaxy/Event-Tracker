@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { requireRole, requireUser } from '@/lib/auth';
-import { getUserDisplayName } from '@/lib/data';
-import { saveEvent, createEvent, softDeleteEvent, markEventOnsite, WriteForbiddenError, type EventPatch } from '@/lib/write';
-import type { EventState } from '@/lib/types';
+import { requireRole, requireUser } from '@/lib/auth/auth';
+import { getUserDisplayName } from '@/lib/db/data';
+import { saveEvent, createEvent, softDeleteEvent, markEventOnsite, WriteForbiddenError, type EventPatch } from '@/lib/db/write';
+import type { EventState } from '@/lib/types/types';
 
 // app/event/actions.ts — the event-editor Server Action.
 //

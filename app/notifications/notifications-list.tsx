@@ -8,7 +8,7 @@ import { Bell, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { markReadAction, decideTravelRequestAction } from './actions';
 import { renderNotification, relativeTime, type NotificationItem } from '@/components/notifications/notification-meta';
 

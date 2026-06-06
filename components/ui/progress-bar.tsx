@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // ProgressBar — the thin packed/total bar shown on event/case cards and manifest rollups
 // (DESIGN_ALIGNMENT.md §5 "A thin progress bar shows packed/total"). The fill uses --primary (brand

@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 import { Search } from 'lucide-react';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import {
@@ -64,9 +64,9 @@ import {
   type InventoryPayload,
   type ItemFlag,
   type PartRefTag,
-} from '@/lib/inventory-shape';
-import type { ItemPatch } from '@/lib/write';
-import type { DashTag } from '@/lib/types-dashboard';
+} from '@/lib/views/inventory-shape';
+import type { ItemPatch } from '@/lib/db/write';
+import type { DashTag } from '@/lib/types/types-dashboard';
 import { ItemDetailsModal, type ItemDetailsCase, type KitCandidateItem } from '@/components/inventory/item-details-modal';
 import { ItemMatrixModal } from '@/components/inventory/item-matrix-modal';
 import {

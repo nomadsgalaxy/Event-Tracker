@@ -1,15 +1,15 @@
 import { notFound } from 'next/navigation';
-import { getEvent, getEvents, getCases, getInventory, getTags, getUsers, getUserWeightUnit, getUserTempUnit, type TagDoc } from '@/lib/data';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { stripEventPii, viewerLeadsEvent } from '@/lib/event-view';
-import { activeGrantsFor } from '@/lib/grants';
-import { assembleEventDetailView, type ResolvedTag } from '@/lib/event-detail-view';
-import { eventCode } from '@/lib/eitm';
-import { activeTenantHash36 } from '@/lib/settings-store';
-import { dataMatrixSvg } from '@/lib/data-matrix';
-import { fetchVenueForecast, buildEventForecastRows, type EventForecastRow } from '@/lib/weather';
-import type { CasePayload, EventPayload } from '@/lib/types';
+import { getEvent, getEvents, getCases, getInventory, getTags, getUsers, getUserWeightUnit, getUserTempUnit, type TagDoc } from '@/lib/db/data';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { stripEventPii, viewerLeadsEvent } from '@/lib/views/event-view';
+import { activeGrantsFor } from '@/lib/auth/grants';
+import { assembleEventDetailView, type ResolvedTag } from '@/lib/views/event-detail-view';
+import { eventCode } from '@/lib/integrations/eitm';
+import { activeTenantHash36 } from '@/lib/auth/settings-store';
+import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
+import { fetchVenueForecast, buildEventForecastRows, type EventForecastRow } from '@/lib/integrations/weather';
+import type { CasePayload, EventPayload } from '@/lib/types/types';
 import { EventDetailClient } from './event-detail-tabs';
 
 // app/event/[id]/page.tsx — the event DETAIL view (Server Component).

@@ -1,7 +1,7 @@
-import { getDashboardData } from '@/lib/dashboard-metrics';
-import { requireUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
-import { getUserTempUnit } from '@/lib/data';
+import { getDashboardData } from '@/lib/views/dashboard-metrics';
+import { requireUser } from '@/lib/auth/auth';
+import { can } from '@/lib/auth/rbac';
+import { getUserTempUnit } from '@/lib/db/data';
 import DashboardClient from './_dashboard/dashboard-client';
 
 // Dashboard (/) — Archetype A (DESIGN_ALIGNMENT §4.1): a contextual LEFT filter rail + a main

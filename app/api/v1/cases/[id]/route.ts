@@ -1,8 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, auditKeyWrite } from '@/lib/api-v1';
-import { getCase, getInventory } from '@/lib/data';
-import { saveCase, retireOrDeleteCase, type CasePatch } from '@/lib/write';
-import { serializeCase } from '@/lib/api-v1-serialize';
+import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, auditKeyWrite } from '@/lib/api/api-v1';
+import { getCase, getInventory } from '@/lib/db/data';
+import { saveCase, retireOrDeleteCase, type CasePatch } from '@/lib/db/write';
+import { serializeCase } from '@/lib/api/api-v1-serialize';
 
 export const dynamic = 'force-dynamic';
 

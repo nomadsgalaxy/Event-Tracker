@@ -1,8 +1,8 @@
 import { type NextRequest } from 'next/server';
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
-import { getSession } from '@/lib/session';
-import { passkeyRegisterFinish } from '@/lib/passkeys';
-import { jsonOk, jsonErr, readJson } from '@/lib/api-response';
+import { getSession } from '@/lib/auth/session';
+import { passkeyRegisterFinish } from '@/lib/auth/passkeys';
+import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
 export const dynamic = 'force-dynamic';
 

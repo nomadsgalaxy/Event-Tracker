@@ -1,8 +1,8 @@
-import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, qParam, intParam, auditKeyWrite } from '@/lib/api-v1';
-import { getInventory } from '@/lib/data';
-import { createInventoryItem, type ItemPatch } from '@/lib/write';
-import { itemMatchesQuery, itemInStorage } from '@/lib/inventory-shape';
-import { serializeItem } from '@/lib/api-v1-serialize';
+import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, qParam, intParam, auditKeyWrite } from '@/lib/api/api-v1';
+import { getInventory } from '@/lib/db/data';
+import { createInventoryItem, type ItemPatch } from '@/lib/db/write';
+import { itemMatchesQuery, itemInStorage } from '@/lib/views/inventory-shape';
+import { serializeItem } from '@/lib/api/api-v1-serialize';
 
 export const dynamic = 'force-dynamic';
 

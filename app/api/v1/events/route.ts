@@ -1,7 +1,7 @@
-import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, qParam, intParam, matches, auditKeyWrite } from '@/lib/api-v1';
-import { getEvents, getEvent, getInventory } from '@/lib/data';
-import { createEvent, type EventPatch } from '@/lib/write';
-import { stripEventForKey, eventManifest } from '@/lib/api-v1-serialize';
+import { withKey, apiOk, apiErr, keyCan, requireScope, readBody, qParam, intParam, matches, auditKeyWrite } from '@/lib/api/api-v1';
+import { getEvents, getEvent, getInventory } from '@/lib/db/data';
+import { createEvent, type EventPatch } from '@/lib/db/write';
+import { stripEventForKey, eventManifest } from '@/lib/api/api-v1-serialize';
 
 export const dynamic = 'force-dynamic';
 

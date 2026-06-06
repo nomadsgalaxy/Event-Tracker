@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/util/utils';
 
 // Eyebrow — the tiny uppercase muted label that sits above every block / header / card / column
 // header row (DESIGN_ALIGNMENT.md §5: "Eyebrows everywhere ... the connective tissue"). Pure RSC,

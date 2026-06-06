@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { CalendarDays, MapPin, UserRound } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { cn } from '@/lib/utils';
-import type { DashEvent } from '@/lib/types-dashboard';
+import { cn } from '@/lib/util/utils';
+import type { DashEvent } from '@/lib/types/types-dashboard';
 
 // One dashboard event row, rendered as a shadcn Card. RSC-safe (no hooks/state) so it works
 // in both the server page and the client list. Whole card is a single link to the detail page.
