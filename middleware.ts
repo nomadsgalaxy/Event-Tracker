@@ -188,6 +188,16 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   // The token-authenticated .ics feed is always public (the route checks the token itself).
   if (isCalendarFeed(pathname)) return passThrough();
 
+  // The /api/v1 REST surface authenticates with a Bearer / X-Api-Key TOKEN, not the session cookie.
+  // A headless client (the MCP server, a CLI) carries no _eit_auth cookie, so don't bounce it at the
+  // edge — pass it through and let lib/api-v1.withKey -> verifyApiKey be the authoritative Node-runtime
+  // check (it verifies the key's PBKDF2 secret + re-resolves the owner's live caps). We only skip the
+  // cookie gate when an API-key header is actually present; a /api/v1 request with NO key header still
+  // falls through to the cookie gate below, so we never open an unauthenticated surface.
+  if (pathname.startsWith('/api/v1/') && (req.headers.get('authorization') || req.headers.get('x-api-key'))) {
+    return passThrough();
+  }
+
   const isPublic =
     !isPublicAuthRecoveryException(pathname) &&
     PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));

@@ -1,0 +1,4 @@
+# Event Tracker MCP server dependencies.
+# The HTTP layer uses only the Python standard library (urllib), so the only
+# runtime dependency is the official MCP Python SDK.
+mcp>=1.2.0

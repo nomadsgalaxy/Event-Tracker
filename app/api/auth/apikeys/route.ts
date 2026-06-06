@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic';
 async function handle() {
   const sess = await getSession();
   if (!sess) return jsonErr(401, 'sign in');
-  const { keys, tokenPrefix } = await listApiKeys(sess.sub);
-  return jsonOk({ keys, role: sess.role, tokenPrefix });
+  const { keys, tokenPrefix, role, ownerCaps } = await listApiKeys(sess.sub);
+  return jsonOk({ keys, role, tokenPrefix, ownerCaps });
 }
 
 export const GET = handle;

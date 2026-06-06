@@ -26,6 +26,8 @@ import { Label } from '@/components/ui/label';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { DetailRow } from '@/components/ui/detail-row';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { effectiveTable } from '@/lib/rbac';
 import {
   Dialog,
   DialogContent,
@@ -747,20 +749,36 @@ interface PublicApiKey {
   id: string;
   label: string;
   scope: string;
+  caps: string[];
   createdAt?: number;
   lastUsedAt?: number | null;
 }
+
+// The full capability registry (labels + groups) is the SAME isomorphic table the server enforces, so
+// the picker shows exactly what a key can be scoped to. ownerCaps (from the server) is the LIVE ceiling
+// — a cap the owner doesn't currently hold is shown disabled. Only editable caps are user-pickable
+// (structural/self-service caps like db.read.session are implied; admin-class caps are off the API).
+const PICKABLE_CAPS = effectiveTable().capabilities.filter((c) => c.editable);
+const CAP_GROUP_ORDER = ['Events', 'Inventory & tags', 'Personal data (PII)', 'Administration'];
+function capSummary(k: PublicApiKey): string {
+  const writeOrPii = (k.caps || []).filter((c) => c !== 'db.read.session');
+  if (writeOrPii.length === 0) return 'Read only';
+  return `${writeOrPii.length} ${writeOrPii.length === 1 ? 'capability' : 'capabilities'}`;
+}
+
 function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStepUp: (run: (token: string) => void) => void }) {
   const [keys, setKeys] = useState<PublicApiKey[]>([]);
   const [tokenPrefix, setTokenPrefix] = useState('eitk_');
+  const [ownerCaps, setOwnerCaps] = useState<string[]>([]);
   const [label, setLabel] = useState('');
-  const [scope, setScope] = useState<'read' | 'write'>('read');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newToken, setNewToken] = useState('');
 
   const load = useCallback(async () => {
     const { status, data } = await api('/api/auth/apikeys', undefined, 'GET');
     if (status === 200) {
       setKeys((data.keys as PublicApiKey[] | undefined) ?? []);
+      setOwnerCaps((data.ownerCaps as string[] | undefined) ?? []);
       if (typeof data.tokenPrefix === 'string') setTokenPrefix(data.tokenPrefix);
     }
   }, []);
@@ -768,12 +786,28 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
     void load();
   }, [load]);
 
+  const ownerSet = new Set(ownerCaps);
+  // The caps this owner can actually grant a key, grouped for the picker.
+  const grantable = PICKABLE_CAPS.filter((c) => ownerSet.has(c.id));
+  const groups = CAP_GROUP_ORDER.map((g) => ({ group: g, caps: grantable.filter((c) => c.group === g) })).filter((g) => g.caps.length);
+
+  function toggle(id: string, on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   function createKey() {
     requireStepUp(async (token) => {
-      const { status, data } = await api('/api/auth/apikeys/create', { label: label.trim() || 'API key', scope, stepupToken: token });
+      const caps = [...selected].filter((c) => ownerSet.has(c));
+      const { status, data } = await api('/api/auth/apikeys/create', { label: label.trim() || 'API key', caps, stepupToken: token });
       if (status === 200 && typeof data.token === 'string') {
         setNewToken(data.token);
         setLabel('');
+        setSelected(new Set());
         await load();
       } else {
         toast.error(String(data.error || 'Could not create the key.'));
@@ -800,29 +834,55 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
   }
 
   return (
-    <FieldGroup title="API keys" description="User-bound keys for the scoped REST API. The full key is shown once at creation.">
+    <FieldGroup title="API keys" description="User-bound keys for the scoped REST API + MCP server. A key can only do what you can — and only the capabilities you select. The full key is shown once at creation.">
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="key-label" className="text-xs text-muted-foreground">Label</Label>
-            <Input id="key-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. CI export" className="w-48" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Scope</Label>
-            <Select value={scope} onValueChange={(v) => setScope(v as 'read' | 'write')}>
-              <SelectTrigger className="w-32" aria-label="API key scope">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="read">Read</SelectItem>
-                <SelectItem value="write">Read &amp; write</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button type="button" onClick={createKey}>
-            <Plus aria-hidden /> Create key
-          </Button>
+        <div className="grid gap-1.5">
+          <Label htmlFor="key-label" className="text-xs text-muted-foreground">Label</Label>
+          <Input id="key-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. CI export" className="w-64" />
         </div>
+
+        <div className="grid gap-2 rounded-md border border-border p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Capabilities</span>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSelected(new Set(grantable.map((c) => c.id)))}>
+                Match my access
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                Read only
+              </Button>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            With nothing selected the key is read-only. Demoting your role narrows every key you hold automatically.
+          </p>
+          {groups.map(({ group, caps }) => (
+            <div key={group} className="grid gap-1.5">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{group}</span>
+              {caps.map((c) => (
+                <label key={c.id} className="flex items-start gap-2 text-xs">
+                  <Checkbox
+                    checked={selected.has(c.id)}
+                    onCheckedChange={(v) => toggle(c.id, v === true)}
+                    aria-label={c.label}
+                    className="mt-0.5"
+                  />
+                  <span className="flex flex-col">
+                    <span>{c.label}</span>
+                    <span className="text-muted-foreground">{c.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          ))}
+          {groups.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">Your role grants no extra capabilities — keys will be read-only.</p>
+          ) : null}
+        </div>
+
+        <Button type="button" onClick={createKey} className="self-start">
+          <Plus aria-hidden /> Create key
+        </Button>
 
         {newToken ? (
           <div className="flex flex-col gap-2 rounded-md border border-[var(--success)] bg-[color-mix(in_oklab,var(--success)_10%,transparent)] p-3">
@@ -841,20 +901,26 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
           <p className="text-xs text-muted-foreground">No API keys yet. Keys begin with <code className="font-mono">{tokenPrefix}</code>.</p>
         ) : (
           <ul className="flex flex-col divide-y divide-border">
-            {keys.map((k) => (
-              <li key={k.id} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="flex flex-col">
-                  <span className="text-sm">{k.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    <code className="font-mono">{tokenPrefix}{k.id}…</code> · {k.scope}
-                    {k.createdAt ? ` · created ${new Date(k.createdAt).toLocaleDateString()}` : ''}
-                  </span>
-                </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => revokeKey(k.id)}>
-                  <Trash2 aria-hidden /> Revoke
-                </Button>
-              </li>
-            ))}
+            {keys.map((k) => {
+              const reduced = (k.caps || []).some((c) => !ownerSet.has(c));
+              return (
+                <li key={k.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-sm">{k.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      <code className="font-mono">{tokenPrefix}{k.id}…</code> · {capSummary(k)}
+                      {k.createdAt ? ` · created ${new Date(k.createdAt).toLocaleDateString()}` : ''}
+                      {' · '}
+                      {k.lastUsedAt ? `last used ${new Date(k.lastUsedAt).toLocaleDateString()}` : 'never used'}
+                      {reduced ? ' · reduced to your current role' : ''}
+                    </span>
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => revokeKey(k.id)}>
+                    <Trash2 aria-hidden /> Revoke
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

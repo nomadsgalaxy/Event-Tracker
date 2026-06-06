@@ -92,6 +92,13 @@ Set `EIT_DEMO_MODE=1` (and `ET_SESSION_SECRET`) to run a public, self-resetting 
 auto-signed-in to an isolated per-browser sandbox cloned from a read-only seed, and admin/config
 writes are blocked. See [docs/SETUP.md](docs/SETUP.md#demo-mode).
 
+## REST API and MCP
+
+There's a scoped REST API at `/api/v1` and a stdio MCP server (`eit_mcp/`) for Claude Desktop / Claude
+Code. Each user mints their own keys in **Account → Security**; a key carries a subset of that user's
+own capabilities and can never exceed them. See **[docs/REST_API.md](docs/REST_API.md)** and
+**[eit_mcp/README.md](eit_mcp/README.md)**.
+
 ## License
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE).

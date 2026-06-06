@@ -3352,3 +3352,120 @@ export async function deleteTag({
   return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount, eventUses, itemUses };
 }
 
+// ─── Inventory: flag an item (condition / loss note) ─────────────────────────────────────────────
+// Append an OPEN flag to a catalog item — the condition/loss affordance + the REST flag_item tool. The
+// gate is db.write.app (authorized+, the warehouse-worker write tier — matches the catalog write gate).
+// Reuses addFlag (the pure builder), then $sets only payload.flags + updatedAt (envelope discipline).
+export async function flagInventoryItem({
+  itemId,
+  note,
+  severity,
+  category,
+  actorRole,
+  actor,
+}: {
+  itemId: string;
+  note: string;
+  severity?: string;
+  category?: string;
+  actorRole: string;
+  actor: PackByActor;
+}): Promise<{ ok: boolean; itemId: string; flag: ItemFlag }> {
+  if (!can('db.write.app', actorRole)) {
+    throw new WriteForbiddenError('You do not have permission to flag inventory.');
+  }
+  const _id = String(itemId);
+  const db = await getDb();
+  const col = db.collection<InventoryDoc>('inventory');
+  const stored = await col.findOne({ _id, ...NOT_DELETED });
+  if (!stored) throw new Error('Inventory item not found (or deleted).');
+  const by = actor?.name || actor?.email || 'api';
+  const flags = buildAddFlag(stored.payload, { note: String(note ?? ''), severity, category, by });
+  const now = Date.now();
+  await col.updateOne({ _id, ...NOT_DELETED }, { $set: { 'payload.flags': flags, 'payload.id': _id, updatedAt: now } });
+  return { ok: true, itemId: _id, flag: flags[flags.length - 1] };
+}
+
+// ─── Event: set a staffer's travel or lodging (per-event PII write) ──────────────────────────────
+// The "set my flight / my hotel" path (the REST set_flight/set_lodging tools). Gated by staff.pii.view
+// with self/lead/manager context: a user can set THEIR OWN travel (isSelf), the lead of the event can
+// set any staffer's (isLeadOfEvent), manager+ can set anyone's. Merges the patch into the matched
+// staffer's travel|hotel object and $sets ONLY payload.staff + updatedAt — never any other field, and
+// it can only touch a person already on the roster (no arbitrary staffer insertion). The target
+// defaults to the actor when staffEmail is omitted.
+export async function setStaffPii({
+  eventId,
+  staffEmail,
+  kind,
+  patch,
+  actorEmail,
+  actorRole,
+}: {
+  eventId: string;
+  staffEmail?: string;
+  kind: 'travel' | 'hotel';
+  patch: Record<string, unknown>;
+  actorEmail: string;
+  actorRole: string;
+}): Promise<{ ok: boolean; staffEmail: string; travel?: unknown; hotel?: unknown }> {
+  const _id = String(eventId);
+  const db = await getDb();
+  const col = db.collection<EventDoc>('events');
+  const stored = await col.findOne({ _id, ...NOT_DELETED });
+  if (!stored) throw new Error('Event not found (or deleted).');
+
+  const lc = (v: unknown) => String(v ?? '').trim().toLowerCase();
+  const target = lc(staffEmail) || lc(actorEmail);
+  if (!target) throw new Error('A staff email is required.');
+  const isSelf = target === lc(actorEmail);
+  const isLead = viewerLeadsEvent(stored.payload, actorEmail);
+  if (!can('staff.pii.view', actorRole, { isSelf, isLeadOfEvent: isLead })) {
+    throw new WriteForbiddenError('You do not have permission to set travel/lodging for this person.');
+  }
+
+  const staff = (Array.isArray(stored.payload.staff) ? stored.payload.staff.slice() : []) as unknown as Record<string, unknown>[];
+  const idx = staff.findIndex((s) => lc(s?.email) === target);
+  if (idx === -1) throw new Error('That person is not on this event roster.');
+  const cur = staff[idx] || {};
+  const clean = patch && typeof patch === 'object' ? patch : {};
+  const merged: Record<string, unknown> =
+    kind === 'hotel'
+      ? { ...cur, hotel: { ...((cur.hotel as object) || {}), ...clean } }
+      : { ...cur, travel: { ...((cur.travel as object) || {}), ...clean } };
+  staff[idx] = merged;
+
+  const now = Date.now();
+  await col.updateOne({ _id, ...NOT_DELETED }, { $set: { 'payload.staff': staff, updatedAt: now } });
+  return {
+    ok: true,
+    staffEmail: target,
+    ...(kind === 'hotel' ? { hotel: merged.hotel } : { travel: merged.travel }),
+  };
+}
+
+// ─── Inventory: CREATE (mint id + insert, then apply the editor patch) ──────────────────────────
+// The catalog "new item" path for the REST API + the generic /db mirror. Mints a server-side id (a
+// client id is never trusted), inserts a minimal bulk envelope, then applies the patch via upsertItem
+// (which re-gates db.write.app + sanitizes every field). Gated by db.write.app (authorized+).
+export async function createInventoryItem({
+  patch,
+  actorRole,
+}: {
+  patch: ItemPatch;
+  actorRole: string;
+}): Promise<CreateEventResult> {
+  if (!can('db.write.app', actorRole)) {
+    throw new WriteForbiddenError('You do not have permission to create inventory.');
+  }
+  const db = await getDb();
+  const col = db.collection<InventoryDoc>('inventory');
+  const id = generateId();
+  const now = Date.now();
+  const base = { id, tracking: 'bulk', distribution: [], units: [], flags: [] } as unknown as InventoryDoc['payload'];
+  await col.insertOne({ _id: id, payload: base, createdAt: now, updatedAt: now, deletedAt: null } as InventoryDoc);
+  if (patch && Object.keys(patch).length) {
+    await upsertItem({ id, patch, actorRole });
+  }
+  return { ok: true, matched: 1, modified: 1, id };
+}
+

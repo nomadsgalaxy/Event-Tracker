@@ -1,5 +1,6 @@
 import 'server-only';
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import { redirect } from 'next/navigation';
 import { getDb } from './mongo';
 import { getSession, type SessionPayload } from './session';
@@ -144,6 +145,26 @@ export function verifyPassword(password: string, rec: PwRecord | null | undefine
     if (!Number.isInteger(iters) || iters < 1) return false;
     const expect = b64urlDecode(rec.hash);
     const dk = crypto.pbkdf2Sync(Buffer.from(password, 'utf-8'), salt, iters, expect.length, 'sha256');
+    return dk.length === expect.length && crypto.timingSafeEqual(dk, expect);
+  } catch {
+    return false;
+  }
+}
+
+// Async (libuv-threadpool) PBKDF2 so a hot verification path never blocks the Node event loop. Used by
+// the unauthenticated API-key verify path (lib/api-keys.verifyApiKey), where a flood of bad tokens
+// would otherwise pin a core with synchronous derivations. Same algorithm + constant-time compare as
+// verifyPassword — keep them in lockstep.
+const pbkdf2Async = promisify(crypto.pbkdf2);
+export async function verifyPasswordAsync(password: string, rec: PwRecord | null | undefined): Promise<boolean> {
+  if (!rec || typeof rec !== 'object') return false;
+  try {
+    if (rec.algo && rec.algo !== 'pbkdf2-sha256') return false;
+    const salt = b64urlDecode(rec.salt);
+    const iters = Number(rec.iters);
+    if (!Number.isInteger(iters) || iters < 1) return false;
+    const expect = b64urlDecode(rec.hash);
+    const dk = await pbkdf2Async(Buffer.from(password, 'utf-8'), salt, iters, expect.length, 'sha256');
     return dk.length === expect.length && crypto.timingSafeEqual(dk, expect);
   } catch {
     return false;
