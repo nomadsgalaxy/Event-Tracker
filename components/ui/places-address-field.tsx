@@ -33,7 +33,9 @@ export interface ParsedPlace {
 // ── Google Maps SDK loader (browser-only, idempotent) ──────────────────────────────────────────
 // Lazy-injects the Maps JS script ONCE per page and resolves when google.maps.places is ready.
 // Mirrors the Python window.eitLoadGoogleMaps (index.html). No-op + reject when no public key.
-type MapsNamespace = typeof globalThis & { google?: { maps?: { places?: unknown } } };
+type MapsNamespace = typeof globalThis & {
+  google?: { maps?: { places?: unknown; importLibrary?: (name: string) => Promise<unknown> } };
+};
 let mapsPromise: Promise<unknown> | null = null;
 
 function loadGoogleMaps(key: string): Promise<unknown> {
@@ -42,22 +44,34 @@ function loadGoogleMaps(key: string): Promise<unknown> {
   if (w.google?.maps?.places) return Promise.resolve(w.google);
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById('eit-gmaps-sdk') as HTMLScriptElement | null;
-    const onReady = () => {
-      if (w.google?.maps?.places) resolve(w.google);
-      else reject(new Error('Google Maps loaded without Places'));
+    // With `loading=async` the script's `load` event fires BEFORE google.maps.places is populated, so
+    // reading google.maps.places here would bail too early and the widget would never bind. Await the
+    // bootstrap's importLibrary('places') instead — it resolves once the Places library is actually
+    // ready (the Google-recommended async pattern). Fall back to a direct check for a legacy/sync load.
+    const awaitPlaces = () => {
+      const g = w.google;
+      if (g?.maps?.importLibrary) {
+        Promise.resolve(g.maps.importLibrary('places')).then(() => resolve(g)).catch(reject);
+      } else if (g?.maps?.places) {
+        resolve(g);
+      } else {
+        reject(new Error('Google Maps loaded without Places'));
+      }
     };
+    const existing = document.getElementById('eit-gmaps-sdk') as HTMLScriptElement | null;
     if (existing) {
-      existing.addEventListener('load', onReady, { once: true });
-      existing.addEventListener('error', () => reject(new Error('Google Maps failed to load')), { once: true });
-      if (w.google?.maps?.places) onReady();
+      if (w.google?.maps) awaitPlaces();
+      else {
+        existing.addEventListener('load', awaitPlaces, { once: true });
+        existing.addEventListener('error', () => reject(new Error('Google Maps failed to load')), { once: true });
+      }
       return;
     }
     const s = document.createElement('script');
     s.id = 'eit-gmaps-sdk';
     s.async = true;
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&loading=async`;
-    s.addEventListener('load', onReady, { once: true });
+    s.addEventListener('load', awaitPlaces, { once: true });
     s.addEventListener('error', () => reject(new Error('Google Maps failed to load')), { once: true });
     document.head.appendChild(s);
   });
