@@ -76,8 +76,9 @@ All configuration is environment variables. The load-bearing ones:
 | `EIT_ADMIN_EMAILS` | first run | Comma-separated emails that are always admin. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | for SSO | Enables Google sign-in. |
 
-The complete reference (integration keys, the deployment tenant for Data Matrix, demo mode, etc.) is
-in **[docs/SETUP.md](docs/SETUP.md)**.
+The complete reference (the deployment tenant for Data Matrix, demo mode, etc.) is in
+**[docs/SETUP.md](docs/SETUP.md)**. To enable address autocomplete, weather, flight lookup, or
+shipment tracking, follow the step-by-step **[docs/API_KEYS.md](docs/API_KEYS.md)**.
 
 ## First sign-in
 

@@ -188,6 +188,9 @@ still scans on the `/scan` screen.
 
 ## Integration keys
 
+For a from-scratch, click-by-click walkthrough of each provider (creating the Google key + which APIs
+to enable, AeroDataBox, the shipment trackers) see **[API_KEYS.md](API_KEYS.md)**. The short version:
+
 Optional keys (Places, weather, flight lookup, shipment tracking) can be set two ways:
 
 - **Environment** (the table above) - wins, good for infrastructure-managed secrets.
