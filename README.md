@@ -1,41 +1,96 @@
-# Event Tracker — Next.js rewrite
+# Event Tracker
 
-A full-stack **Next.js 15 (App Router) + TypeScript** rewrite of Event Tracker, built to compare
-head-to-head against the Python + single-HTML-file version (at the repo root / on `main`).
+Self-hosted showcase inventory and event manager. Track inventory, road cases, and events for trade
+shows and live-event tours: assign cases to events, print and scan Data Matrix labels, build
+manifests, and run the full pack → ship → on-site → return → unpack lifecycle on your own server.
 
-## Why this exists
+Built with Next.js (App Router), React, TypeScript, Tailwind, and MongoDB. Live-DB only: every read
+and write goes straight to your database, so there is no stale local cache to reconcile.
 
-The owner's call: move off the 31k-line `index.html` (in-browser babel, no modules, no types,
-`window.*` everything) to a real dynamic web app, and off the **localStorage-first → push-to-Mongo**
-data model that caused the desync bugs. This branch is the **Next.js version** of the comparison.
+## Features
 
-## Architecture (this version)
+- **Inventory, road cases, and events** in one catalog, with case→event assignment.
+- **Packing manifests** built from shared helpers so per-case and per-event counts never drift, with
+  printable manifest sheets.
+- **Data Matrix labels** for cases, items, and events: print crisp SVG labels and scan them with the
+  camera (ZXing) or Web NFC to pack, check in, and check out.
+- **Event lifecycle** states (draft → upcoming → packing → ready → in transit → on-site → returning →
+  closed) that drive case availability, calendar, and dashboard filtering.
+- **Kits / BOM**, multi-SKU listings, and both serial and bulk item tracking.
+- **Warehouses and transfers**: each case has a home (return) warehouse and an optional current
+  location, with in-transit derivation.
+- **Sign-off flows** for ship-kit and return, with per-case and per-item disposition.
+- **Travel and lodging** per event, optional flight lookup and venue weather, and per-staffer travel
+  PII gated server-side.
+- **Calendar feeds** (.ics subscription, per-user token), **reports** with CSV export, and a
+  **notifications** bell.
+- **Accounts and roles** (admin, manager, lead, authorized, read-only) with local passwords, optional
+  TOTP 2FA, passkeys / WebAuthn, recovery codes, and Google sign-in (OIDC).
+- **Server-authoritative auth and RBAC** with a PII gate on every data path, never client-trusted.
+- Optional **public demo mode**: each visitor gets an isolated, self-resetting sandbox.
 
-- **Live-DB only.** No localStorage source of truth, no offline cache. Every read/write is a real
-  DB call. Server Components / Route Handlers query **Mongo directly** (official `mongodb` driver).
-  A missing/unreachable DB is a hard error, not a silent stale read.
-- **Same data, same Mongo** as the Python version — identical `{_id, payload, …}` envelopes
-  (`lib/types.ts`) — so the comparison measures the *stack*, not the data.
-- **Server-authoritative auth/RBAC** (auth phase, in progress): the security model from the Python
-  `eit_auth`/`eit_perms`/`handle_db`/PII-strip gets ported to a single server-side gate every data
-  op calls — never client-trusted. (Until then this scaffold is read-only and unauthenticated.)
+## Tech stack
 
-## Run it
+Next.js 16 (App Router, React Server Components + Server Actions) · React 19 · TypeScript · Tailwind
+CSS v4 · MongoDB (official `mongodb` driver) · self-hostable via Docker.
+
+## Quick start
+
+### Local development
+
+Requires Node.js 22+ and a MongoDB you can reach (a standalone `mongod` is fine, no replica set
+needed).
 
 ```bash
-cd nextjs
-cp .env.example .env.local      # set MONGO_URI to the same Mongo (or a dev copy) the Python app uses
+cp .env.example .env.local        # set MONGO_URI + ET_SESSION_SECRET (see below)
 npm install
-npm run dev                      # http://localhost:3100
+npm run dev                       # http://localhost:3100
 ```
 
-## Status
+Minimum to boot: `MONGO_URI` and a `ET_SESSION_SECRET` of at least 16 characters
+(`openssl rand -hex 32`). Everything else is optional and enables specific features.
 
-- [x] Foundation: Next.js 15 + TS, live Mongo data layer, design tokens, app shell.
-- [x] Dashboard — live event list from Mongo (Server Component).
-- [ ] Auth + RBAC port (server-side gate) — the security-critical phase.
-- [ ] Event editor (the tabbed form where #90/#93 lived — the real test).
-- [ ] Scan-pack, manifests, travel/PII, shipping, sign-off, warehouses, calendar, notifications.
+### Docker
 
-See `../NEXTJS_MIGRATION_BRIEF.md` and the architecture team's `NEXTJS_ARCHITECTURE.md` for the
-full plan + phased roadmap.
+```bash
+# build the production image
+docker build -t event-tracker .
+
+# run it against your MongoDB (set the real values in an env file, not on the command line)
+docker run -p 3100:3100 --env-file .env.production event-tracker
+```
+
+The image is a standalone Next.js server (it does not need the database to build). See
+[docs/SETUP.md](docs/SETUP.md) for a full deployment walk-through and a demo-mode compose file.
+
+## Configuration
+
+All configuration is environment variables. The load-bearing ones:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `MONGO_URI` | yes | MongoDB connection string. |
+| `MONGO_DB` | no | Database name (default `event_tracker`). |
+| `ET_SESSION_SECRET` | yes | ≥16-char secret; signs sessions and derives at-rest encryption keys. |
+| `EIT_PUBLIC_URL` | behind a proxy | Public base URL; pins OAuth/passkey origin and calendar URLs. |
+| `EIT_ADMIN_EMAILS` | first run | Comma-separated emails that are always admin. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | for SSO | Enables Google sign-in. |
+
+The complete reference (integration keys, the deployment tenant for Data Matrix, demo mode, etc.) is
+in **[docs/SETUP.md](docs/SETUP.md)**.
+
+## First sign-in
+
+There is no seeded admin account. Set `EIT_ADMIN_EMAILS` to your address, then sign in with Google
+(if configured) or register a local password for that email; admin emails always resolve to the admin
+role. See [docs/SETUP.md](docs/SETUP.md#first-admin) for details.
+
+## Demo mode
+
+Set `EIT_DEMO_MODE=1` (and `ET_SESSION_SECRET`) to run a public, self-resetting demo: visitors are
+auto-signed-in to an isolated per-browser sandbox cloned from a read-only seed, and admin/config
+writes are blocked. See [docs/SETUP.md](docs/SETUP.md#demo-mode).
+
+## License
+
+See [LICENSE](LICENSE) and [NOTICE](NOTICE).
