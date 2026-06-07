@@ -338,15 +338,17 @@ function AxisCard({
         <div className="min-h-[8px] flex-1" />
 
         {/* (f) ONE row: the status pill AND "FLAIR: <chip>" together (index.html ~L15619-15631). */}
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <StatusBadge state={event.state} className="text-[10px]" />
           {event.primaryTag ? (
             <>
-              {/* #49: label the flair so it reads independent of the status pill. */}
+              {/* #49: label the flair so it reads independent of the status pill. Show the FULL tag
+                  (flair glyph + label), not just the bare emoji, so the dashboard reads which flair an
+                  event carries and what it means. The row wraps if the label needs the room. */}
               <span className="ml-1 shrink-0 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
                 Flair:
               </span>
-              <TagChip tag={event.primaryTag} compact />
+              <TagChip tag={event.primaryTag} />
             </>
           ) : null}
         </div>
