@@ -36,6 +36,19 @@ export function FindCommand({ events }: { events: DashEvent[] }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
+  // Platform-aware shortcut hint: ⌘K on macOS, Ctrl K elsewhere. Detected after mount (navigator is
+  // client-only), so the SSR render and the first client render agree on the non-Mac label — no
+  // hydration mismatch; a Mac just flips the glyph once on mount. The binding below already accepts
+  // both metaKey and ctrlKey, so this only changes what's SHOWN.
+  const [isMac, setIsMac] = React.useState(false);
+  React.useEffect(() => {
+    const p =
+      (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ||
+      navigator.platform ||
+      navigator.userAgent ||
+      '';
+    setIsMac(/mac|iphone|ipad|ipod/i.test(p));
+  }, []);
 
   // ⌘K / Ctrl-K toggles the palette — the conventional quick-switcher shortcut.
   React.useEffect(() => {
@@ -73,7 +86,7 @@ export function FindCommand({ events }: { events: DashEvent[] }) {
         <Search size={14} aria-hidden />
         <span>Find</span>
         <kbd className="ml-1 hidden rounded border border-border bg-muted px-1 font-mono text-[10px] text-muted-foreground sm:inline">
-          ⌘K
+          {isMac ? '⌘K' : 'Ctrl K'}
         </kbd>
       </Button>
 
