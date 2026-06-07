@@ -93,6 +93,24 @@ export function renderNotification(n: NotificationItem, viewerEmail: string): Re
     };
   }
 
+  if (n.type === 'flight_delay') {
+    const flight = (d.flightNumber as string) || 'A flight';
+    const leg = d.leg === 'return' ? 'return' : 'outbound';
+    const iAmSubject = (subject || '').toLowerCase() === me;
+    const whose = iAmSubject ? 'Your' : `${subject}'s`;
+    const delayMin = Number(d.delayMin || 0);
+    const what =
+      d.status === 'cancelled'
+        ? `${flight} (${leg}) is cancelled`
+        : `${flight} (${leg}) is delayed${delayMin ? ` ${delayMin}m` : ''}`;
+    return {
+      title: `${whose} ${what} for ${eventName}.`,
+      actionable: false,
+      eventId: d.eventId as string | undefined,
+      canView: Boolean(d.eventId),
+    };
+  }
+
   return {
     title: 'You have a new notification.',
     actionable: false,

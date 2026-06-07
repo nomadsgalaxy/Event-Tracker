@@ -163,6 +163,40 @@ function initialsOf(name: string): string {
   );
 }
 
+// Live flight-status chip (auto-refresh): colored by the leg's tracked status, tooltip'd with when it
+// was last checked. Renders nothing for an untracked leg (no status stamped).
+function flightStatusBadge(leg: TravelLeg): ReactNode {
+  const st = leg.status;
+  if (!st) return null;
+  const delay = Number(leg.delayMin || 0);
+  let label: string;
+  let tone: string;
+  if (st === 'cancelled' || st === 'diverted') {
+    label = st === 'cancelled' ? 'Cancelled' : 'Diverted';
+    tone = 'bg-[color-mix(in_oklab,var(--destructive)_15%,transparent)] text-[var(--destructive)]';
+  } else if (st === 'delayed') {
+    label = delay ? `Delayed +${delay}m` : 'Delayed';
+    tone = 'bg-[color-mix(in_oklab,var(--warning)_18%,transparent)] text-[var(--warning)]';
+  } else if (st === 'on_time') {
+    label = 'On time';
+    tone = 'bg-[color-mix(in_oklab,var(--success)_15%,transparent)] text-[var(--success)]';
+  } else if (st === 'departed' || st === 'arrived') {
+    label = st === 'departed' ? 'Departed' : 'Arrived';
+    tone = 'bg-muted text-muted-foreground';
+  } else {
+    return null;
+  }
+  const checked = Number(leg.lastCheckedAt || 0);
+  return (
+    <span
+      className={cn('ml-1 rounded px-1 text-[10px] font-semibold uppercase tracking-wide', tone)}
+      title={checked ? `Flight status updated ${new Date(checked).toLocaleString()}` : undefined}
+    >
+      {label}
+    </span>
+  );
+}
+
 function legSummary(leg: TravelLeg | undefined): ReactNode {
   if (!leg) return null;
   if (!(leg.carrier || leg.number || leg.departLocation || leg.arriveLocation || leg.departAt)) return null;
@@ -178,6 +212,7 @@ function legSummary(leg: TravelLeg | undefined): ReactNode {
       {route}
       {carrier ? <span className="text-muted-foreground"> · {carrier}</span> : null}
       {leg.confirmation ? <span className="text-muted-foreground"> · conf {leg.confirmation}</span> : null}
+      {flightStatusBadge(leg)}
     </>
   );
 }

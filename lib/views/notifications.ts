@@ -333,6 +333,75 @@ export async function createTravelRequest(
   return { ok: true, duplicate: false };
 }
 
+// ── Flight delay / cancellation alert (written by the background flight auto-refresh) ─────────────
+// A system-generated notification: a tracked flight for `to` newly delayed or cancelled. Self-scoped
+// like every other notif (payload.to === recipient), so it shows in that person's bell. Deduped within
+// 12h on event + flight + leg + status, BUT delay-aware: a 'delayed' alert is only suppressed when the
+// delay hasn't grown by at least FLIGHT_ALERT_GROW_MIN since the last one — so a 20min→90min slip still
+// reaches the traveler, while repeated sweeps re-observing the same delay don't pile up.
+const FLIGHT_ALERT_GROW_MIN = 15;
+
+export interface FlightAlertData {
+  eventId: string;
+  eventName?: string;
+  subjectEmail: string; // whose flight (the traveler)
+  flightNumber: string;
+  leg: 'outbound' | 'return' | string;
+  status: string; // 'delayed' | 'cancelled' | …
+  delayMin: number;
+}
+
+export async function createFlightAlert(to: string, data: FlightAlertData): Promise<{ ok: boolean; duplicate?: boolean }> {
+  const recipient = lc(to);
+  if (!recipient || !data.eventId) return { ok: false };
+  const db = await getDb();
+  const col = db.collection<NotificationDoc>(NOTIFS_COLLECTION);
+
+  const since = Date.now() - 12 * 60 * 60 * 1000;
+  const existing = await col.findOne(
+    {
+      'payload.type': 'flight_delay',
+      'payload.to': recipient,
+      'payload.data.eventId': data.eventId,
+      'payload.data.flightNumber': data.flightNumber,
+      'payload.data.leg': data.leg,
+      'payload.data.status': data.status,
+      'payload.createdAt': { $gte: since },
+      'payload.deletedAt': { $in: [null, undefined] },
+    },
+    { sort: { 'payload.createdAt': -1 } },
+  );
+  if (existing) {
+    // A non-delay status (cancelled, diverted) is a one-shot — suppress the repeat. A 'delayed' repeat is
+    // only suppressed while the delay hasn't materially grown since the last alert.
+    if (data.status !== 'delayed') return { ok: true, duplicate: true };
+    const prevDelay = Number(
+      (existing.payload as { data?: { delayMin?: number } } | undefined)?.data?.delayMin ?? 0,
+    );
+    if (data.delayMin - prevDelay < FLIGHT_ALERT_GROW_MIN) return { ok: true, duplicate: true };
+  }
+
+  const now = Date.now();
+  const id = randomUUID();
+  const doc: NotificationDoc = {
+    _id: id,
+    payload: {
+      id,
+      to: recipient,
+      type: 'flight_delay',
+      data: { ...data, subjectEmail: lc(data.subjectEmail) },
+      createdAt: now,
+      readAt: null,
+      deletedAt: null,
+    },
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  await col.insertOne(doc);
+  return { ok: true, duplicate: false };
+}
+
 export interface DecideResult {
   ok: boolean;
   /** The resolved status when ok ('approved' | 'denied'), or the existing status if already decided. */

@@ -49,6 +49,17 @@ export interface TravelLeg {
   departAt?: string;
   arriveAt?: string;
   confirmation?: string;
+  // Live flight tracking (stamped by the background auto-refresh, lib/integrations/flight-refresh):
+  // the normalized status + departure delay derived from AeroDataBox. Additive + optional — manual
+  // legs and non-flight modes never set them.
+  status?: 'on_time' | 'delayed' | 'cancelled' | 'departed' | 'arrived' | 'diverted' | string;
+  delayMin?: number; // minutes the revised departure runs past the scheduled time (0 when on time)
+  lastCheckedAt?: number; // ms epoch of the last AeroDataBox refresh for this leg
+  // The SCHEDULED departure date (YYYY-MM-DD) + UTC instant, captured once from the lookup and then
+  // IMMUTABLE — the auto-refresh queries by flightDate (so a delay across local midnight can't shift
+  // the query date) and windows by departUtc (offset-clean, so a far-timezone leg isn't dropped early).
+  flightDate?: string;
+  departUtc?: number;
   [k: string]: unknown;
 }
 
