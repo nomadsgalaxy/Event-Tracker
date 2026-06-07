@@ -892,8 +892,12 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
                     <span className="flex items-center gap-1.5">
                       {c.label}
                       {isDangerousCap(c.id) ? (
-                        <span className="rounded bg-[color-mix(in_oklab,var(--destructive)_15%,transparent)] px-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--destructive)]">
-                          {c.group === 'Administration' ? 'admin' : 'can delete'}
+                        <span
+                          className="rounded bg-[color-mix(in_oklab,var(--destructive)_15%,transparent)] px-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--destructive)]"
+                          title={c.group === 'Administration' ? undefined : 'Potentially Destructive'}
+                          aria-label={c.group === 'Administration' ? undefined : 'Potentially Destructive'}
+                        >
+                          {c.group === 'Administration' ? 'admin' : 'D'}
                         </span>
                       ) : null}
                     </span>
