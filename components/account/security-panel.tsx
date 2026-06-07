@@ -27,7 +27,7 @@ import { Eyebrow } from '@/components/ui/eyebrow';
 import { DetailRow } from '@/components/ui/detail-row';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { effectiveTable } from '@/lib/auth/rbac';
+import { effectiveTable, isDangerousCap, dangerousCaps } from '@/lib/auth/rbac';
 import {
   Dialog,
   DialogContent,
@@ -760,6 +760,7 @@ interface PublicApiKey {
 // (structural/self-service caps like db.read.session are implied; admin-class caps are off the API).
 const PICKABLE_CAPS = effectiveTable().capabilities.filter((c) => c.editable);
 const CAP_GROUP_ORDER = ['Events', 'Inventory & tags', 'Personal data (PII)', 'Administration'];
+const CAP_LABEL: Record<string, string> = Object.fromEntries(PICKABLE_CAPS.map((c) => [c.id, c.label]));
 function capSummary(k: PublicApiKey): string {
   const writeOrPii = (k.caps || []).filter((c) => c !== 'db.read.session');
   if (writeOrPii.length === 0) return 'Read only';
@@ -773,6 +774,7 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
   const [label, setLabel] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newToken, setNewToken] = useState('');
+  const [confirmDanger, setConfirmDanger] = useState<string[] | null>(null);
 
   const load = useCallback(async () => {
     const { status, data } = await api('/api/auth/apikeys', undefined, 'GET');
@@ -800,10 +802,17 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
     });
   }
 
-  function createKey() {
+  // Step-up (re-auth) then create. acknowledge=true is sent only after the user clears the danger
+  // confirmation below; the server independently requires it for admin/destructive caps.
+  function proceedCreate(acknowledge: boolean) {
     requireStepUp(async (token) => {
       const caps = [...selected].filter((c) => ownerSet.has(c));
-      const { status, data } = await api('/api/auth/apikeys/create', { label: label.trim() || 'API key', caps, stepupToken: token });
+      const { status, data } = await api('/api/auth/apikeys/create', {
+        label: label.trim() || 'API key',
+        caps,
+        acknowledgeRisk: acknowledge,
+        stepupToken: token,
+      });
       if (status === 200 && typeof data.token === 'string') {
         setNewToken(data.token);
         setLabel('');
@@ -813,6 +822,18 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
         toast.error(String(data.error || 'Could not create the key.'));
       }
     });
+  }
+
+  function createKey() {
+    // If the selection grants administrative access or the ability to delete data, make the user
+    // explicitly confirm (with the back-up-your-DB warning) BEFORE the step-up. A safe (read/edit-only)
+    // key skips straight to step-up.
+    const danger = dangerousCaps([...selected].filter((c) => ownerSet.has(c)));
+    if (danger.length > 0) {
+      setConfirmDanger(danger);
+      return;
+    }
+    proceedCreate(false);
   }
 
   async function revokeKey(id: string) {
@@ -868,7 +889,14 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
                     className="mt-0.5"
                   />
                   <span className="flex flex-col">
-                    <span>{c.label}</span>
+                    <span className="flex items-center gap-1.5">
+                      {c.label}
+                      {isDangerousCap(c.id) ? (
+                        <span className="rounded bg-[color-mix(in_oklab,var(--destructive)_15%,transparent)] px-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--destructive)]">
+                          {c.group === 'Administration' ? 'admin' : 'can delete'}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="text-muted-foreground">{c.desc}</span>
                   </span>
                 </label>
@@ -924,6 +952,42 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
           </ul>
         )}
       </div>
+
+      <Dialog open={confirmDanger !== null} onOpenChange={(o) => { if (!o) setConfirmDanger(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[var(--destructive)]">ARE YOU SURE!?</DialogTitle>
+            <DialogDescription>
+              You’re about to create an API key that can <strong>delete data</strong> or use{' '}
+              <strong>administrative functions</strong>. Please be sure your database is on a backup
+              schedule before you proceed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-1.5 rounded-md border border-[var(--destructive)] bg-[color-mix(in_oklab,var(--destructive)_8%,transparent)] p-3 text-xs">
+            <span className="font-medium">This key would be granted:</span>
+            <ul className="list-disc pl-4">
+              {(confirmDanger ?? []).map((id) => (
+                <li key={id}>{CAP_LABEL[id] ?? id}</li>
+              ))}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setConfirmDanger(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setConfirmDanger(null);
+                proceedCreate(true);
+              }}
+            >
+              I understand — continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FieldGroup>
   );
 }

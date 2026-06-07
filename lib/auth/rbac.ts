@@ -292,6 +292,35 @@ export type Capability = (typeof CAP_LIST)[number]['id'];
 // Used by an override validator (later wave); referenced here so the seam is documented.
 export const LIFELINE_CAPS: readonly string[] = ['admin.console', 'admin.users.local', 'admin.users.directory'];
 
+// ── Dangerous capabilities (API-key risk gate) ──────────────────────────────────────────────────────
+// Caps that grant ADMINISTRATIVE access or the ability to DELETE / destroy data through the /api/v1
+// surface. Scoping an API key to ANY of these triggers the create-time "are you sure" confirmation in
+// the UI, and the server REQUIRES an explicit risk acknowledgement (lib/api/api-keys.createApiKey) on
+// top of the step-up that key creation already needs. The whole Administration group counts; the rest
+// are the caps that back a DELETE / destructive endpoint: event/case/inventory/tag deletion, clearing
+// the global emergency contact, and reverting a sign-off. Isomorphic — the client picker + the server
+// gate evaluate the SAME set so they can't drift.
+const DESTRUCTIVE_CAP_IDS: ReadonlySet<string> = new Set([
+  'event.delete',
+  'tags.delete',
+  'pallets.edit',
+  'db.write.app',
+  'emergency_contact.write',
+  'signoff.revert',
+]);
+
+/** True iff scoping a key to `cap` grants administrative access or the ability to delete/destroy data. */
+export function isDangerousCap(cap: string): boolean {
+  const c = CAPS[cap];
+  if (!c) return false;
+  return c.group === G_ADMIN || DESTRUCTIVE_CAP_IDS.has(cap);
+}
+
+/** The administrative/destructive subset of `caps` (drives the create-time confirmation + server gate). */
+export function dangerousCaps(caps: readonly string[]): string[] {
+  return caps.filter(isDangerousCap);
+}
+
 // ── Override seam (admin-editable per-org table) ────────────────────────────────────
 // With no override installed, effectiveGrants() returns the pure seeded matrix — identical
 // to a fresh eit_perms. The persisted __perms__ doc (lib/perms-store) is read server-side and

@@ -2,7 +2,7 @@ import 'server-only';
 import crypto from 'node:crypto';
 import { getDb } from '@/lib/db/mongo';
 import { AUTH_COLLECTION, hashPassword, verifyPasswordAsync, resolveLiveRole, type AuthDoc, type PwRecord } from '@/lib/auth/auth';
-import { effectiveGrants, CAPS } from '@/lib/auth/rbac';
+import { effectiveGrants, CAPS, dangerousCaps } from '@/lib/auth/rbac';
 import type { Role } from '@/lib/types/types';
 
 // lib/api/api-keys.ts — caller-scoped, user-bound API keys (mirrors server/eit_api.py key management).
@@ -137,7 +137,7 @@ export type CreateKeyResult =
 export async function createApiKey(
   email: string,
   label: string,
-  opts: { caps?: unknown; scope?: unknown }
+  opts: { caps?: unknown; scope?: unknown; acknowledgeRisk?: boolean }
 ): Promise<CreateKeyResult> {
   const e = norm(email);
   const r = await rec(e);
@@ -169,6 +169,19 @@ export async function createApiKey(
   );
   if (ownerSet.has('db.read.session')) clamped.add('db.read.session');
   const caps = [...clamped].sort();
+
+  // ADMINISTRATIVE or DESTRUCTIVE caps require an EXPLICIT risk acknowledgement, even though step-up is
+  // already enforced by the route. The UI shows the "are you sure / back up your DB" confirmation before
+  // sending acknowledgeRisk:true; a direct API call to mint such a key must opt in the same way. This is
+  // the server-side half of the gate, so the warning can't be bypassed by skipping the dialog.
+  const danger = dangerousCaps(caps);
+  if (danger.length > 0 && opts.acknowledgeRisk !== true) {
+    return {
+      ok: false,
+      error: `this key would grant administrative or deletion access (${danger.join(', ')}) — confirm the risk to create it`,
+      code: 400,
+    };
+  }
 
   const id = crypto.randomBytes(6).toString('hex');
   const secret = crypto.randomBytes(32).toString('base64url');
