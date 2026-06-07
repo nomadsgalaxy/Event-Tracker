@@ -133,7 +133,7 @@ const MANIFEST_DOC_CSS = `
   #eit-manifest-print .doc-head-text { min-width: 0; flex: 1; }
   #eit-manifest-print .eyebrow { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #888; font-weight: 700; }
   #eit-manifest-print h1 { font-weight: 700; font-size: 26px; line-height: 1.2; margin: 6px 0; color: #111; }
-  /* Orange "Show" banner — the roadcase manifest's "Going to" banner, retargeted to the event. */
+  /* Orange "Going to" banner — matches the roadcase manifest's banner (name headline, dates · city). */
   #eit-manifest-print .show-banner { border: 1px solid #c98a00; background: #fff7e6; border-left: 5px solid #e08e00; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #eit-manifest-print .show-banner .sb-eyebrow { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #9a6a00; font-weight: 700; }
   #eit-manifest-print .show-banner .sb-title { font-size: 16px; font-weight: 700; color: #111; margin-top: 2px; }
@@ -227,10 +227,11 @@ export function PrintManifest({
   const eventSvg = codes?.eventSvg ?? '';
   const rowCount =
     caseGroups.reduce((n, g) => n + g.rows.length, 0) + (looseGroup?.rows.length ?? 0);
-  // Orange banner content — the show location is the headline (the event NAME is already the title),
-  // dates + lead are the sub. Mirrors the roadcase manifest's "Going to" banner.
-  const bannerTitle = row.city || row.name || 'Show';
-  const bannerSub = [row.dates, row.lead ? `Lead: ${row.lead}` : ''].filter(Boolean).join(' · ');
+  // Orange "Going to" banner — IDENTICAL in form to the roadcase manifest's banner: the show NAME is
+  // the headline, with the dates + location (city) beneath. The name also titles the document, but we
+  // lead with it here so the event banner reads the same as the per-case one. The lead still appears in
+  // the "Released by" line below.
+  const bannerSub = [row.dates, row.city].filter(Boolean).join(' · ');
 
   return (
     <>
@@ -252,10 +253,10 @@ export function PrintManifest({
           ) : null}
         </div>
 
-        {/* Orange "Show" banner — the roadcase manifest's signature element, retargeted to the event. */}
+        {/* Orange "Going to" banner — matches the roadcase manifest's banner exactly (name headline). */}
         <div className="show-banner">
-          <div className="sb-eyebrow">Show</div>
-          <div className="sb-title">{bannerTitle}</div>
+          <div className="sb-eyebrow">Going to</div>
+          <div className="sb-title">{row.name || 'Event'}</div>
           {bannerSub ? <div className="sb-sub">{bannerSub}</div> : null}
         </div>
 
