@@ -72,6 +72,11 @@ export function findInventoryByScan(items: ScanItem[], raw: string | null | unde
     if (it.qr) fields.push({ field: 'qr', value: String(it.qr).toLowerCase() });
     if (it.sku) fields.push({ field: 'sku', value: String(it.sku).toLowerCase() });
     if (id) fields.push({ field: 'id', value: String(id).toLowerCase() });
+    // Bound NFC tags: an item carries the physical tag UIDs as keys of tagData (written by the scan +
+    // consumable read flows). Scanning a bound tag therefore resolves to its item by an exact UID match.
+    for (const uid of Object.keys(it.tagData || {})) {
+      if (uid) fields.push({ field: 'nfc', value: uid.toLowerCase() });
+    }
     for (const d of it.distribution || []) {
       for (const s of d.serials || []) fields.push({ field: 'serial', value: String(s).toLowerCase() });
     }

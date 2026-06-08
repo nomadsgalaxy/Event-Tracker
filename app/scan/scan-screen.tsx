@@ -215,6 +215,30 @@ export function ScanScreen({
     [routeIsLoose, routeLooseEventId, policy.canAddLoose, activeCaseId, looseTargetEvent, runWrite]
   );
 
+  // Route a resolved item the same way for a camera scan, an NFC tap, or the manual picker: into the
+  // active case's Add prompt when packing, else open the item's current/last case (or note it's never
+  // been packed). Shared so scanning a bound NFC tag behaves exactly like scanning the item's label.
+  const routeMatchedItem = useCallback(
+    (item: InventoryPayload, id: string, matchField: string) => {
+      if (activeCaseId) {
+        setPending({ item, id, matchField });
+        return;
+      }
+      const r = itemCurrentOrLastCase(item);
+      const label = item.name || item.slug || item.id;
+      if (r.caseId && r.status === 'current') {
+        toast.success(`${label} · currently in case`);
+        window.location.href = '/cases/' + r.caseId;
+      } else if (r.caseId && r.status === 'last') {
+        toast.info(`${label} · last seen in this case`);
+        window.location.href = '/cases/' + r.caseId;
+      } else {
+        toast.warning(`${label} · not in a case yet`);
+      }
+    },
+    [activeCaseId]
+  );
+
   // ── Resolve a scanned/typed code (camera onScan, NFC, manual picker) ───────────────────────────
   const handleScan = useCallback(
     (s: ScanResult) => {
@@ -242,12 +266,8 @@ export function ScanScreen({
         }
         if (eit.kind === 'item') {
           const found = itemById.get(eit.id);
-          if (found && activeCaseId) {
-            setPending({ item: found.payload, id: found.id, matchField: 'id' });
-            return;
-          }
           if (found) {
-            routeItemNoCase(found.payload);
+            routeMatchedItem(found.payload, found.id, 'id');
             return;
           }
           toast.warning('Item not found');
@@ -279,27 +299,8 @@ export function ScanScreen({
       } else {
         setUnknown({ text: s.text, format: s.format, suggestions: [], multiExact: false });
       }
-
-      function routeMatchedItem(item: InventoryPayload, id: string, matchField: string) {
-        if (activeCaseId) setPending({ item, id, matchField });
-        else routeItemNoCase(item);
-      }
-
-      function routeItemNoCase(item: InventoryPayload) {
-        const r = itemCurrentOrLastCase(item);
-        const label = item.name || item.slug || item.id;
-        if (r.caseId && r.status === 'current') {
-          window.location.href = '/cases/' + r.caseId;
-          toast.success(`${label} · currently in case`);
-        } else if (r.caseId && r.status === 'last') {
-          window.location.href = '/cases/' + r.caseId;
-          toast.info(`${label} · last seen in this case`);
-        } else {
-          toast.warning(`${label} · never packed in a case`);
-        }
-      }
     },
-    [cases, events, items, itemById, activeCaseId, tenantHash]
+    [cases, events, items, itemById, activeCaseId, tenantHash, routeMatchedItem]
   );
 
   // ── NFC tag handler — UID match via findInventoryByScan, then refresh tag data ────────────────
@@ -311,7 +312,8 @@ export function ScanScreen({
       if (result.tier === 'exact' && result.itemId) {
         const e = itemById.get(result.itemId);
         if (e) {
-          // Refresh tag data on the matched item (best-effort), then surface the Add prompt.
+          // Refresh tag data on the matched item (best-effort), then bring the item up — the Add-to-case
+          // prompt when packing, else open it like scanning its label.
           runWrite(() =>
             tagDataAction({
               itemId: e.id,
@@ -325,7 +327,8 @@ export function ScanScreen({
               },
             })
           );
-          if (activeCaseId) setPending({ item: e.payload, id: e.id, matchField: result.matchField || 'nfc' });
+          toast.success(`${e.payload.name || 'Item'} · matched from tag`);
+          routeMatchedItem(e.payload, e.id, result.matchField || 'nfc');
         }
       } else if (result.tier === 'substring' && result.itemIds) {
         setUnknown({ text: entry.tagUid, format: 'nfc:' + entry.format, suggestions: result.itemIds.map((id) => itemById.get(id)?.payload).filter((x): x is InventoryPayload => !!x), multiExact: false });
@@ -333,7 +336,7 @@ export function ScanScreen({
         setUnknown({ text: entry.tagUid, format: 'nfc:' + entry.format, suggestions: [], multiExact: false });
       }
     },
-    [items, itemById, activeCaseId, runWrite]
+    [items, itemById, runWrite, routeMatchedItem]
   );
 
   const nfc = useNfcReader({ onTag: handleNfcTag });
