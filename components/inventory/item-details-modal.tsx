@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { TagChip } from '@/components/ui/tag-chip';
 import { ItemMatrixModal } from './item-matrix-modal';
+import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
 import {
   itemTotalQty,
@@ -983,6 +984,19 @@ export function ItemDetailsModal({
               ) : null}
             </>
           )}
+
+          {/* Consumable NFC — read a filament/resin spool tag (OpenPrintTag/OpenSpool), bind it to this
+              item, and program blank tags. Consumables only; Web NFC is Chrome-Android, degrades elsewhere. */}
+          {kind === 'consumable' && item.id ? (
+            <ConsumableNfcPanel
+              item={item}
+              canEdit={canEdit}
+              onApplyToForm={(patch) => {
+                if (patch.name != null) setName(patch.name);
+                if (patch.weight != null) setWeight(patch.weight);
+              }}
+            />
+          ) : null}
 
           {/* Applied tags */}
           <div className="flex flex-col gap-2">

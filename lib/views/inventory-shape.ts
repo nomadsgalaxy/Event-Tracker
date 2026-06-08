@@ -14,6 +14,7 @@
 // The helpers below branch on tracking so every consumer works for both shapes.
 
 import type { Envelope } from '@/lib/types/types';
+import type { ParsedTag } from '@/lib/integrations/nfc-decoders';
 
 // ── Distribution row (BULK) ────────────────────────────────────────────────────────────
 // Row shapes (from the loose-items plan):
@@ -109,6 +110,18 @@ export interface KitRequirement {
   note: string;
 }
 
+// An NFC tag bound to an item, keyed by the physical tag UID. Written by the scan + consumable read
+// flows (lib/db/write.updateItemTagData). `parsed` is the decoded material data (OpenPrintTag/OpenSpool).
+export interface ItemTagData {
+  tagUid: string;
+  format?: string;
+  category?: 'filament' | 'resin' | 'generic' | string;
+  parsed?: ParsedTag | null;
+  raw?: unknown;
+  lastReadAt?: number;
+  lastReadBy?: { email?: string; name?: string } | null;
+}
+
 // The per-item rollup state — NOT an event lifecycle state. Mirrors index.html STATES.
 export type ItemState = 'packed' | 'pending' | 'flagged' | 'draft';
 
@@ -144,6 +157,7 @@ export interface InventoryPayload {
   flags?: ItemFlag[];
   tagIds?: string[];
   requirements?: KitRequirement[]; // #27 kit BOM (equipment models only)
+  tagData?: Record<string, ItemTagData>; // NFC tags bound to this item, keyed by tag UID
 }
 
 export type InventoryDoc = Envelope<InventoryPayload>;
