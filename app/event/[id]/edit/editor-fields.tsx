@@ -9,7 +9,9 @@ import {
   Controller,
   type FieldPath,
 } from 'react-hook-form';
-import { Plus, Trash2, Lock, X, Plane } from 'lucide-react';
+import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   FormField,
   FormItem,
@@ -643,22 +645,9 @@ export function TeamPanel({ piiEditable }: { piiEditable: boolean }) {
         {available.length > 0 ? (
           <FormItem>
             <FormLabel>Add team member</FormLabel>
-            <Select value="" onValueChange={addFromDirectory}>
-              <FormControl>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="+ Add team member from directory…" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                {available.map((u) => (
-                  <SelectItem key={u.email} value={u.email}>
-                    {u.name ? `${u.name} (${u.email})` : u.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <StaffPicker options={available} onSelect={addFromDirectory} />
             <FormDescription>
-              {directory.length} {directory.length === 1 ? 'user' : 'users'} in directory · pick one to add.
+              {directory.length} {directory.length === 1 ? 'user' : 'users'} in directory · search by name or email.
             </FormDescription>
           </FormItem>
         ) : (
@@ -669,6 +658,59 @@ export function TeamPanel({ piiEditable }: { piiEditable: boolean }) {
         )}
       </FieldGroup>
     </div>
+  );
+}
+
+// Searchable directory picker for adding a team member — a search bar over the available directory
+// (filter by name or email) with selectable results, instead of a long scrolling <select>. Mirrors the
+// roadcase/kit-BOM combobox pattern (Popover + cmdk Command). Module scope so it's never re-created.
+function StaffPicker({
+  options,
+  onSelect,
+}: {
+  options: { email: string; name?: string }[];
+  onSelect: (email: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = (u: { email: string; name?: string }) => (u.name ? `${u.name} (${u.email})` : u.email);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal text-muted-foreground"
+        >
+          + Add team member from directory…
+          <ChevronsUpDown size={14} className="shrink-0 opacity-50" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search by name or email…" />
+          <CommandList>
+            <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">No matching users.</CommandEmpty>
+            <CommandGroup>
+              {options.map((u) => (
+                <CommandItem
+                  key={u.email}
+                  value={`${u.name || ''} ${u.email}`}
+                  onSelect={() => {
+                    onSelect(u.email);
+                    setOpen(false);
+                  }}
+                >
+                  <Check size={14} className="mr-2 shrink-0 opacity-0" aria-hidden />
+                  <span className="truncate">{label(u)}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
