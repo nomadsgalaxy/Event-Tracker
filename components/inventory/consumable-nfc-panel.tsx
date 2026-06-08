@@ -49,6 +49,12 @@ export function ConsumableNfcPanel({
     () => (item.tagData ? Object.values(item.tagData) : []).sort((a, b) => (b.lastReadAt || 0) - (a.lastReadAt || 0)),
     [item.tagData]
   );
+  // Each spool tag is also a serial unit (auto-registered): map tag UID → unit for its location/remaining.
+  const unitByTag = useMemo(() => {
+    const m = new Map<string, NonNullable<InventoryPayload['units']>[number]>();
+    for (const u of item.units || []) if (u && !u.deletedAt && u.tagUid) m.set(u.tagUid, u);
+    return m;
+  }, [item.units]);
 
   const handleTag = (entry: NfcTagEntry) => {
     setLastEntry(entry);
@@ -156,6 +162,9 @@ export function ConsumableNfcPanel({
           {boundTags.map((t) => {
             const open = expandedUid === t.tagUid;
             const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            const unit = unitByTag.get(t.tagUid);
+            const remaining = unit?.remainingWeight ?? t.parsed?.remaining_weight ?? null;
+            const where = unit ? (unit.location && unit.location !== 'storage' ? 'in a case' : 'in storage') : null;
             return (
               <div key={t.tagUid} className="overflow-hidden rounded-md border border-border bg-card">
                 <button
@@ -164,11 +173,17 @@ export function ConsumableNfcPanel({
                   aria-expanded={open}
                   className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-muted/40"
                 >
-                  <span className="flex items-center gap-1.5 truncate text-xs text-foreground">
+                  <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-foreground">
                     {t.parsed?.primary_color ? (
-                      <span className="inline-block size-3 rounded-[3px] border border-border" style={{ background: t.parsed.primary_color }} aria-hidden />
+                      <span className="inline-block size-3 shrink-0 rounded-[3px] border border-border" style={{ background: t.parsed.primary_color }} aria-hidden />
                     ) : null}
-                    {tagHeading(t.parsed, t.category)}
+                    <span className="truncate">{tagHeading(t.parsed, t.category)}</span>
+                    {where ? (
+                      <span className="shrink-0 rounded border border-border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+                        {where}
+                        {remaining != null ? ` · ${remaining}g` : ''}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     <span className="font-mono text-[10px] text-muted-foreground">{t.tagUid}</span>

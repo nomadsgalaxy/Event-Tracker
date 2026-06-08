@@ -83,6 +83,10 @@ interface UnitFormRow {
   location: string;
   sku: string;
   state: string;
+  // NFC spool link + grams remaining — set by the tag flow, not editable here, but carried through a
+  // save so editing the item never severs a spool's tag link or drops its remaining weight.
+  tagUid?: string;
+  remainingWeight?: number | null;
 }
 
 function uid(): string {
@@ -253,6 +257,8 @@ export function ItemDetailsModal({
       location: u.location || 'storage',
       sku: u.sku || '',
       state: u.state || 'draft',
+      tagUid: u.tagUid,
+      remainingWeight: u.remainingWeight,
     }))
   );
   // #27 kit BOM — per-model requirements[] rows. Edited only when allInventory is supplied (the
@@ -400,6 +406,8 @@ export function ItemDetailsModal({
           sku: (u.sku || '').trim(),
           state: (u.state as ItemUnit['state']) || 'draft',
           flags: [],
+          ...(u.tagUid ? { tagUid: u.tagUid } : {}),
+          ...(typeof u.remainingWeight === 'number' ? { remainingWeight: u.remainingWeight } : {}),
         })),
         distribution: [],
         stockTotal: null,

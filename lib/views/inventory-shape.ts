@@ -65,6 +65,10 @@ export interface ItemUnit {
   state?: ItemState;
   sku?: string;
   flags?: ItemFlag[];
+  // NFC spool tracking: a consumable's physical spool is a serial unit linked to its tag by UID, with
+  // the grams remaining read from the tag (OpenPrintTag actual − consumed). See [[nfc-consumable-tags]].
+  tagUid?: string;
+  remainingWeight?: number | null;
   // Per-unit return sign-off (#22 serial parity with DistributionRow.signoff). Written by the scan
   // flow when a deployed unit is signed back in; read by the sign-off readiness math.
   signoff?: RowSignoff | null;

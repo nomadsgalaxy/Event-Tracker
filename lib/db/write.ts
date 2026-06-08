@@ -1285,6 +1285,10 @@ function cleanUnit(u: ItemUnit): ItemUnit {
       : 'draft',
     sku: u.sku ? String(u.sku).trim() : '',
     flags: Array.isArray(u.flags) ? u.flags : [],
+    // Preserve the NFC spool link + remaining weight through the full editor save (auto-set by the tag
+    // read flow; the editor never authors them, but it must not strip them either).
+    ...(u.tagUid ? { tagUid: String(u.tagUid) } : {}),
+    ...(typeof u.remainingWeight === 'number' ? { remainingWeight: u.remainingWeight } : {}),
   };
 }
 
@@ -1749,6 +1753,61 @@ export async function addItemToCase({ itemId, caseId, alsoPack, actorRole, actor
   }, actor);
 
   return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount, state: alsoPack ? 'packed' : 'pending' };
+}
+
+// ─── Scan-pack a SPECIFIC spool: relocate the serial unit linked to a tag UID into the case ──────
+// The NFC-spool flow: each consumable spool is a serial unit linked by tag UID (see updateItemTagData).
+// Scanning that spool in scan-pack packs THAT unit (not just any free unit, the way addItemToCase does).
+// If no unit carries the UID yet (e.g. a never-read tag), register one in the case. Gated scan.pack.
+interface PackTaggedUnitArgs {
+  itemId: string;
+  caseId: string;
+  tagUid: string;
+  actorRole: string;
+  actor: { email?: string; name?: string };
+}
+export async function packTaggedUnitIntoCase({ itemId, caseId, tagUid, actorRole, actor }: PackTaggedUnitArgs): Promise<PackItemResult> {
+  if (!can('scan.pack', actorRole)) throw new WriteForbiddenError('You do not have permission to pack cases.');
+  const _id = String(itemId);
+  const cId = String(caseId);
+  const uid = String(tagUid ?? '').trim();
+  if (!cId) throw new Error('A case is required to pack into.');
+  if (!uid) throw new Error('A tag UID is required.');
+  const db = await getDb();
+  const col = db.collection<InventoryDoc>('inventory');
+  const stored = await col.findOne({ _id, ...NOT_DELETED });
+  if (!stored) throw new Error('Inventory item not found (or deleted).');
+  const item = stored.payload || {};
+  const now = Date.now();
+  const by: PackByActor | null = actor?.email || actor?.name ? { email: actor.email, name: actor.name } : null;
+  const units: ItemUnit[] = Array.isArray(item.units) ? item.units.slice() : [];
+  const idx = units.findIndex((u) => u && !u.deletedAt && u.tagUid === uid);
+  if (idx >= 0) {
+    units[idx] = { ...units[idx], location: cId, state: 'packed', storageNote: '', packedBy: by, packedAt: now };
+  } else {
+    units.push({
+      id: 'unit-' + now.toString(36) + Math.random().toString(36).slice(2, 6),
+      serial: uid,
+      tagUid: uid,
+      location: cId,
+      state: 'packed',
+      storageNote: '',
+      flags: [],
+      packedBy: by,
+      packedAt: now,
+    });
+  }
+  const res = await col.updateOne(
+    { _id, ...NOT_DELETED },
+    { $set: { 'payload.units': units, 'payload.tracking': 'serial', 'payload.id': _id, updatedAt: now } }
+  );
+  const holder = await holdingEventForCase(cId);
+  await logScanAudit(
+    holder?.id ?? null,
+    { type: 'scan-pack', kind: 'add-and-pack', caseId: cId, itemId: _id, itemLabel: item.name || item.sku || _id },
+    actor
+  );
+  return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount, state: 'packed' };
 }
 
 // ─── Scan-return: set / cycle / clear a row's disposition (unpack mode) ─────────────────────────
@@ -2610,10 +2669,39 @@ export async function updateItemTagData({ itemId, entry, actorRole }: UpdateTagD
     lastReadAt: entry.lastReadAt || now,
     lastReadBy: entry.lastReadBy || (existing.lastReadBy as unknown) || null,
   };
-  const res = await col.updateOne(
-    { _id, ...NOT_DELETED },
-    { $set: { 'payload.tagData': tagData, 'payload.id': _id, updatedAt: now } }
-  );
+  const set: Record<string, unknown> = { 'payload.tagData': tagData, 'payload.id': _id, updatedAt: now };
+
+  // Spool-as-unit: a consumable's filament/resin tag is registered as an individually tracked SERIAL
+  // unit (linked by tag UID). Reading a NEW tag adds a unit; a known tag refreshes its grams remaining.
+  // The item flips to serial tracking (reversible — distribution[] is kept but ignored while serial).
+  const cat = entry.category ?? (existing.category as string) ?? '';
+  const isSpool =
+    (item.kind === 'consumable' || item.type === 'consumable') &&
+    (cat === 'filament' || cat === 'resin' || !!(mergedParsed && mergedParsed.material_class));
+  if (isSpool) {
+    const p = mergedParsed || {};
+    const numOf = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    const remaining = numOf(p.remaining_weight) ?? numOf(p.actual_netto_full_weight) ?? numOf(p.nominal_netto_full_weight);
+    const units: ItemUnit[] = Array.isArray(item.units) ? item.units.slice() : [];
+    const idx = units.findIndex((u) => u && !u.deletedAt && u.tagUid === uid);
+    if (idx >= 0) {
+      units[idx] = { ...units[idx], remainingWeight: remaining, serial: units[idx].serial || uid };
+    } else {
+      units.push({
+        id: 'unit-' + now.toString(36) + Math.random().toString(36).slice(2, 6),
+        serial: uid,
+        tagUid: uid,
+        location: 'storage',
+        state: 'draft',
+        remainingWeight: remaining,
+        flags: [],
+      });
+    }
+    set['payload.units'] = units;
+    set['payload.tracking'] = 'serial';
+  }
+
+  const res = await col.updateOne({ _id, ...NOT_DELETED }, { $set: set });
   return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount };
 }
 

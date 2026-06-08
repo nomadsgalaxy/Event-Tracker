@@ -13,6 +13,7 @@ import {
   bumpItemQtyInCase,
   adoptProductCode,
   updateItemTagData,
+  packTaggedUnitIntoCase,
   WriteForbiddenError,
 } from '@/lib/db/write';
 
@@ -155,6 +156,24 @@ export async function countOnlyAction(input: { itemId: string; caseId: string })
     await bumpItemQtyInCase({ itemId, caseId, actorRole: user.role });
     revalidatePath('/scan');
     return { ok: true, itemId };
+  } catch (e) {
+    return { ...fail(e), itemId };
+  }
+}
+
+/** Pack the spool whose NFC tag was scanned — relocates the serial unit linked to `tagUid` into the
+ *  case (registering it if needed). authorized+. */
+export async function packTaggedUnitAction(input: { itemId: string; caseId: string; tagUid: string }): Promise<ScanActionState> {
+  const itemId = String(input.itemId ?? '').trim();
+  const caseId = String(input.caseId ?? '').trim();
+  const tagUid = String(input.tagUid ?? '').trim();
+  if (!itemId || !caseId || !tagUid) return { error: 'Missing item, case, or tag.' };
+  const user = await requireRole('authorized');
+  try {
+    const name = await getUserDisplayName(user.email);
+    const res = await packTaggedUnitIntoCase({ itemId, caseId, tagUid, actorRole: user.role, actor: { email: user.email, name } });
+    revalidatePath('/scan');
+    return { ok: true, itemId, state: res.state };
   } catch (e) {
     return { ...fail(e), itemId };
   }

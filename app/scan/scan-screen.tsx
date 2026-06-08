@@ -42,6 +42,7 @@ import {
   countOnlyAction,
   adoptProductCodeAction,
   tagDataAction,
+  packTaggedUnitAction,
 } from './actions';
 import type { ScanResult } from './use-scan-camera';
 
@@ -312,23 +313,33 @@ export function ScanScreen({
       if (result.tier === 'exact' && result.itemId) {
         const e = itemById.get(result.itemId);
         if (e) {
-          // Refresh tag data on the matched item (best-effort), then bring the item up — the Add-to-case
-          // prompt when packing, else open it like scanning its label.
-          runWrite(() =>
-            tagDataAction({
-              itemId: e.id,
-              entry: {
-                tagUid: entry.tagUid,
-                format: entry.format,
-                category: entry.category,
-                parsed: (entry.parsed as Record<string, unknown> | null) ?? undefined,
-                raw: entry.raw,
-                lastReadAt: entry.lastReadAt,
+          const tagEntry = {
+            tagUid: entry.tagUid,
+            format: entry.format,
+            category: entry.category,
+            parsed: (entry.parsed as Record<string, unknown> | null) ?? undefined,
+            raw: entry.raw,
+            lastReadAt: entry.lastReadAt,
+          };
+          const cId = activeCaseId;
+          // A spool (serial consumable matched by its bound tag) packs THAT specific unit into the open
+          // case. Refresh the tag first (keeps remaining-weight current), then pack — sequenced in one
+          // thunk so the two units[] writes don't race.
+          const spoolPack = !!cId && !isUnpackMode && e.payload.tracking === 'serial' && result.matchField === 'nfc';
+          if (spoolPack) {
+            runWrite(
+              async () => {
+                await tagDataAction({ itemId: e.id, entry: tagEntry });
+                return packTaggedUnitAction({ itemId: e.id, caseId: cId as string, tagUid: entry.tagUid });
               },
-            })
-          );
-          toast.success(`${e.payload.name || 'Item'} · matched from tag`);
-          routeMatchedItem(e.payload, e.id, result.matchField || 'nfc');
+              () => toast.success(`${e.payload.name || 'Spool'} · packed into case`)
+            );
+          } else {
+            // Otherwise refresh the tag (best-effort) and bring the item up like scanning its label.
+            runWrite(() => tagDataAction({ itemId: e.id, entry: tagEntry }));
+            toast.success(`${e.payload.name || 'Item'} · matched from tag`);
+            routeMatchedItem(e.payload, e.id, result.matchField || 'nfc');
+          }
         }
       } else if (result.tier === 'substring' && result.itemIds) {
         setUnknown({ text: entry.tagUid, format: 'nfc:' + entry.format, suggestions: result.itemIds.map((id) => itemById.get(id)?.payload).filter((x): x is InventoryPayload => !!x), multiExact: false });
@@ -336,7 +347,7 @@ export function ScanScreen({
         setUnknown({ text: entry.tagUid, format: 'nfc:' + entry.format, suggestions: [], multiExact: false });
       }
     },
-    [items, itemById, runWrite, routeMatchedItem]
+    [items, itemById, runWrite, routeMatchedItem, activeCaseId, isUnpackMode]
   );
 
   const nfc = useNfcReader({ onTag: handleNfcTag });
