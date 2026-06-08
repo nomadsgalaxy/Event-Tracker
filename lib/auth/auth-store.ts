@@ -580,13 +580,15 @@ export async function adminResetPassword({
     if (!dir || dir.deletedAt || dir.payload?.deletedAt) throw new AdminActionError(404, 'account not found');
   }
 
+  // Reset = set a temp password for a LOCAL account + force a change. It must NOT wipe the user's
+  // Google binding or passkeys — doing so silently converted an SSO user into a password-only account
+  // (the "Chris" lockout). To move an account between local and SSO, use adminConvertToLocal /
+  // adminConvertToOauth, which are explicit.
   const patch: Partial<AuthDoc> & Record<string, unknown> = {
     pw: hashPw(tempPassword),
     failed: 0,
     lockedUntil: 0,
     mustChangePassword: true,
-    passkeys: [],
-    oauthIdentities: [],
   };
   if (clear2fa) {
     patch.totp = null;
@@ -598,6 +600,69 @@ export async function adminResetPassword({
   // upsert so the SSO-provisioned (no-record) case writes a fresh credential record.
   await patchAuth(email, patch, true);
   return { ok: true, email, cleared2fa: Boolean(clear2fa) };
+}
+
+/**
+ * Convert an account to OAuth-only ("default back to OAuth"). Clears the password + the forced-change
+ * flag + lockout so the password path is gone and the login offers Google; KEEPS any OAuth bindings +
+ * passkeys; stamps ssoProvisioned. This is the fix for an SSO user who got a stray password (e.g. from
+ * an old reset). ADMIN-ONLY. Refuses a soft-deleted directory user.
+ */
+export async function adminConvertToOauth({
+  targetEmail,
+  actorEmail,
+}: {
+  targetEmail: string;
+  actorEmail: string;
+}): Promise<{ ok: true; email: string }> {
+  denyInDemo('User provisioning');
+  await requireAdminActor(actorEmail);
+  const email = norm(targetEmail);
+  if (!email) throw new AdminActionError(400, 'email is required');
+  const db = await _getDb();
+  const dir = await db
+    .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>(USERS_COLLECTION)
+    .findOne({ _id: email });
+  if (!dir || dir.deletedAt || dir.payload?.deletedAt) throw new AdminActionError(404, 'account not found');
+  await patchAuth(
+    email,
+    { pw: null, mustChangePassword: false, failed: 0, lockedUntil: 0, ssoProvisioned: true },
+    true
+  );
+  return { ok: true, email };
+}
+
+/**
+ * Convert an account to local-only: set a temp password (force-change) and remove OAuth bindings so the
+ * account no longer signs in via SSO. KEEPS passkeys. ADMIN-ONLY. Refuses a soft-deleted user. The
+ * counterpart to adminConvertToOauth; both are explicit (a plain password reset never converts).
+ */
+export async function adminConvertToLocal({
+  targetEmail,
+  tempPassword,
+  actorEmail,
+}: {
+  targetEmail: string;
+  tempPassword: string;
+  actorEmail: string;
+}): Promise<{ ok: true; email: string }> {
+  denyInDemo('User provisioning');
+  await requireAdminActor(actorEmail);
+  const email = norm(targetEmail);
+  if (!email || String(tempPassword ?? '').length < 8) {
+    throw new AdminActionError(400, 'email and a >= 8 character temp password are required');
+  }
+  const db = await _getDb();
+  const dir = await db
+    .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>(USERS_COLLECTION)
+    .findOne({ _id: email });
+  if (!dir || dir.deletedAt || dir.payload?.deletedAt) throw new AdminActionError(404, 'account not found');
+  await patchAuth(
+    email,
+    { pw: hashPw(tempPassword), mustChangePassword: true, failed: 0, lockedUntil: 0, oauthIdentities: [], ssoProvisioned: false },
+    true
+  );
+  return { ok: true, email };
 }
 
 /**

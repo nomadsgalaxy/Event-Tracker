@@ -6,6 +6,8 @@ import { getDb, NOT_DELETED } from '@/lib/db/mongo';
 import {
   adminCreateLocalAccount,
   adminResetPassword,
+  adminConvertToOauth,
+  adminConvertToLocal,
   adminClear2fa,
   deleteDirectoryUser,
   AdminActionError,
@@ -184,6 +186,38 @@ export async function resetPasswordAction(
   try {
     const res = await adminResetPassword({ targetEmail, tempPassword, clear2fa, actorEmail: admin.user.email });
     await writeAudit({ actor: admin.user.email, action: 'account.admin_reset', target: res.email, detail: { cleared2fa: res.cleared2fa } });
+    revalidatePath('/config');
+    revalidatePath('/config/audit');
+    return { ok: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+// ── Convert account type (local XOR oauth) ─────────────────────────────────────────────────────────
+/** Default a user back to OAuth-only: clears the password so the login offers Google again (fixes an
+ *  SSO user who got a stray password). Keeps their Google binding + passkeys. */
+export async function convertToOauthAction(targetEmail: string): Promise<AdminResult> {
+  const admin = await gateAdmin();
+  if ('error' in admin) return admin;
+  try {
+    const res = await adminConvertToOauth({ targetEmail, actorEmail: admin.user.email });
+    await writeAudit({ actor: admin.user.email, action: 'account.convert_oauth', target: res.email });
+    revalidatePath('/config');
+    revalidatePath('/config/audit');
+    return { ok: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+/** Convert a user to a local password account: sets a temp password (force-change) + removes OAuth. */
+export async function convertToLocalAction(targetEmail: string, tempPassword: string): Promise<AdminResult> {
+  const admin = await gateAdmin();
+  if ('error' in admin) return admin;
+  try {
+    const res = await adminConvertToLocal({ targetEmail, tempPassword, actorEmail: admin.user.email });
+    await writeAudit({ actor: admin.user.email, action: 'account.convert_local', target: res.email });
     revalidatePath('/config');
     revalidatePath('/config/audit');
     return { ok: true };

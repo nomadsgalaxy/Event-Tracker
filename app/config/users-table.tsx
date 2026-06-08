@@ -14,6 +14,7 @@ import {
   Printer,
   HeartPulse,
   MoreHorizontal,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -61,6 +62,7 @@ import {
   renameUserAction,
   deleteUserAction,
   resetPasswordAction,
+  convertToOauthAction,
   clear2faAction,
   getUserAccommodationsAction,
   saveUserAccommodationsAction,
@@ -146,6 +148,7 @@ export function UsersTable({
   const [pendingChange, setPendingChange] = useState<{ row: UserRow; nextRole: string } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
+  const [convertTarget, setConvertTarget] = useState<UserRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [accTarget, setAccTarget] = useState<UserRow | null>(null);
   const [editingNameFor, setEditingNameFor] = useState<string | null>(null);
@@ -219,6 +222,21 @@ export function UsersTable({
     });
   }
 
+  function runConvertOauth() {
+    if (!convertTarget) return;
+    const row = convertTarget;
+    startTransition(async () => {
+      const res = await convertToOauthAction(row.email);
+      setConvertTarget(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${row.name || row.email} now signs in with Google (OAuth-only).`);
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -286,6 +304,7 @@ export function UsersTable({
                   onCommitRename={(name) => commitRename(r, name)}
                   onCancelRename={() => setEditingNameFor(null)}
                   onReset={() => setResetTarget(r)}
+                  onConvertOauth={() => setConvertTarget(r)}
                   onClear2fa={() => runClear2fa(r)}
                   onAccommodations={() => setAccTarget(r)}
                   onDelete={() => setDeleteTarget(r)}
@@ -324,6 +343,13 @@ export function UsersTable({
         }}
       />
 
+      <ConvertOauthDialog
+        target={convertTarget}
+        pending={isPending}
+        onCancel={() => !isPending && setConvertTarget(null)}
+        onConfirm={runConvertOauth}
+      />
+
       <DeleteUserDialog
         target={deleteTarget}
         pending={isPending}
@@ -355,6 +381,7 @@ function UserRowView({
   onCommitRename,
   onCancelRename,
   onReset,
+  onConvertOauth,
   onClear2fa,
   onAccommodations,
   onDelete,
@@ -371,6 +398,7 @@ function UserRowView({
   onCommitRename: (name: string) => void;
   onCancelRename: () => void;
   onReset: () => void;
+  onConvertOauth: () => void;
   onClear2fa: () => void;
   onAccommodations: () => void;
   onDelete: () => void;
@@ -488,6 +516,11 @@ function UserRowView({
               <DropdownMenuItem onSelect={onReset}>
                 <KeyRound className="size-4" aria-hidden />
                 {r.hasPassword ? 'Reset password…' : 'Set local password…'}
+              </DropdownMenuItem>
+            )}
+            {canManageLocal && r.hasPassword && (
+              <DropdownMenuItem onSelect={onConvertOauth}>
+                <Globe className="size-4" aria-hidden /> Convert to OAuth-only…
               </DropdownMenuItem>
             )}
             {canManageLocal && r.twofaEnrolled && (
@@ -805,6 +838,48 @@ function ResetPasswordDialog({
           <Button onClick={submit} disabled={pending}>
             {pending && <Loader2 className="animate-spin" aria-hidden />}
             {isSet ? 'Set password' : 'Reset password'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ConvertOauthDialog({
+  target,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  target: UserRow | null;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={target !== null} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Convert to OAuth-only?</DialogTitle>
+          <DialogDescription>
+            {target && (
+              <>
+                Set <strong className="text-foreground">{target.email}</strong> to sign in with Google
+                only. Their password is removed (the sign-in page will offer Google), and their passkeys
+                stay. Use &ldquo;Set local password&rdquo; later to switch them back to a local account.
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" autoFocus disabled={pending}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button onClick={onConfirm} disabled={pending}>
+            {pending && <Loader2 className="animate-spin" aria-hidden />}
+            Convert to OAuth-only
           </Button>
         </DialogFooter>
       </DialogContent>

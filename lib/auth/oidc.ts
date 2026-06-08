@@ -312,6 +312,16 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSign
     { upsert: true }
   );
 
+  // Auto-heal: an SSO-provisioned account that somehow carries a stray password (e.g. a legacy reset
+  // that converted it to local) is restored to OAuth-only on sign-in, so the password path can't
+  // shadow SSO. Scoped to ssoProvisioned + a non-null pw, so a real local account is never touched.
+  await db
+    .collection(AUTH)
+    .updateOne(
+      { _id: email, ssoProvisioned: true, pw: { $ne: null } } as Record<string, unknown>,
+      { $set: { pw: null, mustChangePassword: false, updatedAt: now } }
+    );
+
   // Record the Google identity on the auth record so it shows under Account → Security → linked
   // logins. The sign-in already succeeded for this verified email (a session is about to be minted),
   // so binding the user's OWN identity to their OWN record is not an escalation. Guard against hijack:
