@@ -120,6 +120,9 @@ const PUBLIC_PATHS = [
   '/api/auth/passkey/login',
   '/api/version', // the build-id stamp (non-sensitive) — public so the version-watcher works pre-login too
   '/api/demo/enter', // DEMO auto-sign-in — public so a signed-out visitor can be bounced through it
+  '/t', // the NFC tag viewer — renders material data from the URL FRAGMENT only (never sent to the
+        // server, no DB read, no inventory exposure), so a tag tapped on any phone (iOS/Android) opens
+        // a readable card without a login. Self-contained: the page shows only what the URL carries.
 ];
 
 // The token-authenticated iCalendar feed: /calendar/<token>.ics. PUBLIC (calendar apps can't SSO; the

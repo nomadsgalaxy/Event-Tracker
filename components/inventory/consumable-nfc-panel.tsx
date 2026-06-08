@@ -8,83 +8,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eyebrow } from '@/components/ui/eyebrow';
-import { useNfcReader } from '@/app/scan/use-nfc-reader';
+import { useNfcReader, type NfcOutRecord } from '@/app/scan/use-nfc-reader';
 import { tagDataAction } from '@/app/scan/actions';
 import { encodeOpenPrintTag, encodeOpenSpool, type TagEncodeInput } from '@/lib/integrations/nfc-encoders';
+import { buildTagViewerUrl } from '@/lib/integrations/tag-url';
+import { ParsedTagView, tagHeading } from '@/components/inventory/parsed-tag-view';
 import type { NfcTagEntry, ParsedTag } from '@/lib/integrations/nfc-decoders';
 import type { InventoryPayload, ItemTagData } from '@/lib/views/inventory-shape';
 
 // components/inventory/consumable-nfc-panel.tsx — the consumable NFC affordance inside ItemDetailsModal.
 // Shown only for kind 'consumable'. Reads a filament/resin tag (OpenPrintTag / OpenSpool / OpenTag3D),
 // binds it to this item by UID (tagDataAction), shows the decoded material data, offers to apply the
-// name/weight to the catalog item, and can program a blank tag from the item's data. Web NFC is
-// Chrome-on-Android only, so the read/write controls degrade gracefully elsewhere.
+// name/weight to the catalog item, and programs a blank tag. A written tag carries BOTH the data record
+// AND a /t URI record, so the tag is readable on any platform (iOS/Android open the URI on tap). Web NFC
+// read/write is Chrome-on-Android only, so the controls degrade gracefully elsewhere.
 
 const MATERIAL_TYPES = [
   'PLA', 'PETG', 'TPU', 'ABS', 'ASA', 'PC', 'PCTG', 'PP', 'PA6', 'PA11', 'PA12', 'PA66', 'CPE', 'TPE',
   'HIPS', 'PHA', 'PET', 'PEI', 'PBT', 'PVB', 'PVA', 'PEKK', 'PEEK', 'BVOH', 'TPC', 'PPS', 'PPSU', 'PVC',
   'PEBA', 'PVDF', 'PPA', 'PCL', 'PES', 'PMMA', 'POM', 'PPE', 'PS', 'PSU', 'TPI', 'SBS', 'OBC', 'EVA',
 ];
-
-function headingOf(p: ParsedTag | null | undefined, category?: string): string {
-  if (!p) return category === 'resin' ? 'Resin' : 'Filament';
-  return (
-    (p.brand_name ? p.brand_name + ' ' : '') +
-    (p.material_name || p.material_type || (p.material_class === 'SLA' ? 'Resin' : 'Filament'))
-  ).trim();
-}
-
-const fmtDate = (ms?: number | string | null): string | null => {
-  if (ms == null || ms === '') return null;
-  const d = new Date(typeof ms === 'string' ? ms : Number(ms));
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-};
-
-// One labelled value in the decoded-fields grid.
-function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
-  if (value == null || value === '') return null;
-  return (
-    <div className="flex flex-col">
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="text-xs text-foreground">{value}</span>
-    </div>
-  );
-}
-
-function ParsedFields({ p, color }: { p: ParsedTag; color?: string | null }) {
-  const weight =
-    p.actual_netto_full_weight != null ? p.actual_netto_full_weight : p.nominal_netto_full_weight;
-  return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-      <Field label="Material" value={p.material_type} />
-      <Field label="Class" value={p.material_class} />
-      {color ? (
-        <div className="flex flex-col">
-          <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Color</span>
-          <span className="flex items-center gap-1.5 text-xs text-foreground">
-            <span className="inline-block size-3 rounded-[3px] border border-border" style={{ background: color }} aria-hidden />
-            {color}
-          </span>
-        </div>
-      ) : null}
-      <Field label="Net weight" value={weight != null ? `${weight} g` : null} />
-      <Field label="Remaining" value={p.remaining_weight != null ? `${p.remaining_weight} g` : null} />
-      <Field label="Diameter" value={p.filament_diameter != null ? `${p.filament_diameter} mm` : null} />
-      <Field
-        label="Nozzle"
-        value={p.min_print_temperature != null || p.max_print_temperature != null ? `${p.min_print_temperature ?? '?'}–${p.max_print_temperature ?? '?'} °C` : null}
-      />
-      <Field
-        label="Bed"
-        value={p.min_bed_temperature != null || p.max_bed_temperature != null ? `${p.min_bed_temperature ?? '?'}–${p.max_bed_temperature ?? '?'} °C` : null}
-      />
-      <Field label="Density" value={p.density != null ? `${p.density} g/cm³` : null} />
-      <Field label="Manufactured" value={fmtDate(p.manufactured_date)} />
-      <Field label="Expires" value={fmtDate(p.expiration_date)} />
-      <Field label="Storage" value={p.storage_location} />
-    </div>
-  );
-}
 
 export function ConsumableNfcPanel({
   item,
@@ -139,7 +82,7 @@ export function ConsumableNfcPanel({
     const p = lastEntry?.parsed;
     if (!p || !onApplyToForm) return;
     const patch: { name?: string; weight?: string } = {};
-    const heading = headingOf(p, lastEntry?.category);
+    const heading = tagHeading(p, lastEntry?.category);
     if (heading) patch.name = heading;
     // nominal net weight is grams of material; the item's "weight ea." is in kg.
     const grams = p.nominal_netto_full_weight ?? p.actual_netto_full_weight;
@@ -174,7 +117,8 @@ export function ConsumableNfcPanel({
 
       {!nfc.supported ? (
         <p className="text-xs italic text-muted-foreground">
-          Reading and writing NFC tags needs Chrome on Android (Web NFC). Bound tags still show here on any device.
+          Reading/writing tags needs Chrome on Android (Web NFC). Tags written here carry a link any phone
+          can tap to read; bound tags also show below on any device.
         </p>
       ) : null}
       {nfc.active ? (
@@ -188,20 +132,15 @@ export function ConsumableNfcPanel({
 
       {/* Just-read tag */}
       {lastParsed ? (
-        <div className="flex flex-col gap-2 rounded-md border border-accent bg-card p-2.5" style={{ borderColor: 'var(--accent)' }}>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[13px] font-semibold text-foreground">{headingOf(lastParsed, lastEntry?.category)}</span>
-            <span className="font-mono text-[10px] text-muted-foreground">{lastEntry?.format}</span>
-          </div>
-          <ParsedFields p={lastParsed} color={lastParsed.primary_color} />
-          <div className="mt-0.5 flex items-center justify-between gap-2 border-t border-border pt-2">
-            <span className="font-mono text-[10px] text-muted-foreground">UID {lastEntry?.tagUid || '—'}</span>
-            {canEdit && onApplyToForm ? (
+        <div className="flex flex-col gap-2">
+          <ParsedTagView parsed={lastParsed} category={lastEntry?.category} format={lastEntry?.format} uid={lastEntry?.tagUid} />
+          {canEdit && onApplyToForm ? (
+            <div className="flex justify-end">
               <Button type="button" variant="outline" size="sm" onClick={applyToForm}>
                 Apply name + weight to item
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -217,7 +156,7 @@ export function ConsumableNfcPanel({
                 {t.parsed?.primary_color ? (
                   <span className="inline-block size-3 rounded-[3px] border border-border" style={{ background: t.parsed.primary_color }} aria-hidden />
                 ) : null}
-                {headingOf(t.parsed, t.category)}
+                {tagHeading(t.parsed, t.category)}
               </span>
               <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{t.tagUid}</span>
             </div>
@@ -238,7 +177,7 @@ function TagWriter({
 }: {
   item: InventoryPayload;
   seed: ParsedTag | null;
-  writeTag: (rec: { mediaType: string; data: Uint8Array }) => Promise<{ ok: boolean; error?: string }>;
+  writeTag: (records: NfcOutRecord[]) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [format, setFormat] = useState<'opt' | 'openspool'>('opt');
   const [materialClass, setMaterialClass] = useState<'FFF' | 'SLA'>((seed?.material_class as 'FFF' | 'SLA') || 'FFF');
@@ -266,11 +205,16 @@ function TagWriter({
       max_print_temperature: num(maxTemp),
     };
     const enc = format === 'openspool' ? encodeOpenSpool(input) : encodeOpenPrintTag(input);
+    // Two-record message: the universal-read /t URI (any phone opens it on tap) + the format data record.
+    const records: NfcOutRecord[] = [
+      { recordType: 'url', data: buildTagViewerUrl(input, window.location.origin) },
+      { recordType: 'mime', mediaType: enc.mediaType, data: enc.data },
+    ];
     setWriting(true);
-    const res = await writeTag({ mediaType: enc.mediaType, data: enc.data });
+    const res = await writeTag(records);
     setWriting(false);
     setConfirming(false);
-    if (res.ok) toast.success('Tag written');
+    if (res.ok) toast.success('Tag written — readable on any phone');
     else if (res.error === 'permission-denied') toast.error('NFC permission denied');
     else toast.error(res.error === 'nfc-unsupported' ? 'NFC writing needs Chrome on Android' : `Write failed: ${res.error || 'unknown'}`);
   };
@@ -339,6 +283,9 @@ function TagWriter({
           <Input value={maxTemp} inputMode="numeric" onChange={(e) => setMaxTemp(e.target.value)} className="h-7 text-xs" />
         </div>
       </div>
+      <p className="text-[10px] text-muted-foreground">
+        Writes the {format === 'opt' ? 'OpenPrintTag' : 'OpenSpool'} data plus a link any phone can tap to read.
+      </p>
       {confirming ? (
         <div className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning/[0.06] p-2.5">
           <p className="text-xs text-foreground">Hold a blank (or rewritable) tag to the back of your phone, then confirm.</p>

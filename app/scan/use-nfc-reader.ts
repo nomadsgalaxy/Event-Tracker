@@ -67,13 +67,21 @@ export interface NfcWriteResult {
   error?: string;
 }
 
+// A record to write. 'mime' carries the format payload (OpenPrintTag CBOR / OpenSpool JSON); 'url'
+// carries the universal-read viewer link that iOS/Android open natively on tap.
+export interface NfcOutRecord {
+  recordType: 'mime' | 'url' | 'text';
+  mediaType?: string;
+  data: Uint8Array | string;
+}
+
 export interface UseNfcReader {
   supported: boolean;
   active: boolean;
   error: string | null;
   start: () => Promise<void>;
   stop: () => void;
-  writeTag: (rec: { mediaType: string; data: Uint8Array }) => Promise<NfcWriteResult>;
+  writeTag: (records: NfcOutRecord[]) => Promise<NfcWriteResult>;
 }
 
 export function useNfcReader(opts: { onTag?: (entry: NfcTagEntry) => void }): UseNfcReader {
@@ -176,13 +184,16 @@ export function useNfcReader(opts: { onTag?: (entry: NfcTagEntry) => void }): Us
   // Program a blank (or rewritable) tag with a single MIME record. Web NFC's write() prompts for the tap
   // itself; it must be called from a user gesture. Returns a result instead of throwing.
   const writeTag = useCallback(
-    async function writeTag(rec: { mediaType: string; data: Uint8Array }): Promise<NfcWriteResult> {
+    async function writeTag(records: NfcOutRecord[]): Promise<NfcWriteResult> {
       if (!supported) return { ok: false, error: 'nfc-unsupported' };
+      if (!records || records.length === 0) return { ok: false, error: 'nfc-empty-write' };
       try {
         const Ctor = (window as unknown as { NDEFReader: NdefReaderCtor }).NDEFReader;
         const reader = new Ctor();
         if (!reader.write) return { ok: false, error: 'nfc-write-unsupported' };
-        await reader.write({ records: [{ recordType: 'mime', mediaType: rec.mediaType, data: rec.data }] });
+        await reader.write({
+          records: records.map((r) => ({ recordType: r.recordType, mediaType: r.mediaType, data: r.data })),
+        });
         return { ok: true };
       } catch (e) {
         const err = e as { name?: string; message?: string };
