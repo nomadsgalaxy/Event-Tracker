@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { getSession } from '@/lib/auth/session';
+import { googleClientId } from '@/lib/auth/oidc';
 import {
   Card,
   CardContent,
@@ -9,6 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import LoginForm from './login-form';
+import { GoogleOneTap } from './google-one-tap';
 
 // /login — the only unauthenticated PAGE (middleware lets it through). A Server Component shell: if
 // there's already a valid full session, skip straight to the destination; otherwise render the
@@ -36,6 +38,8 @@ export default async function LoginPage({
   const session = await getSession();
   if (session) redirect(dest);
 
+  const gClientId = googleClientId();
+
   return (
     // Fill the viewport below the global header (h-14) and the main's py-6, then center the card.
     <div className="flex min-h-[calc(100dvh-7.5rem)] items-center justify-center">
@@ -49,6 +53,8 @@ export default async function LoginPage({
         <CardContent>
           {/* Only thread `next` when it points somewhere other than the default. */}
           <LoginForm next={dest !== '/' ? dest : undefined} />
+          {/* Google One Tap: surfaces an existing Google session as a one-tap (or auto) sign-in. */}
+          {gClientId ? <GoogleOneTap clientId={gClientId} next={dest !== '/' ? dest : undefined} /> : null}
         </CardContent>
       </Card>
     </div>

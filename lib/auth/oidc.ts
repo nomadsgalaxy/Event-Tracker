@@ -223,6 +223,35 @@ export async function exchangeGoogleCode(
   };
 }
 
+/**
+ * Verify a Google One Tap / GIS credential (an ID token JWT delivered by the gsi client, NOT a code
+ * exchange). Same rigor as exchangeGoogleCode minus the per-flow nonce/PKCE (which only apply to the
+ * redirect flow): RS256 signature against Google's JWKS (alg pinned), issuer, aud membership (+azp on
+ * multi-aud), exp with skew, email_verified. The credential is origin-restricted by Google to the
+ * client's Authorized JavaScript origins, so only our own pages can obtain one for our client_id.
+ */
+export async function verifyGoogleCredential(idToken: string): Promise<GoogleProfile> {
+  const c = await verifyIdToken(idToken); // signature-verified claims (throws on bad sig/alg/kid)
+  if (!ISSUERS.has(String(c.iss))) throw new Error('credential: bad issuer');
+  const auds = Array.isArray(c.aud) ? c.aud.map(String) : [String(c.aud)];
+  if (!auds.includes(clientId())) throw new Error('credential: bad audience');
+  if (auds.length > 1 && String(c.azp) !== clientId()) throw new Error('credential: bad azp');
+  if (Number(c.exp ?? 0) < Math.floor(Date.now() / 1000) - EXP_SKEW_SEC) throw new Error('credential: expired');
+  return {
+    email: norm(c.email),
+    emailVerified: c.email_verified === true || c.email_verified === 'true',
+    name: typeof c.name === 'string' ? c.name : undefined,
+    picture: typeof c.picture === 'string' ? c.picture : undefined,
+    sub: c.sub != null ? String(c.sub) : undefined,
+    iss: typeof c.iss === 'string' ? c.iss : undefined,
+  };
+}
+
+/** The public Google OAuth client id (safe to expose to the browser for GIS One Tap). '' if unset. */
+export function googleClientId(): string {
+  return clientId();
+}
+
 async function allowedDomain(email: string): Promise<boolean> {
   const domain = (email.split('@')[1] || '').toLowerCase();
   // Env allowlist (deploy-time) UNION the Access-policy overlay (admin-editable). Empty UNION ⇒ open
