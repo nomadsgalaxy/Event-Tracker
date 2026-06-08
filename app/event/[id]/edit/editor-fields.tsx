@@ -9,7 +9,7 @@ import {
   Controller,
   type FieldPath,
 } from 'react-hook-form';
-import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, Copy } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
@@ -726,6 +726,70 @@ function StaffPicker({
   );
 }
 
+// "Copy from…" — pulls another staffer's travel or hotel into this one (multiple people often share a
+// flight or hotel). Lists the other staffers who HAVE that kind of info; selecting one deep-copies it.
+// Reads live form values via getValues (so it's current even though the row is render-isolated).
+function CopyFromMenu({
+  index,
+  kind,
+  onCopy,
+}: {
+  index: number;
+  kind: 'travel' | 'hotel';
+  onCopy: (data: unknown) => void;
+}) {
+  const { getValues } = useFormContext<EventFormValues>();
+  const { directory } = useEditorContext();
+  const [open, setOpen] = useState(false);
+
+  const hasData = (v: unknown): boolean => {
+    const o = v as Record<string, unknown> | undefined;
+    if (!o) return false;
+    return kind === 'travel'
+      ? !!(o.mode || o.outbound || o.return)
+      : !!(o.name || o.address || o.room || o.phone || o.checkInAt || o.checkOutAt || o.confirmation || o.notes);
+  };
+  const labelFor = (s: Record<string, unknown>): string => {
+    const email = String(s.email || '').toLowerCase();
+    const u = email ? directory.find((d) => d.email.toLowerCase() === email) : null;
+    return (u && u.name) || String(s.name || '') || String(s.email || '') || '(unnamed)';
+  };
+  // Recomputed each render (re-runs when the popover toggles) off LIVE values.
+  const sources = ((getValues('staff') as Record<string, unknown>[] | undefined) || [])
+    .map((s, i) => ({ i, s }))
+    .filter(({ i, s }) => i !== index && hasData(s?.[kind]))
+    .map(({ i, s }) => ({ i, label: labelFor(s), data: s[kind] }));
+  if (sources.length === 0) return null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="ghost" size="xs" className="text-muted-foreground">
+          <Copy size={12} aria-hidden /> Copy from…
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-1">
+        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Copy {kind} from
+        </p>
+        {sources.map((src) => (
+          <button
+            key={src.i}
+            type="button"
+            onClick={() => {
+              onCopy(JSON.parse(JSON.stringify(src.data)));
+              setOpen(false);
+            }}
+            className="block w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+          >
+            {src.label}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // One staffer row — its OWN module-scope component, so editing staffer N's role can't remount
 // staffer M's inputs. Field paths are computed from the row index. Shows the directory avatar/name +
 // onsite range, then (when piiEditable) the travel + hotel sub-editors.
@@ -813,7 +877,7 @@ function StaffRow({
 
           {piiEditable ? (
             <>
-              <TravelEditor base={base} />
+              <TravelEditor base={base} index={index} />
               <HotelEditor base={base} index={index} />
             </>
           ) : (
@@ -871,6 +935,10 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
     setValue(h as Name, {} as never, { shouldDirty: true });
     setExpanded(false);
   };
+  const copyFrom = (data: unknown) => {
+    setValue(h as Name, data as never, { shouldDirty: true });
+    setExpanded(true);
+  };
 
   // Places fan-out for the hotel address writes onto the hotel sub-object.
   const onHotelPlace = useCallback(
@@ -906,19 +974,22 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
       );
     }
     return (
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="w-fit text-muted-foreground"
-        onClick={() => {
-          setExpanded(true);
-          seedDefaults();
-        }}
-      >
-        <Plus aria-hidden />
-        Add hotel info
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="w-fit text-muted-foreground"
+          onClick={() => {
+            setExpanded(true);
+            seedDefaults();
+          }}
+        >
+          <Plus aria-hidden />
+          Add hotel info
+        </Button>
+        <CopyFromMenu index={index} kind="hotel" onCopy={copyFrom} />
+      </div>
     );
   }
   return (
@@ -927,6 +998,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
         <GroupLabel>Hotel</GroupLabel>
       </legend>
       <div className="flex items-center justify-end gap-1 -mt-2">
+        <CopyFromMenu index={index} kind="hotel" onCopy={copyFrom} />
         <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
           Clear
         </Button>
@@ -986,7 +1058,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
 }
 
 // ── Travel sub-editor (PII) — mode radios + two legs + flight lookup ───────────
-function TravelEditor({ base }: { base: string }) {
+function TravelEditor({ base, index }: { base: string; index: number }) {
   const t = `${base}.travel` as const;
   const { control, getValues, setValue } = useFormContext<EventFormValues>();
   const travel = useWatch({ control, name: t as Name }) as Record<string, unknown> | undefined;
@@ -999,6 +1071,10 @@ function TravelEditor({ base }: { base: string }) {
   const clear = () => {
     setValue(t as Name, {} as never, { shouldDirty: true });
     setExpanded(false);
+  };
+  const copyFrom = (data: unknown) => {
+    setValue(t as Name, data as never, { shouldDirty: true });
+    setExpanded(true);
   };
 
   if (!expanded) {
@@ -1018,16 +1094,19 @@ function TravelEditor({ base }: { base: string }) {
       );
     }
     return (
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="w-fit text-muted-foreground"
-        onClick={() => setExpanded(true)}
-      >
-        <Plane aria-hidden />
-        Add travel info
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="w-fit text-muted-foreground"
+          onClick={() => setExpanded(true)}
+        >
+          <Plane aria-hidden />
+          Add travel info
+        </Button>
+        <CopyFromMenu index={index} kind="travel" onCopy={copyFrom} />
+      </div>
     );
   }
 
@@ -1050,6 +1129,7 @@ function TravelEditor({ base }: { base: string }) {
           ))}
         </div>
         <div className="flex items-center gap-1">
+          <CopyFromMenu index={index} kind="travel" onCopy={copyFrom} />
           <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
             Clear
           </Button>
