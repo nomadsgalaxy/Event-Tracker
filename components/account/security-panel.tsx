@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -9,7 +9,6 @@ import {
   KeyRound,
   Link2,
   Loader2,
-  Lock,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -134,6 +133,9 @@ function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }
 }
 
 // ── Step-up modal (re-auth with the current password → a short-lived step-up token) ───────────────
+// A plain "are you sure?" confirm before a sensitive security change. Replaces the old password
+// step-up: the account is local OR OAuth-only (an OAuth-only account has no password to re-enter), so
+// these self-service changes are gated by a full session + an explicit confirm, not a re-auth.
 function StepUpModal({
   open,
   onCancel,
@@ -143,59 +145,21 @@ function StepUpModal({
   onCancel: () => void;
   onToken: (token: string) => void;
 }) {
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const pwId = useId();
-
-  useEffect(() => {
-    if (open) {
-      setPassword('');
-      setError('');
-    }
-  }, [open]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setBusy(true);
-    try {
-      const { status, data } = await api('/api/auth/stepup', { password });
-      if (status === 200 && typeof data.stepupToken === 'string') {
-        onToken(data.stepupToken);
-        return;
-      }
-      setError(String(data.error || 'Could not confirm your password.'));
-    } catch {
-      setError('Network error — please try again.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Confirm it’s you</DialogTitle>
-          <DialogDescription>Re-enter your password to make this security change.</DialogDescription>
+          <DialogTitle>Are you sure?</DialogTitle>
+          <DialogDescription>Confirm you want to make this change to your account security.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor={pwId}>Password</Label>
-            <Input id={pwId} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus required />
-          </div>
-          {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : null}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !password}>
-              {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Lock aria-hidden />}
-              Confirm
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => onToken('')}>
+            <Check aria-hidden /> Confirm
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -296,11 +260,11 @@ export function SecurityPanel({ initial }: { initial: SecurityInitial }) {
         onRecoveryCodes={setRecoveryCodes}
       />
 
-      <PasskeysCard isLocal={isLocal} onRefresh={refresh} requireStepUp={requireStepUp} />
+      <PasskeysCard onRefresh={refresh} requireStepUp={requireStepUp} />
 
       <LinkedLoginsCard status={status} isLocal={isLocal} onRefresh={refresh} requireStepUp={requireStepUp} />
 
-      <ApiKeysCard isLocal={isLocal} requireStepUp={requireStepUp} />
+      <ApiKeysCard />
 
       <CalendarCard />
 
@@ -560,7 +524,7 @@ interface PublicPasskey {
   addedAt?: number;
   counter: number;
 }
-function PasskeysCard({ isLocal, onRefresh, requireStepUp }: { isLocal: boolean; onRefresh: () => void; requireStepUp: (run: (token: string) => void) => void }) {
+function PasskeysCard({ onRefresh, requireStepUp }: { onRefresh: () => void; requireStepUp: (run: (token: string) => void) => void }) {
   const [keys, setKeys] = useState<PublicPasskey[]>([]);
   const [supported, setSupported] = useState(false);
   const [secure, setSecure] = useState(false);
@@ -629,14 +593,6 @@ function PasskeysCard({ isLocal, onRefresh, requireStepUp }: { isLocal: boolean;
         toast.error(String(data.error || 'Could not remove that passkey.'));
       }
     });
-  }
-
-  if (!isLocal) {
-    return (
-      <FieldGroup title="Passkeys" description="Sign in with your fingerprint, face, or device PIN — no password.">
-        <p className="text-xs text-muted-foreground">Set a local password above to add passkeys.</p>
-      </FieldGroup>
-    );
   }
 
   return (
@@ -767,7 +723,7 @@ function capSummary(k: PublicApiKey): string {
   return `${writeOrPii.length} ${writeOrPii.length === 1 ? 'capability' : 'capabilities'}`;
 }
 
-function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStepUp: (run: (token: string) => void) => void }) {
+function ApiKeysCard() {
   const [keys, setKeys] = useState<PublicApiKey[]>([]);
   const [tokenPrefix, setTokenPrefix] = useState('eitk_');
   const [ownerCaps, setOwnerCaps] = useState<string[]>([]);
@@ -802,26 +758,24 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
     });
   }
 
-  // Step-up (re-auth) then create. acknowledge=true is sent only after the user clears the danger
-  // confirmation below; the server independently requires it for admin/destructive caps.
-  function proceedCreate(acknowledge: boolean) {
-    requireStepUp(async (token) => {
-      const caps = [...selected].filter((c) => ownerSet.has(c));
-      const { status, data } = await api('/api/auth/apikeys/create', {
-        label: label.trim() || 'API key',
-        caps,
-        acknowledgeRisk: acknowledge,
-        stepupToken: token,
-      });
-      if (status === 200 && typeof data.token === 'string') {
-        setNewToken(data.token);
-        setLabel('');
-        setSelected(new Set());
-        await load();
-      } else {
-        toast.error(String(data.error || 'Could not create the key.'));
-      }
+  // Create the key. acknowledge=true is sent only after the user clears the danger confirmation below;
+  // the server independently requires it for admin/destructive caps. A full session is the gate (no
+  // step-up — the account may be OAuth-only with no password to re-enter).
+  async function proceedCreate(acknowledge: boolean) {
+    const caps = [...selected].filter((c) => ownerSet.has(c));
+    const { status, data } = await api('/api/auth/apikeys/create', {
+      label: label.trim() || 'API key',
+      caps,
+      acknowledgeRisk: acknowledge,
     });
+    if (status === 200 && typeof data.token === 'string') {
+      setNewToken(data.token);
+      setLabel('');
+      setSelected(new Set());
+      await load();
+    } else {
+      toast.error(String(data.error || 'Could not create the key.'));
+    }
   }
 
   function createKey() {
@@ -844,14 +798,6 @@ function ApiKeysCard({ isLocal, requireStepUp }: { isLocal: boolean; requireStep
     } else {
       toast.error(String(data.error || 'Could not revoke that key.'));
     }
-  }
-
-  if (!isLocal) {
-    return (
-      <FieldGroup title="API keys" description="Programmatic access to the scoped REST API.">
-        <p className="text-xs text-muted-foreground">Set a local password above to create API keys.</p>
-      </FieldGroup>
-    );
   }
 
   return (

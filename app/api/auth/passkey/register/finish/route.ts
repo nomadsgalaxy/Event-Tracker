@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic';
 // key never leaves the device. Full LOCAL session required. Mirrors eit_webauthn._reg_finish.
 export async function POST(req: NextRequest) {
   const sess = await getSession();
-  if (!sess || sess.src !== 'local') {
-    return jsonErr(401, 'sign in with your password to add a passkey');
+  if (!sess) {
+    return jsonErr(401, 'sign in to add a passkey');
   }
   const body = await readJson(req);
   const state = String(body.state ?? '');

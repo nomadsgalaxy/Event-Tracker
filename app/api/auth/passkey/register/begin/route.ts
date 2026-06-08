@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic';
 // Mirrors eit_webauthn._reg_begin.
 export async function POST(_req: NextRequest) {
   const sess = await getSession();
-  if (!sess || sess.src !== 'local') {
-    return jsonErr(401, 'sign in with your password to add a passkey');
+  if (!sess) {
+    return jsonErr(401, 'sign in to add a passkey');
   }
   const { options, state } = await passkeyRegisterBegin(sess.sub);
   return jsonOk({ options, state });

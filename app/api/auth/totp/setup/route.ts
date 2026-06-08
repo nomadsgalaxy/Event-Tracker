@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStageToken, verifyStepupToken } from '@/lib/auth/session';
+import { getSession, verifyStageToken } from '@/lib/auth/session';
 import { beginTotpSetup, getAuthRecord } from '@/lib/auth/auth-store';
 import { jsonOk, jsonErr, readJson } from '@/lib/api/api-response';
 
@@ -34,13 +34,7 @@ export async function POST(req: NextRequest) {
 
   const rec = await getAuthRecord(email);
   if (!rec) return jsonErr(404, 'account not found');
-
-  // Replacing an EXISTING authenticator from a full session ⇒ require step-up.
-  if (rec.totp && viaFullSession) {
-    if (!verifyStepupToken(String(body.stepupToken ?? ''), email)) {
-      return jsonErr(403, 'step-up required');
-    }
-  }
+  void viaFullSession; // (previously gated a step-up on re-enroll; the client now confirms instead)
 
   const { otpauthUri, secret } = await beginTotpSetup(email);
   return jsonOk({ otpauthUri, secret });
