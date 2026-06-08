@@ -9,7 +9,7 @@ import {
   Controller,
   type FieldPath,
 } from 'react-hook-form';
-import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown } from 'lucide-react';
+import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
@@ -741,6 +741,9 @@ function StaffRow({
       .slice(0, 2)
       .toUpperCase() || '?';
   const isLegacy = !email && !!nameVal;
+  // Each staffer card collapses to its header so you can fold the people you're done with while editing
+  // another (events with a big roster get long fast). Defaults open; toggled by clicking the name.
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4">
@@ -749,15 +752,24 @@ function StaffRow({
           {display.picture ? <AvatarImage src={display.picture} alt="" referrerPolicy="no-referrer" /> : null}
           <AvatarFallback className="text-[10px] font-bold">{initials}</AvatarFallback>
         </Avatar>
-        <div className="min-w-0">
-          <div className="truncate text-sm text-foreground">
-            {display.name || display.email || <span className="italic text-muted-foreground">not yet picked</span>}
-          </div>
-          <div className="truncate font-mono text-[10px] text-muted-foreground">
-            {display.email}
-            {isLegacy ? ' · legacy entry' : ''}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand staffer details' : 'Collapse staffer details'}
+          className="flex min-w-0 items-center gap-2 rounded text-left hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground transition-transform', collapsed && '-rotate-90')} aria-hidden />
+          <span className="min-w-0">
+            <span className="block truncate text-sm text-foreground">
+              {display.name || display.email || <span className="italic text-muted-foreground">not yet picked</span>}
+            </span>
+            <span className="block truncate font-mono text-[10px] text-muted-foreground">
+              {display.email}
+              {isLegacy ? ' · legacy entry' : ''}
+            </span>
+          </span>
+        </button>
         <BareInput name={`${base}.role` as Name} placeholder="Role (Lead, Booth ops, …)" ariaLabel={`Role for staffer ${index + 1}`} />
         <Button
           type="button"
@@ -771,28 +783,32 @@ function StaffRow({
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FormItem>
-          <FormLabel>Onsite arrives</FormLabel>
-          <BareInput name={`${base}.onsiteStart` as Name} type="datetime-local" ariaLabel="Onsite arrives" />
-        </FormItem>
-        <FormItem>
-          <FormLabel>Onsite leaves</FormLabel>
-          <BareInput name={`${base}.onsiteEnd` as Name} type="datetime-local" ariaLabel="Onsite leaves" />
-        </FormItem>
-      </div>
-
-      {piiEditable ? (
+      {!collapsed ? (
         <>
-          <TravelEditor base={base} />
-          <HotelEditor base={base} index={index} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormItem>
+              <FormLabel>Onsite arrives</FormLabel>
+              <BareInput name={`${base}.onsiteStart` as Name} type="datetime-local" ariaLabel="Onsite arrives" />
+            </FormItem>
+            <FormItem>
+              <FormLabel>Onsite leaves</FormLabel>
+              <BareInput name={`${base}.onsiteEnd` as Name} type="datetime-local" ariaLabel="Onsite leaves" />
+            </FormItem>
+          </div>
+
+          {piiEditable ? (
+            <>
+              <TravelEditor base={base} />
+              <HotelEditor base={base} index={index} />
+            </>
+          ) : (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Lock aria-hidden className="size-3.5" />
+              Travel &amp; hotel are private — only a manager, this staffer, or the event lead can edit them.
+            </p>
+          )}
         </>
-      ) : (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Lock aria-hidden className="size-3.5" />
-          Travel &amp; hotel are private — only a manager, this staffer, or the event lead can edit them.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
