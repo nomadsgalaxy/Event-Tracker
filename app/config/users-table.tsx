@@ -455,7 +455,8 @@ function UserRowView({
               2FA
             </Badge>
           )}
-          {r.hasLocalAccount && !r.hasPassword && (
+          {/* "No password" is implied for an OIDC/OAuth account — only flag it on a local account. */}
+          {!/^(oidc|oauth|github|google)/i.test(String(r.source || '')) && r.hasLocalAccount && !r.hasPassword && (
             <Badge variant="outline" className="text-[10px] text-muted-foreground">
               no password
             </Badge>
