@@ -94,8 +94,9 @@ export async function addUserAction(input: AddUserInput): Promise<AdminResult> {
       });
       await writeAudit({ actor: admin.user.email, action: 'account.provision', target: email, detail: { role, local: true } });
     } else {
-      // Directory-only user (no sign-in account). They sign in later via SSO / a separately-created
-      // local account. We $set ONLY the directory fields — never a credential, never escalation.
+      // No password ⇒ an OAuth-only (oidc:google) account by default: they sign in via Google, never a
+      // password. We set the directory source + provision a credential-less, ssoProvisioned auth record
+      // (pw:null) so the account is classified OAuth-only immediately — never a credential, never escalation.
       const db = await getDb();
       const existing = await db.collection<UserDoc>(USERS_COLLECTION).findOne({ _id: email });
       const payloadDeleted = (existing?.payload as { deletedAt?: number | null } | undefined)?.deletedAt;
@@ -113,7 +114,7 @@ export async function addUserAction(input: AddUserInput): Promise<AdminResult> {
             'payload.email': email,
             'payload.name': name || email,
             'payload.role': safeRole,
-            'payload.source': 'directory',
+            'payload.source': 'oidc:google',
             'payload.updatedAt': now,
             // Clear a prior tombstone if this re-adds a soft-deleted user.
             'payload.deletedAt': null,
@@ -124,7 +125,13 @@ export async function addUserAction(input: AddUserInput): Promise<AdminResult> {
         },
         { upsert: true }
       );
-      await writeAudit({ actor: admin.user.email, action: 'account.provision', target: email, detail: { role: safeRole, local: false } });
+      // Mark the credential side OAuth-only (no password) so login + the Users table classify it right.
+      await db.collection<{ _id: string }>('auth').updateOne(
+        { _id: email },
+        { $set: { source: 'oidc:google', pw: null, ssoProvisioned: true, updatedAt: now }, $setOnInsert: { _id: email, role: safeRole, createdAt: now } },
+        { upsert: true }
+      );
+      await writeAudit({ actor: admin.user.email, action: 'account.provision', target: email, detail: { role: safeRole, local: false, oauthOnly: true } });
     }
     revalidatePath('/config');
     revalidatePath('/config/audit');

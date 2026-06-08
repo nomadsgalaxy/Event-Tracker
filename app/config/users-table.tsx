@@ -661,7 +661,7 @@ function AddUserDialog({
         toast.error(res.error);
         return;
       }
-      toast.success(createLocal ? `Created a local account for ${e}.` : `Added ${e} to the directory.`);
+      toast.success(createLocal ? `Created a local account for ${e}.` : `Added ${e} as an OAuth-only (Google) user.`);
       reset();
       onDone();
     });
@@ -679,8 +679,8 @@ function AddUserDialog({
         <DialogHeader>
           <DialogTitle>Add user</DialogTitle>
           <DialogDescription>
-            Add a directory entry. Optionally create a local sign-in account with a temporary password —
-            the user must change it at first sign-in and enroll two-factor.
+            By default the user signs in with Google (OAuth-only) — no password. Tick the box below to
+            make it a local password account instead.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -717,9 +717,10 @@ function AddUserDialog({
           <label className="flex items-center gap-2.5 rounded-md border border-border p-3 text-sm">
             <Checkbox checked={createLocal} onCheckedChange={(v) => setCreateLocal(v === true)} />
             <span>
-              Create a local sign-in account
+              Make it a local password account instead
               <span className="block text-xs text-muted-foreground">
-                A temporary password the user must change. Mandatory 2FA on first sign-in.
+                A temporary password the user must change. Mandatory 2FA on first sign-in. Leave
+                unticked for Google (OAuth) sign-in.
               </span>
             </span>
           </label>
