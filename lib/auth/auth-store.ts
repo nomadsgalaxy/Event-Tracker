@@ -626,9 +626,11 @@ export async function adminConvertToOauth({
   if (!dir || dir.deletedAt || dir.payload?.deletedAt) throw new AdminActionError(404, 'account not found');
   await patchAuth(
     email,
-    { pw: null, mustChangePassword: false, failed: 0, lockedUntil: 0, ssoProvisioned: true },
+    { pw: null, mustChangePassword: false, failed: 0, lockedUntil: 0, ssoProvisioned: true, source: 'oidc:google' },
     true
   );
+  // Reflect the account TYPE on the directory record too (the Users table reads payload.source first).
+  await db.collection<{ _id: string }>(USERS_COLLECTION).updateOne({ _id: email }, { $set: { 'payload.source': 'oidc:google', updatedAt: Date.now() } });
   return { ok: true, email };
 }
 
@@ -659,9 +661,10 @@ export async function adminConvertToLocal({
   if (!dir || dir.deletedAt || dir.payload?.deletedAt) throw new AdminActionError(404, 'account not found');
   await patchAuth(
     email,
-    { pw: hashPw(tempPassword), mustChangePassword: true, failed: 0, lockedUntil: 0, oauthIdentities: [], ssoProvisioned: false },
+    { pw: hashPw(tempPassword), mustChangePassword: true, failed: 0, lockedUntil: 0, oauthIdentities: [], ssoProvisioned: false, source: 'local' },
     true
   );
+  await db.collection<{ _id: string }>(USERS_COLLECTION).updateOne({ _id: email }, { $set: { 'payload.source': 'local', updatedAt: Date.now() } });
   return { ok: true, email };
 }
 
