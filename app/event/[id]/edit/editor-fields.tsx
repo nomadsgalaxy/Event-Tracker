@@ -554,6 +554,12 @@ export function TeamPanel({ piiEditable }: { piiEditable: boolean }) {
   const { fields, append, remove } = useFieldArray({ control, name: 'staff' });
   const { directory } = useEditorContext();
 
+  // Staffers already on the event when it loaded default to COLLAPSED (fold the existing roster); a
+  // staffer added now stays expanded so you can fill them in. Tracked by the field's stable id, so a
+  // remove/reorder doesn't reclassify rows.
+  const initialStaffIds = useRef<Set<string> | null>(null);
+  if (initialStaffIds.current === null) initialStaffIds.current = new Set(fields.map((f) => f.id));
+
   // Watch staff emails to compute the available directory + the lead options (reactive).
   const staffWatch = useWatch({ control, name: 'staff' }) as EventFormValues['staff'] | undefined;
   const staffList = staffWatch ?? [];
@@ -635,7 +641,13 @@ export function TeamPanel({ piiEditable }: { piiEditable: boolean }) {
         ) : (
           <div className="grid gap-3">
             {fields.map((f, i) => (
-              <StaffRow key={f.id} index={i} piiEditable={piiEditable} onRemove={() => remove(i)} />
+              <StaffRow
+                key={f.id}
+                index={i}
+                piiEditable={piiEditable}
+                onRemove={() => remove(i)}
+                defaultCollapsed={initialStaffIds.current?.has(f.id) ?? false}
+              />
             ))}
           </div>
         )}
@@ -721,10 +733,12 @@ function StaffRow({
   index,
   piiEditable,
   onRemove,
+  defaultCollapsed = false,
 }: {
   index: number;
   piiEditable: boolean;
   onRemove: () => void;
+  defaultCollapsed?: boolean;
 }) {
   const base = `staff.${index}` as const;
   const { control } = useFormContext<EventFormValues>();
@@ -742,8 +756,9 @@ function StaffRow({
       .toUpperCase() || '?';
   const isLegacy = !email && !!nameVal;
   // Each staffer card collapses to its header so you can fold the people you're done with while editing
-  // another (events with a big roster get long fast). Defaults open; toggled by clicking the name.
-  const [collapsed, setCollapsed] = useState(false);
+  // another (events with a big roster get long fast). Pre-saved staffers default collapsed; a freshly
+  // added one stays open. Toggled by clicking the name.
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
     <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4">
@@ -876,6 +891,20 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
   const phone = (hotel?.phone as string) || '';
 
   if (!expanded) {
+    // Has data → a compact summary that re-expands (no data loss); empty → the Add button.
+    if (hasAny) {
+      return (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-label="Expand hotel info"
+          className="flex w-fit items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <ChevronDown size={14} className="-rotate-90 text-muted-foreground" aria-hidden />
+          <span className="text-foreground">Hotel{hotel?.name ? ` · ${String(hotel.name)}` : ''}</span>
+        </button>
+      );
+    }
     return (
       <Button
         type="button"
@@ -897,10 +926,18 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
       <legend className="flex w-full items-center justify-between px-1">
         <GroupLabel>Hotel</GroupLabel>
       </legend>
-      <div className="flex items-center justify-end -mt-2">
+      <div className="flex items-center justify-end gap-1 -mt-2">
         <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
           Clear
         </Button>
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          aria-label="Collapse hotel"
+          className="rounded p-1 text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <ChevronDown size={14} aria-hidden />
+        </button>
       </div>
       <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
         <BareInput name={`${h}.name` as Name} placeholder="Hotel name (e.g. Marriott Marquis)" ariaLabel="Hotel name" />
@@ -965,6 +1002,21 @@ function TravelEditor({ base }: { base: string }) {
   };
 
   if (!expanded) {
+    // Has data → a compact summary that re-expands (no data loss); empty → the Add button.
+    if (hasAny) {
+      return (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-label="Expand travel info"
+          className="flex w-fit items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <ChevronDown size={14} className="-rotate-90 text-muted-foreground" aria-hidden />
+          <Plane size={14} className="text-muted-foreground" aria-hidden />
+          <span className="text-foreground capitalize">Travel{mode ? ` · ${mode}` : ''}</span>
+        </button>
+      );
+    }
     return (
       <Button
         type="button"
@@ -997,9 +1049,19 @@ function TravelEditor({ base }: { base: string }) {
             </label>
           ))}
         </div>
-        <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
-          Clear
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={clear}>
+            Clear
+          </Button>
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            aria-label="Collapse travel"
+            className="rounded p-1 text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <ChevronDown size={14} aria-hidden />
+          </button>
+        </div>
       </div>
       {mode && (
         <>
