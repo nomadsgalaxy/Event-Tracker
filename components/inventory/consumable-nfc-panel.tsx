@@ -2,12 +2,13 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Nfc, PencilLine, RadioTower } from 'lucide-react';
+import { ChevronDown, ExternalLink, Loader2, Nfc, PencilLine, RadioTower } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eyebrow } from '@/components/ui/eyebrow';
+import { cn } from '@/lib/util/utils';
 import { useNfcReader, type NfcOutRecord } from '@/app/scan/use-nfc-reader';
 import { tagDataAction } from '@/app/scan/actions';
 import { encodeOpenPrintTag, encodeOpenSpool, type TagEncodeInput } from '@/lib/integrations/nfc-encoders';
@@ -42,6 +43,7 @@ export function ConsumableNfcPanel({
   const [lastEntry, setLastEntry] = useState<NfcTagEntry | null>(null);
   const [savingPending, startSaving] = useTransition();
   const [showWriter, setShowWriter] = useState(false);
+  const [expandedUid, setExpandedUid] = useState<string | null>(null);
 
   const boundTags = useMemo<ItemTagData[]>(
     () => (item.tagData ? Object.values(item.tagData) : []).sort((a, b) => (b.lastReadAt || 0) - (a.lastReadAt || 0)),
@@ -144,23 +146,64 @@ export function ConsumableNfcPanel({
         </div>
       ) : null}
 
-      {/* Already-bound tags (persisted on the item) */}
+      {/* Already-bound tags (persisted on the item) — click to explore the full decoded data. Works on
+          any device (desktop included): it reads the stored tagData, no NFC needed. */}
       {boundTags.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
             Bound tags · {boundTags.length}
           </span>
-          {boundTags.map((t) => (
-            <div key={t.tagUid} className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5">
-              <span className="flex items-center gap-1.5 truncate text-xs text-foreground">
-                {t.parsed?.primary_color ? (
-                  <span className="inline-block size-3 rounded-[3px] border border-border" style={{ background: t.parsed.primary_color }} aria-hidden />
+          {boundTags.map((t) => {
+            const open = expandedUid === t.tagUid;
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            return (
+              <div key={t.tagUid} className="overflow-hidden rounded-md border border-border bg-card">
+                <button
+                  type="button"
+                  onClick={() => setExpandedUid(open ? null : t.tagUid)}
+                  aria-expanded={open}
+                  className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-muted/40"
+                >
+                  <span className="flex items-center gap-1.5 truncate text-xs text-foreground">
+                    {t.parsed?.primary_color ? (
+                      <span className="inline-block size-3 rounded-[3px] border border-border" style={{ background: t.parsed.primary_color }} aria-hidden />
+                    ) : null}
+                    {tagHeading(t.parsed, t.category)}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="font-mono text-[10px] text-muted-foreground">{t.tagUid}</span>
+                    <ChevronDown size={13} className={cn('text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />
+                  </span>
+                </button>
+                {open ? (
+                  t.parsed ? (
+                    <div className="flex flex-col gap-2 border-t border-border p-2.5">
+                      <ParsedTagView parsed={t.parsed} category={t.category} format={t.format} uid={t.tagUid} />
+                      <div className="flex items-center justify-between gap-2">
+                        {t.lastReadAt ? (
+                          <span className="text-[10px] text-muted-foreground">
+                            Read {new Date(t.lastReadAt).toLocaleString()}
+                          </span>
+                        ) : <span />}
+                        <a
+                          href={buildTagViewerUrl(t.parsed as Parameters<typeof buildTagViewerUrl>[0], origin)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[11px] text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+                        >
+                          Open in tag viewer <ExternalLink size={11} aria-hidden />
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border-t border-border p-2.5 text-xs text-muted-foreground">
+                      This tag has no decoded material data (UID only — it wasn&apos;t an OpenPrintTag/OpenSpool tag).
+                    </div>
+                  )
                 ) : null}
-                {tagHeading(t.parsed, t.category)}
-              </span>
-              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{t.tagUid}</span>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       ) : null}
 
