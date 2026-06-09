@@ -106,7 +106,7 @@ export async function addUserAction(input: AddUserInput): Promise<AdminResult> {
       const now = Date.now();
       // Role defaults to least-privilege; a non-builtin string is left for the role <select> to fix —
       // but we never write an admin role implicitly here (the <select> uses the role-raise-guarded path).
-      const safeRole = ['read-only', 'authorized', 'lead', 'manager', 'admin'].includes(role) ? role : 'read-only';
+      const safeRole = ['read-only', 'authorized', 'technician', 'lead', 'manager', 'admin'].includes(role) ? role : 'read-only';
       await db.collection<UserDoc>(USERS_COLLECTION).updateOne(
         { _id: email },
         {

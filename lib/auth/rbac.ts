@@ -15,8 +15,14 @@
 
 import type { Role } from '@/lib/types/types';
 
-// ── Roles (seeded defaults; mirrors DEFAULT_ROLES in eit_perms.py) ──────────────────
-// rank orders privilege low->high and seeds the default grant matrix.
+// ── Roles (seeded defaults) ─────────────────────────────────────────────────────────
+// rank orders privilege low->high and seeds the default grant matrix (a role holds every
+// capability whose minRank <= its rank). Ranks: read-only 0, authorized 1, technician 2,
+// lead 3, manager 4, admin 5. 'technician' sits between authorized and lead — it holds the
+// inventory/sign-off tier (minRank 2) but NOT the manager tier (minRank 4: events, PII).
+// When 'technician' was inserted, lead/manager/admin shifted up one and every cap minRank
+// that was 3 (manager) became 4 and 4 (admin) became 5, so the existing roles keep their
+// exact capabilities.
 export interface RoleDef {
   id: string;
   rank: number;
@@ -47,8 +53,17 @@ export const DEFAULT_ROLES: readonly RoleDef[] = [
     desc: 'Lowest write tier (warehouse worker). Packs/unpacks, assigns cases to pallets, writes general app data. Not the event editor, not PII.',
   },
   {
-    id: 'lead',
+    id: 'technician',
     rank: 2,
+    label: 'Technician',
+    color: 'var(--st-unpacking)',
+    hidden: false,
+    builtin: true,
+    desc: 'Inventory technician. Works flagged / out-of-service items: edits inventory, sign-off, loose-item management, label print/adopt, tag apply, pack/unpack. Same inventory powers as a Lead but NO control over events (no create/edit/delete, no travel PII) unless separately made the lead of an event.',
+  },
+  {
+    id: 'lead',
+    rank: 3,
     label: 'Lead',
     color: 'var(--success)',
     hidden: false,
@@ -57,7 +72,7 @@ export const DEFAULT_ROLES: readonly RoleDef[] = [
   },
   {
     id: 'manager',
-    rank: 3,
+    rank: 4,
     label: 'Manager',
     color: 'var(--st-upcoming)',
     hidden: false,
@@ -66,7 +81,7 @@ export const DEFAULT_ROLES: readonly RoleDef[] = [
   },
   {
     id: 'admin',
-    rank: 4,
+    rank: 5,
     label: 'Admin',
     color: 'var(--primary)',
     hidden: false,
@@ -162,14 +177,14 @@ function cap(
 
 export const CAP_LIST: readonly CapDef[] = [
   // ── Events ──────────────────────────────────────────────────────────────────────
-  cap('event.create', 'Create an event', 'Spin up a new event.', G_EVENT, 3, {
+  cap('event.create', 'Create an event', 'Spin up a new event.', G_EVENT, 4, {
     note: 'Default manager+: managers set events up and assign a lead. Editable.',
   }),
-  cap('event.edit', 'Edit an event', 'Open the full event editor and write the event doc.', G_EVENT, 3, {
+  cap('event.edit', 'Edit an event', 'Open the full event editor and write the event doc.', G_EVENT, 4, {
     ctx: [CTX_LEAD],
     note: 'manager+ OR the LEAD of this event. Tightened from the legacy authorized+ so warehouse workers can\'t edit events; they still assign cases via pallets.edit. (#165)',
   }),
-  cap('event.delete', 'Delete an event', 'Soft-delete an event (tombstone replicates to peers).', G_EVENT, 3, {
+  cap('event.delete', 'Delete an event', 'Soft-delete an event (tombstone replicates to peers).', G_EVENT, 4, {
     ctx: [CTX_LEAD],
     note: 'manager+ OR the lead of this event. Was authorized+ with no stricter gate than a field edit — tightened.',
   }),
@@ -180,7 +195,7 @@ export const CAP_LIST: readonly CapDef[] = [
   cap('signoff.commit', 'Record a sign-off', 'Commit a sign-off (pack/load) or a shipment leg.', G_EVENT, 2, {
     note: 'lead+, now enforced server-side too (was client-only above an authorized+ write gate).',
   }),
-  cap('signoff.revert', 'Revert a sign-off', 'Un-sign-off a record.', G_EVENT, 3),
+  cap('signoff.revert', 'Revert a sign-off', 'Un-sign-off a record.', G_EVENT, 4),
   cap('scan.pack', 'Pack / unpack / return', 'Scan items into/out of cases.', G_EVENT, 1, {
     note: 'authorized+ by design (#65) so warehouse workers can pack.',
   }),
@@ -189,51 +204,51 @@ export const CAP_LIST: readonly CapDef[] = [
 
   // ── Inventory & tags ─────────────────────────────────────────────────────────────
   cap('tags.apply', 'Apply / remove a tag', 'Tag or untag events and items.', G_INV, 2),
-  cap('tags.edit', 'Create / edit tag metadata', 'Create a tag or edit its name/color/flair.', G_INV, 3),
-  cap('tags.delete', 'Delete a tag', 'Delete a tag.', G_INV, 3, {
+  cap('tags.edit', 'Create / edit tag metadata', 'Create a tag or edit its name/color/flair.', G_INV, 4),
+  cap('tags.delete', 'Delete a tag', 'Delete a tag.', G_INV, 4, {
     note: 'Default manager+. The legacy >3-uses-admin-only graduation is a client refinement layered on top.',
   }),
 
   // ── Personal data (PII) ──────────────────────────────────────────────────────────
-  cap('staff.pii.view', 'View staff travel & hotel', "See an event staffer's flights and lodging (per-event PII).", G_PII, 3, {
+  cap('staff.pii.view', 'View staff travel & hotel', "See an event staffer's flights and lodging (per-event PII).", G_PII, 4, {
     ctx: [CTX_SELF, CTX_LEAD],
     note: 'manager+ OR self OR the lead of this event. Server-enforced gate — was client-display-only. (#164)',
   }),
-  cap('accommodations.view', 'View accommodations', "See a person's dietary / accessibility / allergies / medical / emergency contact.", G_PII, 3, {
+  cap('accommodations.view', 'View accommodations', "See a person's dietary / accessibility / allergies / medical / emergency contact.", G_PII, 4, {
     ctx: [CTX_SELF],
     note: 'manager+ OR self. NOT lead — medical/dietary is more sensitive than logistics.',
   }),
-  cap('accommodations.edit', 'Edit accommodations', "Write a person's accommodations profile.", G_PII, 3, {
+  cap('accommodations.edit', 'Edit accommodations', "Write a person's accommodations profile.", G_PII, 4, {
     ctx: [CTX_SELF],
     note: 'manager+ OR self.',
   }),
-  cap('emergency_contact.read', 'Read emergency/shipping contact', 'Read the global emergency_contact collection.', G_PII, 3),
-  cap('emergency_contact.write', 'Write emergency/shipping contact', 'Write the global emergency_contact collection.', G_PII, 3),
-  cap('itinerary.print.others', "Print others' itineraries", "Print another staffer's travel itinerary.", G_PII, 3, {
+  cap('emergency_contact.read', 'Read emergency/shipping contact', 'Read the global emergency_contact collection.', G_PII, 4),
+  cap('emergency_contact.write', 'Write emergency/shipping contact', 'Write the global emergency_contact collection.', G_PII, 4),
+  cap('itinerary.print.others', "Print others' itineraries", "Print another staffer's travel itinerary.", G_PII, 4, {
     note: 'manager+. Subject PII flows through staff.pii.view, so this stays consistent.',
   }),
-  cap('calendar.global', 'Global calendar feed', 'Subscribe to the global operational-schedule .ics feed.', G_PII, 3, {
+  cap('calendar.global', 'Global calendar feed', 'Subscribe to the global operational-schedule .ics feed.', G_PII, 4, {
     note: "manager+; the owner's live role is re-checked on every fetch server-side.",
   }),
 
   // ── Administration ───────────────────────────────────────────────────────────────
-  cap('admin.users.directory', 'User directory panel', 'Config > Users: list, edit, reset, delete users.', G_ADMIN, 4),
-  cap('users.role.assign', 'Assign user roles', "Change a user's role in the directory.", G_ADMIN, 3, {
+  cap('admin.users.directory', 'User directory panel', 'Config > Users: list, edit, reset, delete users.', G_ADMIN, 5),
+  cap('users.role.assign', 'Assign user roles', "Change a user's role in the directory.", G_ADMIN, 4, {
     note: 'manager+, BUT never assign a role ABOVE your own rank (role-raise guard — see canGrantRole).',
   }),
-  cap('admin.console', 'Admin console', 'Config > Admin console: admin allowlist, permitted domains, company map.', G_ADMIN, 4, {
+  cap('admin.console', 'Admin console', 'Config > Admin console: admin allowlist, permitted domains, company map.', G_ADMIN, 5, {
     editable: false,
     note: 'Admin-only invariant: the capability that defines who is an admin; making it role-editable could brick the install.',
   }),
-  cap('admin.users.local', 'Local account CRUD', 'Create / reset-password / delete local email+password accounts.', G_ADMIN, 4),
-  cap('audit.view', 'View audit log', 'Config > Audit log + GET /auth/audit.', G_ADMIN, 4),
-  cap('sync.monitor', 'Sync + VPN monitor', 'Config > Sync monitor + Nebula VPN panel.', G_ADMIN, 4),
-  cap('integration.keys', 'Edit integration keys', 'Edit OAuth/Sheets/Calendar/flight/shipping keys (requires step-up).', G_ADMIN, 4, {
+  cap('admin.users.local', 'Local account CRUD', 'Create / reset-password / delete local email+password accounts.', G_ADMIN, 5),
+  cap('audit.view', 'View audit log', 'Config > Audit log + GET /auth/audit.', G_ADMIN, 5),
+  cap('sync.monitor', 'Sync + VPN monitor', 'Config > Sync monitor + Nebula VPN panel.', G_ADMIN, 5),
+  cap('integration.keys', 'Edit integration keys', 'Edit OAuth/Sheets/Calendar/flight/shipping keys (requires step-up).', G_ADMIN, 5, {
     ctx: [CTX_SELF],
     editable: false,
     note: 'Admin + a fresh password step-up. Invariant.',
   }),
-  cap('tls.manage', 'Manage TLS certs', 'Import/generate TLS certificates.', G_ADMIN, 4, { editable: false }),
+  cap('tls.manage', 'Manage TLS certs', 'Import/generate TLS certificates.', G_ADMIN, 5, { editable: false }),
 
   // ── Self-service (always granted to the caller's own record; not role-editable) ──
   cap('account.self', 'Own account screen', 'Profile / security / prefs / own accommodations self-edit.', G_SELF, 0, {

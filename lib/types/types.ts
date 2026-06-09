@@ -321,7 +321,7 @@ export interface EventPayload {
 
 export type EventDoc = Envelope<EventPayload>;
 
-export type Role = 'read-only' | 'authorized' | 'lead' | 'manager' | 'admin';
+export type Role = 'read-only' | 'authorized' | 'technician' | 'lead' | 'manager' | 'admin';
 
 export interface UserPayload {
   email: string;
