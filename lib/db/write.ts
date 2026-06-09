@@ -3,6 +3,7 @@ import { generateId } from '@/lib/util/id';
 import { denyInDemo } from '@/lib/db/demo';
 import { getDb, NOT_DELETED } from '@/lib/db/mongo';
 import { can, VALID_ROLES, rankOf, canGrantRole } from '@/lib/auth/rbac';
+import { dispatchOutbound } from '@/lib/integrations/outbound';
 import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry } from '@/lib/types/types';
@@ -2874,6 +2875,12 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
       },
     }
   );
+  const eventName = stored.payload.name || _id;
+  void dispatchOutbound({
+    type: 'ship_kit_signoff',
+    summary: `Kit shipped: ${eventName} via ${ship.carrier || 'carrier'}${ship.tracking ? ` (${ship.tracking})` : ''} — set In Transit`,
+    data: { eventId: _id, eventName, carrier: ship.carrier, tracking: ship.tracking, byEmail: actor.email },
+  });
   return { ok: res.matchedCount > 0, snapshot };
 }
 
@@ -3526,6 +3533,12 @@ export async function flagInventoryItem({
   const flags = buildAddFlag(stored.payload, { note: String(note ?? ''), severity, category, by });
   const now = Date.now();
   await col.updateOne({ _id, ...NOT_DELETED }, { $set: { 'payload.flags': flags, 'payload.id': _id, updatedAt: now } });
+  const name = stored.payload.name || _id;
+  void dispatchOutbound({
+    type: 'item_flagged',
+    summary: `Item flagged: ${name}${category ? ` (${category})` : ''}${note ? ` — ${String(note).slice(0, 120)}` : ''}`,
+    data: { itemId: _id, name, note: String(note ?? ''), severity, category, by },
+  });
   return { ok: true, itemId: _id, flag: flags[flags.length - 1] };
 }
 

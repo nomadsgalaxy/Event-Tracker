@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db/mongo';
 import { rankOf } from '@/lib/auth/rbac';
 import { GRANTS_COLLECTION, grantExpiry, type GrantDoc } from '@/lib/auth/grants';
 import { viewerLeadsEvent } from '@/lib/views/event-view';
+import { dispatchOutbound } from '@/lib/integrations/outbound';
 import type { Envelope, EventDoc, Role } from '@/lib/types/types';
 
 // lib/views/notifications.ts — the server-side read/write path for the per-user notification feed.
@@ -399,6 +400,11 @@ export async function createFlightAlert(to: string, data: FlightAlertData): Prom
     deletedAt: null,
   };
   await col.insertOne(doc);
+  void dispatchOutbound({
+    type: 'flight_delay',
+    summary: `Flight ${data.flightNumber} ${data.status}${data.delayMin ? ` (+${data.delayMin}m)` : ''} — ${data.eventName || data.eventId}, ${data.leg}`,
+    data: { ...data, to: recipient },
+  });
   return { ok: true, duplicate: false };
 }
 

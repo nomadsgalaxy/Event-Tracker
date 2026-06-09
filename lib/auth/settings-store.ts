@@ -73,6 +73,17 @@ export interface BrandingSettings {
   companyMap: Record<string, string>;
 }
 
+// ── Outbound notifications (webhook + Slack) ──────────────────────────────────────────────────────
+// Admin-configured: a generic JSON webhook URL and/or a Slack incoming-webhook URL, plus which event
+// types fan out. URLs are the capability (a Slack incoming webhook IS a bearer URL), stored as-is.
+export const OUTBOUND_EVENT_TYPES = ['item_flagged', 'flight_delay', 'ship_kit_signoff', 'low_stock'] as const;
+export type OutboundEventType = (typeof OUTBOUND_EVENT_TYPES)[number];
+export interface OutboundWebhookConfig {
+  webhookUrl: string;
+  slackWebhookUrl: string;
+  enabledEvents: string[];
+}
+
 export interface AccessPolicySettings {
   /** ADDITIVE admin emails (added to EIT_ADMIN_EMAILS — never removes an env entry). */
   adminEmails: string[];
@@ -109,6 +120,8 @@ interface SettingsDoc {
   oauthProviders?: ProviderConfig[];
   /** Encrypted per-provider client secrets, keyed by ProviderConfig.id. */
   oauthSecrets?: Record<string, EncBlob>;
+  /** Admin-configured outbound webhook / Slack notifications. */
+  outboundWebhooks?: OutboundWebhookConfig;
   updatedBy?: string;
   updatedAt?: number;
 }
@@ -400,6 +413,60 @@ export async function saveBranding(input: BrandingSettings, actorEmail: string):
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Failed to save branding.' };
+  }
+}
+
+// ── PUBLIC: OUTBOUND WEBHOOKS (non-secret URLs) ──────────────────────────────────────────────────
+const isHttpsUrl = (u: string): boolean => {
+  try {
+    return new URL(u).protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+export async function getOutboundWebhookConfig(opts: { fresh?: boolean } = {}): Promise<OutboundWebhookConfig> {
+  const doc = await getSettingsDoc(opts);
+  const o: Partial<OutboundWebhookConfig> = doc?.outboundWebhooks ?? {};
+  const enabled = Array.isArray(o.enabledEvents)
+    ? o.enabledEvents.filter((e): e is string => typeof e === 'string' && (OUTBOUND_EVENT_TYPES as readonly string[]).includes(e))
+    : [];
+  return {
+    webhookUrl: String(o.webhookUrl || '').trim(),
+    slackWebhookUrl: String(o.slackWebhookUrl || '').trim(),
+    enabledEvents: enabled,
+  };
+}
+
+export async function saveOutboundWebhookConfig(
+  input: OutboundWebhookConfig,
+  actorEmail: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (DEMO_MODE) return demoDenied('Outbound notifications');
+  const webhookUrl = String(input.webhookUrl || '').trim().slice(0, 500);
+  const slackWebhookUrl = String(input.slackWebhookUrl || '').trim().slice(0, 500);
+  if (webhookUrl && !isHttpsUrl(webhookUrl)) return { ok: false, error: 'Webhook URL must be https.' };
+  if (slackWebhookUrl && !isHttpsUrl(slackWebhookUrl)) return { ok: false, error: 'Slack webhook URL must be https.' };
+  const enabledEvents = Array.isArray(input.enabledEvents)
+    ? [...new Set(input.enabledEvents.filter((e) => (OUTBOUND_EVENT_TYPES as readonly string[]).includes(e)))]
+    : [];
+  try {
+    const db = await getDb();
+    await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne(
+      { _id: SETTINGS_ID },
+      {
+        $set: {
+          outboundWebhooks: { webhookUrl, slackWebhookUrl, enabledEvents },
+          updatedBy: String(actorEmail || '').trim().toLowerCase(),
+          updatedAt: Date.now(),
+        },
+      },
+      { upsert: true }
+    );
+    bustCache();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to save outbound webhooks.' };
   }
 }
 
