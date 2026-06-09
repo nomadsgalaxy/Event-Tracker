@@ -80,7 +80,7 @@ function ErrorAlert({ id, message }: { id: string; message: string }) {
   );
 }
 
-export default function LoginForm({ next }: { next?: string }) {
+export default function LoginForm({ next, enabledProviders }: { next?: string; enabledProviders?: { id: string; label: string }[] }) {
   const emailId = useId();
   const passwordId = useId();
   const errorId = useId();
@@ -304,14 +304,14 @@ export default function LoginForm({ next }: { next?: string }) {
     if (!sso) return;
     const MSG: Record<string, string> = {
       state: 'Sign-in expired — please try again.',
-      exchange: 'Could not complete Google sign-in.',
+      exchange: 'Could not complete sign-in. Please try again.',
       offboarded: 'This account has been deactivated.',
       not_allowed: 'That email domain isn’t allowed to sign in.',
-      unverified: 'Your Google email address isn’t verified.',
-      cancelled: 'Google sign-in was cancelled.',
-      unconfigured: 'Google sign-in isn’t configured.',
+      unverified: 'Your email address isn’t verified with the provider.',
+      cancelled: 'Sign-in was cancelled.',
+      unconfigured: 'That sign-in provider isn’t configured.',
     };
-    toast.error('Google sign-in failed', { description: MSG[sso] || 'Please try again.' });
+    toast.error('Sign-in failed', { description: MSG[sso] || 'Please try again.' });
   }, []);
 
   // ── Render per stage ───────────────────────────────────────────────────────────────────────
@@ -518,6 +518,15 @@ export default function LoginForm({ next }: { next?: string }) {
           Continue with Google
         </a>
       </Button>
+
+      {/* Admin-configured providers (generic OIDC / GitHub). Google stays first/default above. */}
+      {(enabledProviders ?? []).map((p) => (
+        <Button key={p.id} asChild variant="outline" className="w-full">
+          <a href={`/api/auth/oidc/${p.id}/start${next ? `?next=${encodeURIComponent(next)}` : ''}`}>
+            {p.label || 'Continue'}
+          </a>
+        </Button>
+      ))}
     </div>
   );
 }

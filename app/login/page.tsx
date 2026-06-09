@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { getSession } from '@/lib/auth/session';
 import { googleClientId } from '@/lib/auth/oidc';
+import { getEnabledProviders } from '@/lib/auth/settings-store';
 import {
   Card,
   CardContent,
@@ -39,6 +40,7 @@ export default async function LoginPage({
   if (session) redirect(dest);
 
   const gClientId = googleClientId();
+  const enabledProviders = await getEnabledProviders();
 
   return (
     // Fill the viewport below the global header (h-14) and the main's py-6, then center the card.
@@ -52,7 +54,7 @@ export default async function LoginPage({
         </CardHeader>
         <CardContent>
           {/* Only thread `next` when it points somewhere other than the default. */}
-          <LoginForm next={dest !== '/' ? dest : undefined} />
+          <LoginForm next={dest !== '/' ? dest : undefined} enabledProviders={enabledProviders} />
           {/* Google One Tap: surfaces an existing Google session as a one-tap (or auto) sign-in. */}
           {gClientId ? <GoogleOneTap clientId={gClientId} next={dest !== '/' ? dest : undefined} /> : null}
         </CardContent>

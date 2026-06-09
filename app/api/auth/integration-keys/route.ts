@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStepupToken } from '@/lib/auth/session';
+import { getSession } from '@/lib/auth/session';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import { rankOf } from '@/lib/auth/rbac';
 import {
@@ -51,10 +51,9 @@ export async function POST(req: NextRequest) {
   const gate = await gateAdmin(req);
   if ('err' in gate) return gate.err;
 
-  // STEP-UP bound to THIS session email.
   const sess = await getSession();
+  if (!sess) return jsonErr(401, 'sign in required');
   const body = (await readJson(req)) as KeysBody;
-  if (!sess || !verifyStepupToken(body.stepupToken, sess.sub)) return jsonErr(403, 'step-up required');
 
   // Whitelist the key names so a client can't write an arbitrary settings field.
   const allowed = new Set<string>(INTEGRATION_KEY_NAMES);

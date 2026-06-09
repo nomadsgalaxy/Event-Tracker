@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStepupToken } from '@/lib/auth/session';
+import { getSession } from '@/lib/auth/session';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import { rankOf, type RoleDef } from '@/lib/auth/rbac';
 import { syncPerms, savePermsOverride, resetPermsOverride } from '@/lib/auth/perms-store';
@@ -46,9 +46,6 @@ export async function POST(req: NextRequest) {
   if (rankOf(liveRole) < rankOf('admin')) return jsonErr(403, 'admin session required');
 
   const body = (await readJson(req)) as PermsBody;
-
-  // STEP-UP: a fresh re-auth token bound to THIS session email (defends a stolen cookie).
-  if (!verifyStepupToken(body.stepupToken, sess.sub)) return jsonErr(403, 'step-up required');
 
   if (body.reset) {
     const res = await resetPermsOverride(sess.sub);

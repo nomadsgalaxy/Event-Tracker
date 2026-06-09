@@ -113,6 +113,7 @@ async function issueDemoSidToken(): Promise<string> {
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/google',
+  '/api/auth/oidc', // generic OIDC/GitHub provider start+callback (signed-out flow, like /api/auth/google)
   '/api/auth/login',
   '/api/auth/totp/verify',
   '/api/auth/recovery', // POST /api/auth/recovery (recovery-code login); /recovery/regenerate is gated below

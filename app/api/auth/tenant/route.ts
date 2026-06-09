@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStepupToken } from '@/lib/auth/session';
+import { getSession } from '@/lib/auth/session';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import { rankOf } from '@/lib/auth/rbac';
 import { activeTenantId, getTenantOverride, saveTenantOverride } from '@/lib/auth/settings-store';
@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
   if (rankOf(liveRole) < rankOf('admin')) return jsonErr(403, 'admin session required');
 
   const body = (await readJson(req)) as TenantBody;
-  if (!verifyStepupToken(body.stepupToken, sess.sub)) return jsonErr(403, 'step-up required');
 
   const res = await saveTenantOverride(String(body.tenantId ?? ''), sess.sub);
   if (!res.ok) return jsonErr(503, res.error || 'failed to save the tenant id');

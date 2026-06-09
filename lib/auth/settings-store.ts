@@ -82,6 +82,22 @@ export interface AccessPolicySettings {
   groupRoleMap: Record<string, string>;
 }
 
+// ── Admin-configurable sign-in providers (generic OIDC + GitHub) ──────────────────────────────────
+// Google stays a built-in (env-configured) provider handled by lib/auth/oidc.ts; these are the EXTRA
+// providers an admin adds. The clientSecret is NEVER stored here — it lives encrypted in
+// oauthSecrets[id] (an EncBlob, same as the integration-key secrets). id is validated PROVIDER_ID_RE.
+export interface ProviderConfig {
+  id: string; // url-safe slug: 'microsoft' | 'github' | 'okta-prod' …
+  type: 'oidc' | 'github';
+  label: string; // "Continue with Microsoft"
+  enabled: boolean;
+  clientId: string; // non-secret (like GOOGLE_CLIENT_ID)
+  discoveryUrl?: string; // required for type==='oidc' (the .well-known/openid-configuration URL)
+  scopes?: string; // space-separated; defaults applied at the protocol layer
+  order?: number; // login-page display order (lower = first)
+}
+export const PROVIDER_ID_RE = /^[a-z0-9_-]{1,40}$/;
+
 interface SettingsDoc {
   _id: string;
   secrets?: Partial<Record<IntegrationKeyName, EncBlob>>;
@@ -89,6 +105,10 @@ interface SettingsDoc {
   policy?: Partial<AccessPolicySettings>;
   /** Data-Matrix tenant id override (lowercased); empty/absent ⇒ fall back to env. */
   tenantId?: string;
+  /** Admin-configured extra sign-in providers (Google is a built-in, not stored here). */
+  oauthProviders?: ProviderConfig[];
+  /** Encrypted per-provider client secrets, keyed by ProviderConfig.id. */
+  oauthSecrets?: Record<string, EncBlob>;
   updatedBy?: string;
   updatedAt?: number;
 }
@@ -463,6 +483,111 @@ export async function savePolicyOverlay(input: SavePolicyInput, actorEmail: stri
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Failed to save the access policy.' };
+  }
+}
+
+// ── PUBLIC: sign-in providers (generic OIDC + GitHub) ─────────────────────────────────────────────
+function cleanProvider(p: ProviderConfig): ProviderConfig | null {
+  const id = String(p?.id || '').trim().toLowerCase();
+  if (!PROVIDER_ID_RE.test(id)) return null;
+  const type = p?.type === 'github' ? 'github' : 'oidc';
+  return {
+    id,
+    type,
+    label: String(p?.label || '').trim().slice(0, 60) || (type === 'github' ? 'GitHub' : id),
+    enabled: !!p?.enabled,
+    clientId: String(p?.clientId || '').trim().slice(0, 200),
+    discoveryUrl: type === 'oidc' ? String(p?.discoveryUrl || '').trim().slice(0, 400) : undefined,
+    scopes: p?.scopes ? String(p.scopes).trim().slice(0, 200) : undefined,
+    order: typeof p?.order === 'number' && Number.isFinite(p.order) ? p.order : undefined,
+  };
+}
+
+/** All configured extra providers (NEVER includes secrets). 30s cache via getSettingsDoc. */
+export async function getProviderConfigs(opts: { fresh?: boolean } = {}): Promise<ProviderConfig[]> {
+  const doc = await getSettingsDoc(opts);
+  const list = Array.isArray(doc?.oauthProviders) ? doc!.oauthProviders! : [];
+  return list.map(cleanProvider).filter((p): p is ProviderConfig => !!p);
+}
+
+/** Enabled providers (for the login page), sorted by `order` then label. */
+export async function getEnabledProviders(): Promise<ProviderConfig[]> {
+  const all = await getProviderConfigs();
+  return all
+    .filter((p) => p.enabled && p.clientId && (p.type === 'github' || p.discoveryUrl))
+    .sort((a, b) => (a.order ?? 100) - (b.order ?? 100) || a.label.localeCompare(b.label));
+}
+
+/** Decrypt a provider's client secret for SERVER-SIDE use (the callback). '' when absent/unset. */
+export async function getProviderSecret(id: string): Promise<string> {
+  const key = String(id || '').trim().toLowerCase();
+  if (!PROVIDER_ID_RE.test(key)) return '';
+  const doc = await getSettingsDoc();
+  return decSecret(doc?.oauthSecrets?.[key]) || '';
+}
+
+/** True iff a provider currently has an encrypted secret stored (for the admin UI set/unset badge). */
+export async function providerSecretStatus(): Promise<Record<string, boolean>> {
+  const doc = await getSettingsDoc({ fresh: true });
+  const out: Record<string, boolean> = {};
+  for (const p of await getProviderConfigs({ fresh: true })) {
+    out[p.id] = decSecret(doc?.oauthSecrets?.[p.id]) != null;
+  }
+  return out;
+}
+
+/**
+ * Admin write: replace the provider list + set any newly-entered secrets (a blank/absent secret keeps
+ * the existing encrypted blob — so the admin never has to re-enter it). Validates every id. Secrets are
+ * encrypted at rest and NEVER returned. The route gates admin before calling.
+ */
+export async function saveProviderConfigs(
+  providers: ProviderConfig[],
+  secrets: Record<string, string>,
+  actorEmail: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (DEMO_MODE) return demoDenied('Sign-in providers');
+  const cleaned: ProviderConfig[] = [];
+  const seen = new Set<string>();
+  for (const raw of providers ?? []) {
+    const p = cleanProvider(raw);
+    if (!p) return { ok: false, error: `Invalid provider id '${raw?.id}' (use a-z, 0-9, -, _).` };
+    if (seen.has(p.id)) return { ok: false, error: `Duplicate provider id '${p.id}'.` };
+    if (p.type === 'oidc' && !p.discoveryUrl) return { ok: false, error: `Provider '${p.id}' needs a discovery URL.` };
+    seen.add(p.id);
+    cleaned.push(p);
+  }
+  const setOps: Record<string, unknown> = {
+    oauthProviders: cleaned,
+    updatedBy: String(actorEmail || '').trim().toLowerCase(),
+    updatedAt: Date.now(),
+  };
+  // Encrypt only the secrets that were actually entered, and only for a provider in the saved list.
+  for (const [id, plaintext] of Object.entries(secrets ?? {})) {
+    const key = String(id || '').trim().toLowerCase();
+    if (!seen.has(key)) continue;
+    const pt = String(plaintext ?? '').trim();
+    if (pt) setOps[`oauthSecrets.${key}`] = encSecret(pt);
+  }
+  // Drop stored secrets for any provider no longer in the list.
+  const unsetOps: Record<string, ''> = {};
+  try {
+    const doc = await getSettingsDoc({ fresh: true });
+    for (const id of Object.keys(doc?.oauthSecrets ?? {})) {
+      if (!seen.has(id)) unsetOps[`oauthSecrets.${id}`] = '';
+    }
+  } catch {
+    /* best-effort cleanup */
+  }
+  try {
+    const db = await getDb();
+    const update: Record<string, unknown> = { $set: setOps };
+    if (Object.keys(unsetOps).length) update.$unset = unsetOps;
+    await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne({ _id: SETTINGS_ID }, update, { upsert: true });
+    bustCache();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to save sign-in providers.' };
   }
 }
 

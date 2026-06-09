@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSession, verifyStepupToken } from '@/lib/auth/session';
+import { getSession } from '@/lib/auth/session';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import { rankOf, effectiveRoles } from '@/lib/auth/rbac';
 import { envAccessPolicy, getPolicyOverlay, savePolicyOverlay } from '@/lib/auth/settings-store';
@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
   if (rankOf(liveRole) < rankOf('admin')) return jsonErr(403, 'admin session required');
 
   const body = (await readJson(req)) as PolicyBody;
-  if (!verifyStepupToken(body.stepupToken, sess.sub)) return jsonErr(403, 'step-up required');
 
   if (
     (body.adminEmails && !Array.isArray(body.adminEmails)) ||

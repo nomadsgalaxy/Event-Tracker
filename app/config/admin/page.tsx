@@ -1,11 +1,13 @@
 import { requireRole } from '@/lib/auth/auth';
-import { getBranding, envAccessPolicy, getPolicyOverlay, getTenantOverride, activeTenantId } from '@/lib/auth/settings-store';
+import { getBranding, envAccessPolicy, getPolicyOverlay, getTenantOverride, activeTenantId, getProviderConfigs, providerSecretStatus } from '@/lib/auth/settings-store';
+import { googleConfigured } from '@/lib/auth/oidc';
 import { tenantHash36 } from '@/lib/integrations/eitm';
 import { dbStatus } from '@/lib/db/mongo';
 import { effectiveRoles } from '@/lib/auth/rbac';
 import { BrandingCard } from './branding-card';
 import { TenantCard } from './tenant-card';
 import { AccessPolicyCard } from './access-policy-card';
+import { SignInProvidersCard } from './sign-in-providers-card';
 import { ServerInfraShells } from './server-infra-shells';
 
 // app/config/admin — Config > Admin. The genuinely-applicable cards are built FULLY (Company
@@ -20,13 +22,15 @@ export const dynamic = 'force-dynamic';
 
 export default async function ConfigAdminPage() {
   await requireRole('admin');
-  const [branding, env, overlay, tenantOverride, activeTenant, db] = await Promise.all([
+  const [branding, env, overlay, tenantOverride, activeTenant, db, providers, secretStatus] = await Promise.all([
     getBranding({ fresh: true }),
     Promise.resolve(envAccessPolicy()),
     getPolicyOverlay({ fresh: true }),
     getTenantOverride({ fresh: true }),
     activeTenantId({ fresh: true }),
     dbStatus(),
+    getProviderConfigs({ fresh: true }),
+    providerSecretStatus(),
   ]);
 
   const envTenantDefault = String(process.env.EIT_TENANT_ID || process.env.MONGO_DB || '').trim().toLowerCase();
@@ -47,6 +51,7 @@ export default async function ConfigAdminPage() {
         }}
       />
       <AccessPolicyCard initial={{ env, policy: overlay, validRoles }} />
+      <SignInProvidersCard initialProviders={providers} initialSecretStatus={secretStatus} googleConfigured={googleConfigured()} />
       <ServerInfraShells dbReachable={db.reachable} dbName={db.dbName} />
     </div>
   );

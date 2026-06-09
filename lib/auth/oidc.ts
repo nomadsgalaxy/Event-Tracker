@@ -62,6 +62,7 @@ export interface OAuthFlow {
   nonce: string;
   verifier: string; // PKCE code_verifier
   next: string;
+  providerId: string; // 'google' | any configured provider id | 'github' — the callback cross-checks it
 }
 
 function flowSecret(): Buffer {
@@ -95,7 +96,14 @@ export function verifyFlow(token: string | undefined | null): OAuthFlow | null {
   try {
     const obj = JSON.parse(Buffer.from(body, 'base64url').toString('utf-8'));
     if (obj && typeof obj.state === 'string' && typeof obj.nonce === 'string' && typeof obj.verifier === 'string') {
-      return { state: obj.state, nonce: obj.nonce, verifier: obj.verifier, next: typeof obj.next === 'string' ? obj.next : '/' };
+      return {
+        state: obj.state,
+        nonce: obj.nonce,
+        verifier: obj.verifier,
+        next: typeof obj.next === 'string' ? obj.next : '/',
+        // Backward-compat: a cookie minted before this field existed is treated as a Google flow.
+        providerId: typeof obj.providerId === 'string' ? obj.providerId : 'google',
+      };
     }
   } catch {
     /* fall through */
@@ -103,12 +111,12 @@ export function verifyFlow(token: string | undefined | null): OAuthFlow | null {
   return null;
 }
 
-/** Mint a fresh flow (state + nonce + PKCE pair). Returns the flow secret + the public challenge. */
-export function newFlow(next: string): { flow: OAuthFlow; challenge: string } {
+/** Mint a fresh flow (state + nonce + PKCE pair) for `providerId`. Returns the flow + the challenge. */
+export function newFlow(next: string, providerId = 'google'): { flow: OAuthFlow; challenge: string } {
   const verifier = crypto.randomBytes(32).toString('base64url');
   const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
   return {
-    flow: { state: crypto.randomBytes(16).toString('hex'), nonce: crypto.randomBytes(16).toString('hex'), verifier, next },
+    flow: { state: crypto.randomBytes(16).toString('hex'), nonce: crypto.randomBytes(16).toString('hex'), verifier, next, providerId },
     challenge,
   };
 }
@@ -297,13 +305,26 @@ interface AuthRec {
   updatedAt?: number;
 }
 
-/** Resolve a verified Google profile to an Event Tracker identity, binding to an existing account
- *  by email or creating a read-only one. NEVER mints a session itself — the callback route does. */
-export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSignInResult> {
+/** The verified SSO profile shape every provider normalizes to (Google, generic OIDC, GitHub). */
+export type SsoProfile = GoogleProfile;
+
+/**
+ * Resolve a VERIFIED SSO profile (from ANY provider) to an Event Tracker identity, binding to an
+ * existing account by email or creating a read-only one. `providerId` is 'google' | any configured
+ * provider id | 'github'; it sets the account source ('github' or `oidc:<id>`) and the
+ * oauthIdentities provider key. NEVER mints a session itself (the callback route does), NEVER writes
+ * role, NEVER overwrites a local password ($setOnInsert), refuses a soft-deleted user, enforces the
+ * domain allow-list. The caller must have already VERIFIED the profile (signature/claims) — this only
+ * does the binding.
+ */
+export async function signInWithOidc(profile: SsoProfile, providerId: string): Promise<OidcSignInResult> {
   if (!profile.emailVerified) return { ok: false, reason: 'unverified' };
   const email = norm(profile.email);
   if (!email) return { ok: false, reason: 'unverified' };
   if (!(await allowedDomain(email))) return { ok: false, reason: 'not_allowed' };
+
+  const pid = String(providerId || 'google');
+  const source = pid === 'github' ? 'github' : `oidc:${pid}`;
 
   const db = await getDb();
   const users = db.collection<DirUser>(USERS);
@@ -319,7 +340,7 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSign
   if (isNew) {
     await users.insertOne({
       _id: email,
-      payload: { email, name: profile.name || email, picture: profile.picture || '', role: 'read-only', source: 'oidc:google' },
+      payload: { email, name: profile.name || email, picture: profile.picture || '', role: 'read-only', source },
       createdAt: now,
       updatedAt: now,
     });
@@ -335,7 +356,7 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSign
   await db.collection<AuthRec>(AUTH).updateOne(
     { _id: email },
     {
-      $setOnInsert: { _id: email, pw: null, role: 'read-only', source: 'oidc:google', ssoProvisioned: true, createdAt: now },
+      $setOnInsert: { _id: email, pw: null, role: 'read-only', source, ssoProvisioned: true, createdAt: now },
       $set: { updatedAt: now },
     },
     { upsert: true }
@@ -351,21 +372,20 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSign
       { $set: { pw: null, mustChangePassword: false, updatedAt: now } }
     );
 
-  // Record the Google identity on the auth record so it shows under Account → Security → linked
-  // logins. The sign-in already succeeded for this verified email (a session is about to be minted),
-  // so binding the user's OWN identity to their OWN record is not an escalation. Guard against hijack:
-  // skip if this (provider, sub) is already attached to a DIFFERENT account. Best-effort — a write
-  // hiccup must never block the sign-in.
+  // Record the provider identity on the auth record (shows under Account → Security → linked logins).
+  // The sign-in already succeeded for this verified email, so binding the user's OWN identity to their
+  // OWN record is not an escalation. Guard against hijack: skip if this (provider, sub) is already
+  // attached to a DIFFERENT account. Best-effort — a write hiccup must never block the sign-in.
   const sub = String(profile.sub || '').trim();
   if (sub) {
     try {
       const authCol = db.collection<AuthRec>(AUTH);
-      const other = await authCol.findOne({ _id: { $ne: email }, oauthIdentities: { $elemMatch: { provider: 'google', sub } } });
+      const other = await authCol.findOne({ _id: { $ne: email }, oauthIdentities: { $elemMatch: { provider: pid, sub } } });
       if (!other) {
         const rec = await authCol.findOne({ _id: email }, { projection: { oauthIdentities: 1 } });
         const ids = Array.isArray(rec?.oauthIdentities) ? rec!.oauthIdentities! : [];
-        if (!ids.some((i) => i.provider === 'google' && i.sub === sub)) {
-          ids.push({ provider: 'google', sub, iss: profile.iss || '', email, linkedAt: now });
+        if (!ids.some((i) => i.provider === pid && i.sub === sub)) {
+          ids.push({ provider: pid, sub, iss: profile.iss || '', email, linkedAt: now });
           await authCol.updateOne({ _id: email }, { $set: { oauthIdentities: ids, updatedAt: now } });
         }
       }
@@ -376,4 +396,9 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSign
 
   const role = await resolveLiveRole(email); // LIVE role: env-admin > directory > read-only
   return { ok: true, email, role, isNew };
+}
+
+/** Resolve a verified Google profile (redirect flow + One Tap) — delegates to the shared binding. */
+export async function signInWithGoogle(profile: GoogleProfile): Promise<OidcSignInResult> {
+  return signInWithOidc(profile, 'google');
 }
