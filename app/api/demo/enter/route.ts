@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { issueSessionToken, COOKIE_NAME, COOKIE_OPTS } from '@/lib/auth/session';
+import { issueSessionToken, COOKIE_NAME, SSO_COOKIE_OPTS } from '@/lib/auth/session';
 import { DEMO_MODE } from '@/lib/db/demo';
 import type { Role } from '@/lib/types/types';
 
@@ -30,6 +30,10 @@ export async function GET(req: NextRequest) {
   // just without the admin screens.
   const { token } = issueSessionToken(DEMO_USER, 'admin' as Role, 'demo');
   const res = redirectTo(dest);
-  res.cookies.set(COOKIE_NAME, token, COOKIE_OPTS);
+  // SameSite=Lax (SSO_COOKIE_OPTS), NOT Strict: this cookie is set during a REDIRECT into the app, and
+  // a freshly-set Strict cookie is dropped by stricter browsers (Safari/WebKit) when the visitor
+  // arrived via a cross-site navigation — the dropped cookie made middleware bounce back here forever
+  // ("too many redirects"). Lax survives the redirect, same as the SSO callback.
+  res.cookies.set(COOKIE_NAME, token, SSO_COOKIE_OPTS);
   return res;
 }
