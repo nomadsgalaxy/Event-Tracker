@@ -417,12 +417,32 @@ export async function saveBranding(input: BrandingSettings, actorEmail: string):
 }
 
 // ── PUBLIC: OUTBOUND WEBHOOKS (non-secret URLs) ──────────────────────────────────────────────────
-const isHttpsUrl = (u: string): boolean => {
+// HTTPS + not pointed at a private/loopback/link-local host — a small SSRF guard so a configured
+// webhook can't be aimed at the cloud metadata endpoint, Mongo's port, or other internal services.
+// Exported so the dispatcher re-checks at fire time (a directly-injected DB value can't bypass save).
+export const isSafeWebhookUrl = (u: string): boolean => {
+  let url: URL;
   try {
-    return new URL(u).protocol === 'https:';
+    url = new URL(u);
   } catch {
     return false;
   }
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1' || host === '0.0.0.0') return false;
+  // IPv4 private / loopback / link-local ranges.
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)) {
+      return false;
+    }
+  }
+  // IPv6 loopback / unique-local (fc00::/7) / link-local (fe80::/10).
+  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe8') || host.startsWith('fe9') || host.startsWith('fea') || host.startsWith('feb')) {
+    return false;
+  }
+  return true;
 };
 
 export async function getOutboundWebhookConfig(opts: { fresh?: boolean } = {}): Promise<OutboundWebhookConfig> {
@@ -445,8 +465,8 @@ export async function saveOutboundWebhookConfig(
   if (DEMO_MODE) return demoDenied('Outbound notifications');
   const webhookUrl = String(input.webhookUrl || '').trim().slice(0, 500);
   const slackWebhookUrl = String(input.slackWebhookUrl || '').trim().slice(0, 500);
-  if (webhookUrl && !isHttpsUrl(webhookUrl)) return { ok: false, error: 'Webhook URL must be https.' };
-  if (slackWebhookUrl && !isHttpsUrl(slackWebhookUrl)) return { ok: false, error: 'Slack webhook URL must be https.' };
+  if (webhookUrl && !isSafeWebhookUrl(webhookUrl)) return { ok: false, error: 'Webhook URL must be https and not a private/internal host.' };
+  if (slackWebhookUrl && !isSafeWebhookUrl(slackWebhookUrl)) return { ok: false, error: 'Slack webhook URL must be https and not a private/internal host.' };
   const enabledEvents = Array.isArray(input.enabledEvents)
     ? [...new Set(input.enabledEvents.filter((e) => (OUTBOUND_EVENT_TYPES as readonly string[]).includes(e)))]
     : [];

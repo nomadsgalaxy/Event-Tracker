@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -1145,6 +1145,19 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (dataUrl: 
   const ref = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const inked = useRef(false);
+  // White canvas + black ink: visible on screen (dark-only UI) AND legible when the captured PNG is
+  // printed on the white manifest of record (a transparent/white-ink capture would print blank).
+  const fillWhite = () => {
+    const c = ref.current;
+    const ctx = c?.getContext('2d');
+    if (c && ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+    }
+  };
+  useEffect(() => {
+    fillWhite();
+  }, []);
   const at = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const c = ref.current!;
     const r = c.getBoundingClientRect();
@@ -1167,7 +1180,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (dataUrl: 
     if (!ctx) return;
     const { x, y } = at(e);
     ctx.lineTo(x, y);
-    ctx.strokeStyle = '#f4f4f5';
+    ctx.strokeStyle = '#111111';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -1180,9 +1193,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (dataUrl: 
     if (c && inked.current) onChange(c.toDataURL('image/png'));
   };
   const clear = () => {
-    const c = ref.current;
-    const ctx = c?.getContext('2d');
-    if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
+    fillWhite();
     inked.current = false;
     onChange('');
   };
@@ -1192,7 +1203,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (dataUrl: 
         ref={ref}
         width={440}
         height={130}
-        className="w-full touch-none rounded-md border border-input bg-input/30"
+        className="w-full touch-none rounded-md border border-input bg-white"
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={end}

@@ -1,5 +1,5 @@
 import 'server-only';
-import { getOutboundWebhookConfig, type OutboundEventType } from '@/lib/auth/settings-store';
+import { getOutboundWebhookConfig, isSafeWebhookUrl, type OutboundEventType } from '@/lib/auth/settings-store';
 import { DEMO_MODE } from '@/lib/db/demo';
 
 // lib/integrations/outbound.ts — best-effort outbound notifications. Fires a generic JSON webhook
@@ -35,8 +35,13 @@ export async function dispatchOutbound(event: OutboundEvent): Promise<void> {
       }).catch(() => undefined);
 
     const jobs: Promise<unknown>[] = [];
-    if (cfg.webhookUrl) jobs.push(post(cfg.webhookUrl, { event: event.type, ts: Date.now(), summary: event.summary, data: event.data }));
-    if (cfg.slackWebhookUrl) jobs.push(post(cfg.slackWebhookUrl, { text: `*Event Tracker* · ${event.summary}` }));
+    // Re-check at fire time (defence in depth vs a directly-injected DB value bypassing the save guard).
+    if (cfg.webhookUrl && isSafeWebhookUrl(cfg.webhookUrl)) {
+      jobs.push(post(cfg.webhookUrl, { event: event.type, ts: Date.now(), summary: event.summary, data: event.data }));
+    }
+    if (cfg.slackWebhookUrl && isSafeWebhookUrl(cfg.slackWebhookUrl)) {
+      jobs.push(post(cfg.slackWebhookUrl, { text: `*Event Tracker* · ${event.summary}` }));
+    }
     await Promise.allSettled(jobs);
   } catch {
     // best-effort: an outbound failure must never affect the caller

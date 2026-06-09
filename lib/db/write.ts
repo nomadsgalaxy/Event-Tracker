@@ -1397,7 +1397,14 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
       case 'purchaseDate':
       case 'nextServiceDate': {
         const s = String(raw ?? '').trim();
-        set[`payload.${key}`] = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+        let ok = false;
+        if (m) {
+          const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+          const dt = new Date(Date.UTC(y, mo - 1, d));
+          ok = dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+        }
+        set[`payload.${key}`] = ok ? s : null;
         break;
       }
       case 'skuOptions': {
@@ -2836,6 +2843,8 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
   };
   const nextSignoff = {
     ...(stored.payload.signoff || {}),
+    // custodyCapture is stored ONCE — on manifestSnapshot.shipping (what the print reads) — not also
+    // here, so the (up to ~900 KB) image blobs aren't duplicated inside the same event document.
     shipped: {
       at: now,
       byEmail: actor.email,
@@ -2844,7 +2853,6 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
       carrier: ship.carrier,
       tracking: ship.tracking,
       pickupDate: ship.pickupDate,
-      ...(custody ? { custodyCapture: custody } : {}),
     },
     manifestSnapshot: snapshot,
   };

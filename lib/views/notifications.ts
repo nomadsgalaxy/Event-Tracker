@@ -403,7 +403,16 @@ export async function createFlightAlert(to: string, data: FlightAlertData): Prom
   void dispatchOutbound({
     type: 'flight_delay',
     summary: `Flight ${data.flightNumber} ${data.status}${data.delayMin ? ` (+${data.delayMin}m)` : ''} — ${data.eventName || data.eventId}, ${data.leg}`,
-    data: { ...data, to: recipient },
+    // Allow-list — NO staff emails: a third-party webhook must not receive traveler PII (the app
+    // gates staff travel PII to manager+ elsewhere). The summary carries the non-PII detail.
+    data: {
+      eventId: data.eventId,
+      eventName: data.eventName,
+      flightNumber: data.flightNumber,
+      leg: data.leg,
+      status: data.status,
+      delayMin: data.delayMin,
+    },
   });
   return { ok: true, duplicate: false };
 }
