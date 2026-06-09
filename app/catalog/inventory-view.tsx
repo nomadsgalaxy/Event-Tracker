@@ -716,7 +716,7 @@ function DesktopRow({
           {ITEM_STATE_LABEL[rollup]}
         </Badge>
         {loose ? (
-          <span className="truncate rounded bg-accent px-1.5 text-[10px] text-primary" title={loose}>
+          <span className="block max-w-full truncate rounded bg-accent px-1.5 text-[10px] text-primary" title={loose}>
             {loose}
           </span>
         ) : null}

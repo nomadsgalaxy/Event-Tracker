@@ -186,7 +186,7 @@ function CaseCard({
 
           <div className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
-              <span className="truncate font-medium text-foreground group-hover/case:underline">{r.label}</span>
+              <span className="min-w-0 truncate font-medium text-foreground group-hover/case:underline">{r.label}</span>
               {r.flagged > 0 ? (
                 <span
                   className="inline-flex shrink-0 items-center gap-0.5 text-xs"
@@ -221,9 +221,9 @@ function CaseCard({
 
         {/* Location + double-booked. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            {r.inTransit ? <Truck className="size-3.5" aria-hidden /> : <MapPin className="size-3.5" aria-hidden />}
-            <span className="truncate">{r.locationLabel}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            {r.inTransit ? <Truck className="size-3.5 shrink-0" aria-hidden /> : <MapPin className="size-3.5 shrink-0" aria-hidden />}
+            <span className="min-w-0 truncate">{r.locationLabel}</span>
           </span>
           {r.conflictCount >= 2 ? (
             <span
@@ -242,7 +242,7 @@ function CaseCard({
           {r.kitFor.length > 0 ? (
             <span className="inline-flex min-w-0 items-center gap-1">
               <span className="text-muted-foreground/70">Kit</span>
-              <span className="truncate font-mono text-foreground">{r.kitFor.join(', ')}</span>
+              <span className="min-w-0 truncate font-mono text-foreground">{r.kitFor.join(', ')}</span>
             </span>
           ) : (
             <span className="text-muted-foreground/70">Shared (no kit)</span>
