@@ -445,6 +445,61 @@ export function returnUnitToService(
   });
 }
 
+// ── Per-case flagging (a flag from a road case targets the serial(s) physically in that case) ──────
+/** Live units of a serial item currently located in the given case. */
+export function unitsInCase(item: InventoryPayload, caseId: string): ItemUnit[] {
+  return itemUnits(item).filter((u) => u.location === caseId);
+}
+
+/** The OPEN flag relevant to this case: for a serial item, an open flag on a unit IN this case (else
+ *  a type-level open flag if any); for bulk, the item-level open flag. Drives the case row's
+ *  "flagged" state + the Resolve action so a flag added to one serial shows on that case row. */
+export function caseOpenFlag(item: InventoryPayload, caseId: string): ItemFlag | null {
+  if (itemIsSerial(item)) {
+    for (const u of unitsInCase(item, caseId)) {
+      const f = (u.flags || []).find((x) => x && x.status === 'open');
+      if (f) return f;
+    }
+  }
+  return itemOpenFlag(item);
+}
+
+/** True iff the flag id lives on one of the item's units (vs the item-level flags). */
+export function flagIsOnUnit(item: InventoryPayload, flagId: string): boolean {
+  return (item.units || []).some((u) => u && (u.flags || []).some((f) => f && f.id === flagId));
+}
+
+/** Add a flag to the named units (by id). Returns a NEW units[] (deleted/other units untouched). */
+export function addFlagToUnits(
+  item: InventoryPayload,
+  unitIds: string[],
+  flag: { note?: string; severity?: string; category?: string; by?: string }
+): ItemUnit[] {
+  const set = new Set(unitIds);
+  return (item.units || []).map((u) =>
+    u && !u.deletedAt && u.id && set.has(u.id) ? { ...u, flags: addFlag({ flags: u.flags } as InventoryPayload, flag) } : u
+  );
+}
+
+/** Resolve a flag by id wherever it lives on the units. Returns a NEW units[]. */
+export function resolveUnitFlagById(
+  item: InventoryPayload,
+  flagId: string,
+  { resolution, by }: { resolution?: string; by?: string }
+): ItemUnit[] {
+  return (item.units || []).map((u) => {
+    if (!u || !(u.flags || []).some((f) => f && f.id === flagId)) return u;
+    return {
+      ...u,
+      flags: (u.flags || []).map((f) =>
+        f && f.id === flagId
+          ? { ...f, status: 'resolved' as const, resolvedAt: new Date().toISOString(), resolvedBy: by || 'unknown', resolution: resolution || '' }
+          : f
+      ),
+    };
+  });
+}
+
 // ── Storage stock (mirrors itemStockTotal / itemInStorage / itemHasStorage) ────────────
 export function itemStockTotal(item: InventoryPayload): number {
   if (itemIsSerial(item)) return itemUnits(item).length; // serial: total known units

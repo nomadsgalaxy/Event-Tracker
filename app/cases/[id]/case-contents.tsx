@@ -41,7 +41,8 @@ import {
 import {
   itemQtyInCase,
   itemStateInCase,
-  itemOpenFlag,
+  caseOpenFlag,
+  unitsInCase,
   type InventoryPayload,
   type ItemFlag,
 } from '@/lib/views/inventory-shape';
@@ -191,7 +192,7 @@ export function CaseContents({
               const it = row.payload;
               const KindIcon = kindLucide(it.kind || it.type || '');
               const qty = itemQtyInCase(it, caseId);
-              const open = itemOpenFlag(it);
+              const open = caseOpenFlag(it, caseId);
               const perCase = itemStateInCase(it, caseId);
               const state: 'packed' | 'pending' | 'flagged' = open ? 'flagged' : perCase === 'packed' ? 'packed' : 'pending';
               const serials =
@@ -341,6 +342,11 @@ export function CaseContents({
           item={flagItem}
           open={!!flagItem}
           onOpenChange={(o) => !o && setFlagItem(null)}
+          serialUnits={
+            flagItem.tracking === 'serial'
+              ? unitsInCase(flagItem, caseId).map((u) => ({ id: u.id || '', serial: u.serial || '' }))
+              : undefined
+          }
           onSubmit={async (data) => {
             const res = await flagCaseItemAction(flagItem.id || '', flagItem, data, caseId);
             if (res.ok) router.refresh();

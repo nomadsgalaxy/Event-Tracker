@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/util/utils';
 import type { InventoryPayload, ItemFlag } from '@/lib/views/inventory-shape';
 
@@ -44,6 +45,9 @@ export interface FlagSubmit {
   note: string;
   category: 'general' | 'damage' | 'maintenance';
   severity: 'low' | 'med' | 'high';
+  /** When flagging a serial item FROM a case, the unit ids to flag (the serials in that case). When
+   *  omitted/empty the host flags the item type (bulk items, or the catalog with no case context). */
+  unitIds?: string[];
 }
 
 export interface ActionResult {
@@ -56,21 +60,28 @@ export function FlagItemModal({
   open,
   onOpenChange,
   onSubmit,
+  serialUnits,
 }: {
   item: InventoryPayload;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: FlagSubmit) => Promise<ActionResult>;
+  /** The serial unit(s) of this item physically in the current case (case context only). When given,
+   *  the flag defaults to those serials; with more than one, the user can pick which. */
+  serialUnits?: { id: string; serial: string }[];
 }) {
+  const perSerial = Array.isArray(serialUnits) && serialUnits.length > 0;
   const [note, setNote] = useState('');
   const [category, setCategory] = useState<FlagSubmit['category']>('general');
   const [severity, setSeverity] = useState<FlagSubmit['severity']>('med');
+  const [picked, setPicked] = useState<Set<string>>(() => new Set((serialUnits || []).map((u) => u.id)));
   const [pending, startTransition] = useTransition();
 
   function reset() {
     setNote('');
     setCategory('general');
     setSeverity('med');
+    setPicked(new Set((serialUnits || []).map((u) => u.id)));
   }
 
   function submit() {
@@ -78,8 +89,12 @@ export function FlagItemModal({
       toast.warning('Please add a note describing the issue.');
       return;
     }
+    if (perSerial && picked.size === 0) {
+      toast.warning('Pick at least one serial to flag.');
+      return;
+    }
     startTransition(async () => {
-      const res = await onSubmit({ note: note.trim(), category, severity });
+      const res = await onSubmit({ note: note.trim(), category, severity, unitIds: perSerial ? [...picked] : undefined });
       if (res.error && !res.ok) {
         toast.error(res.error);
         return;
@@ -105,6 +120,36 @@ export function FlagItemModal({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {perSerial ? (
+            <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/30 p-2.5">
+              <Label className="text-xs">
+                {serialUnits!.length === 1 ? 'Flagging this serial (in this case)' : 'Which serials in this case?'}
+              </Label>
+              {serialUnits!.length === 1 ? (
+                <span className="font-mono text-xs text-foreground">{serialUnits![0].serial || '(no serial)'}</span>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {serialUnits!.map((u) => (
+                    <label key={u.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={picked.has(u.id)}
+                        onCheckedChange={(v) =>
+                          setPicked((s) => {
+                            const n = new Set(s);
+                            if (v === true) n.add(u.id);
+                            else n.delete(u.id);
+                            return n;
+                          })
+                        }
+                      />
+                      <span className="font-mono">{u.serial || '(no serial)'}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="flag-note">Issue description</Label>
             <Textarea

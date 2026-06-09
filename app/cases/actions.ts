@@ -22,6 +22,9 @@ import {
 import {
   addFlag as buildAddFlag,
   resolveFlag as buildResolveFlag,
+  addFlagToUnits,
+  resolveUnitFlagById,
+  flagIsOnUnit,
   type InventoryPayload,
   type ItemFlag,
 } from '@/lib/views/inventory-shape';
@@ -286,7 +289,7 @@ export async function saveCaseItemAction(itemId: string, patch: ItemPatch, caseI
 export async function flagCaseItemAction(
   itemId: string,
   item: InventoryPayload,
-  flag: { note: string; severity: string; category: string },
+  flag: { note: string; severity: string; category: string; unitIds?: string[] },
   caseId: string
 ): Promise<CaseActionResult> {
   const iid = String(itemId ?? '').trim();
@@ -295,14 +298,15 @@ export async function flagCaseItemAction(
   if (!flag?.note || !flag.note.trim()) return { error: 'Please add a note describing the issue.' };
   const user = await requireRole('authorized');
   const by = await getUserDisplayName(user.email).catch(() => user.email);
-  const nextFlags: ItemFlag[] = buildAddFlag(item || { flags: [] }, {
-    note: flag.note.trim(),
-    severity: flag.severity,
-    category: flag.category,
-    by: by || user.email,
-  });
+  const flagData = { note: flag.note.trim(), severity: flag.severity, category: flag.category, by: by || user.email };
+  // From a road case, a serial item's flag targets the SPECIFIC serial(s) in that case (the unit), not
+  // the whole item type. Bulk items (or no unit context) flag the type as before.
+  const patch: ItemPatch =
+    item?.tracking === 'serial' && Array.isArray(flag.unitIds) && flag.unitIds.length
+      ? { units: addFlagToUnits(item, flag.unitIds, flagData) }
+      : { flags: buildAddFlag(item || { flags: [] }, flagData) };
   try {
-    await upsertItem({ id: iid, patch: { flags: nextFlags }, actorRole: user.role });
+    await upsertItem({ id: iid, patch, actorRole: user.role });
   } catch (e) {
     if (e instanceof WriteForbiddenError) return { error: e.message };
     return { error: e instanceof Error ? e.message : 'Could not flag the item.' };
@@ -326,12 +330,13 @@ export async function resolveCaseFlagAction(
   if (!resolution || !resolution.trim()) return { error: 'Please describe how the issue was resolved.' };
   const user = await requireRole('authorized');
   const by = await getUserDisplayName(user.email).catch(() => user.email);
-  const nextFlags: ItemFlag[] = buildResolveFlag(item || { flags: [] }, String(flagId), {
-    resolution: resolution.trim(),
-    by: by || user.email,
-  });
+  // A per-case flag lives on a unit (serial); resolve it where it actually is.
+  const resOpts = { resolution: resolution.trim(), by: by || user.email };
+  const patch: ItemPatch = flagIsOnUnit(item, String(flagId))
+    ? { units: resolveUnitFlagById(item, String(flagId), resOpts) }
+    : { flags: buildResolveFlag(item || { flags: [] }, String(flagId), resOpts) };
   try {
-    await upsertItem({ id: iid, patch: { flags: nextFlags }, actorRole: user.role });
+    await upsertItem({ id: iid, patch, actorRole: user.role });
   } catch (e) {
     if (e instanceof WriteForbiddenError) return { error: e.message };
     return { error: e instanceof Error ? e.message : 'Could not resolve the flag.' };
