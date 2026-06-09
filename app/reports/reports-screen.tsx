@@ -27,10 +27,12 @@ import {
 import { formatWeight, type WeightUnit } from '@/lib/util/weight';
 import type {
   InventoryReport,
+  InvKindRow,
   EventsReport,
   ConditionReport,
   PeopleReport,
 } from '@/lib/views/reports';
+import { formatMoney } from '@/lib/util/money';
 
 // reports-screen.tsx — the client island for the Reports screen. Owns the active tab (controlled
 // TabStrip, the #93-safe all-panels-mounted pattern) mirrored to a sessionStorage key + the global
@@ -282,7 +284,9 @@ export function ReportsScreen({
       <div className="flex flex-col gap-3">
         <SectionHead
           label="Utilization"
-          sub={`${inventory.totalStock.toLocaleString()} units · ${fmtWt(inventory.totalWeightKg)} total inventory weight`}
+          sub={`${inventory.totalStock.toLocaleString()} units · ${fmtWt(inventory.totalWeightKg)} total inventory weight${
+            inventory.totalAssetValue > 0 ? ` · ${formatMoney(inventory.totalAssetValue)} asset value` : ''
+          }`}
         />
         <KpiStrip>
           <KpiCard
@@ -311,8 +315,8 @@ export function ReportsScreen({
           onExport={() =>
             downloadCsv(
               'inventory-by-kind',
-              ['Kind', 'Rows', 'Deployed', 'In storage', 'Total', 'Weight (kg)'],
-              inventory.kinds.map((k) => [k.kind, k.rows, k.deployed, k.storage, k.total, Math.round(k.weightKg * 10) / 10])
+              ['Kind', 'Rows', 'Deployed', 'In storage', 'Total', 'Weight (kg)', 'Asset value ($)'],
+              inventory.kinds.map((k) => [k.kind, k.rows, k.deployed, k.storage, k.total, Math.round(k.weightKg * 10) / 10, Math.round(k.assetValue * 100) / 100])
             )
           }
         />
@@ -326,6 +330,9 @@ export function ReportsScreen({
             { key: 'storage', label: 'In storage', num: true },
             { key: 'total', label: 'Total', num: true },
             { key: 'weightKg', label: 'Weight', num: true, render: (r) => fmtWt(r.weightKg) },
+            ...(inventory.totalAssetValue > 0
+              ? [{ key: 'assetValue' as const, label: 'Value', num: true, render: (r: InvKindRow) => (r.assetValue > 0 ? formatMoney(r.assetValue) : '—') }]
+              : []),
           ]}
         />
       </div>
@@ -531,8 +538,8 @@ export function ReportsScreen({
               ? () =>
                   downloadCsv(
                     'shrinkage',
-                    ['Item', 'Qty', 'Event', 'Reason'],
-                    condition.shrink.map((r) => [r.itemName, r.qty, r.eventName, r.reason])
+                    ['Item', 'Qty', 'Event', 'Reason', 'Est. loss ($)'],
+                    condition.shrink.map((r) => [r.itemName, r.qty, r.eventName, r.reason, r.dollarsLost || 0])
                   )
               : undefined
           }
@@ -543,13 +550,14 @@ export function ReportsScreen({
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
-            {/* Line / unit summary header — N lines (left) vs total units lost (right, warning-tinted). */}
+            {/* Line / unit summary header — N lines (left) vs total units lost + estimated $ (right). */}
             <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2.5">
               <Eyebrow>
                 {condition.shrink.length} line{condition.shrink.length === 1 ? '' : 's'}
               </Eyebrow>
-              <span className="font-mono text-xs tabular-nums" style={{ color: 'var(--warning)' }}>
-                {condition.shrinkUnits} unit{condition.shrinkUnits === 1 ? '' : 's'}
+              <span className="flex items-baseline gap-2 font-mono text-xs tabular-nums" style={{ color: 'var(--warning)' }}>
+                {condition.shrinkDollars > 0 ? <span className="font-semibold">{formatMoney(condition.shrinkDollars)}</span> : null}
+                <span>{condition.shrinkUnits} unit{condition.shrinkUnits === 1 ? '' : 's'}</span>
               </span>
             </div>
             {condition.shrink.map((s, i) => (
@@ -568,6 +576,11 @@ export function ReportsScreen({
                     {s.eventName} · {s.reason}
                   </div>
                 </div>
+                {s.dollarsLost > 0 ? (
+                  <span className="shrink-0 font-mono text-xs tabular-nums" style={{ color: 'var(--warning)' }}>
+                    {formatMoney(s.dollarsLost)}
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>

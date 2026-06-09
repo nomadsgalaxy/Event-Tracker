@@ -52,6 +52,7 @@ import {
   itemInStorage,
   itemIsLowStock,
   itemIsOutOfService,
+  itemIsDueForService,
   itemStateTone,
   itemIsSerial,
   itemMatchesQuery,
@@ -198,11 +199,13 @@ export function InventoryView({
   const counts = useMemo(() => {
     let restock = 0;
     let repair = 0;
+    let due = 0;
     for (const r of rows) {
       if (itemIsLowStock(r.payload)) restock++;
       if (itemIsOutOfService(r.payload)) repair++;
+      if (itemIsDueForService(r.payload)) due++;
     }
-    return { restock, repair };
+    return { restock, repair, due };
   }, [rows]);
   const filterChips = useMemo(
     () => [
@@ -211,6 +214,7 @@ export function InventoryView({
       { id: 'has-storage', label: 'Has storage stock' },
       { id: 'restock', label: `Restock (${counts.restock})` },
       { id: 'repair_queue', label: `Repair queue (${counts.repair})` },
+      ...(counts.due > 0 ? [{ id: 'due_for_service', label: `Due for service (${counts.due})` }] : []),
       ...ITEM_KINDS.map((k) => ({ id: k, label: `${k[0].toUpperCase()}${k.slice(1)}s` })),
     ],
     [counts]

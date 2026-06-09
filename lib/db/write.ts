@@ -1251,6 +1251,11 @@ const ITEM_EDITABLE_FIELDS = [
   'flags',
   'status',
   'requirements',
+  'nextServiceDate',
+  'serviceIntervalDays',
+  'purchasePrice',
+  'purchaseDate',
+  'replacementCost',
 ] as const;
 
 export type ItemPatch = Partial<Pick<InventoryPayload, (typeof ITEM_EDITABLE_FIELDS)[number]>>;
@@ -1314,6 +1319,12 @@ function cleanFlag(f: ItemFlag): ItemFlag {
   if (typeof f.resolvedAt === 'string') out.resolvedAt = f.resolvedAt;
   if (typeof f.resolvedBy === 'string') out.resolvedBy = f.resolvedBy;
   if (typeof f.resolution === 'string') out.resolution = f.resolution;
+  // Light service workflow: keep the repair cost (number|null) + the tech who handled it.
+  if (f.repairCost != null && f.repairCost !== ('' as unknown)) {
+    const c = Number(f.repairCost);
+    if (Number.isFinite(c) && c >= 0) out.repairCost = c;
+  }
+  if (typeof f.assignedTech === 'string' && f.assignedTech.trim()) out.assignedTech = f.assignedTech.trim();
   return out;
 }
 
@@ -1371,12 +1382,21 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
         break;
       }
       case 'reorderPoint':
-      case 'stockTotal': {
+      case 'stockTotal':
+      case 'serviceIntervalDays':
+      case 'purchasePrice':
+      case 'replacementCost': {
         if (raw == null || raw === ('' as unknown)) set[`payload.${key}`] = null;
         else {
           const n = Number(raw);
           set[`payload.${key}`] = Number.isFinite(n) ? Math.max(0, n) : null;
         }
+        break;
+      }
+      case 'purchaseDate':
+      case 'nextServiceDate': {
+        const s = String(raw ?? '').trim();
+        set[`payload.${key}`] = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
         break;
       }
       case 'skuOptions': {

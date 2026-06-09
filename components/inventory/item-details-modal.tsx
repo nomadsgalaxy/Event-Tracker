@@ -31,6 +31,7 @@ import { TagChip } from '@/components/ui/tag-chip';
 import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
+import { formatMoney } from '@/lib/util/money';
 import {
   itemTotalQty,
   itemInStorage,
@@ -236,6 +237,14 @@ export function ItemDetailsModal({
   const [stockTotal, setStockTotal] = useState(item.stockTotal == null ? '' : String(item.stockTotal));
   const [reorderPoint, setReorderPoint] = useState(item.reorderPoint == null ? '' : String(item.reorderPoint));
   const [storageNotes, setStorageNotes] = useState(item.storageNotes || '');
+  // Asset value (per-unit, USD) + light maintenance scheduling (ISO dates).
+  const [purchasePrice, setPurchasePrice] = useState(item.purchasePrice == null ? '' : String(item.purchasePrice));
+  const [replacementCost, setReplacementCost] = useState(item.replacementCost == null ? '' : String(item.replacementCost));
+  const [purchaseDate, setPurchaseDate] = useState(item.purchaseDate || '');
+  const [nextServiceDate, setNextServiceDate] = useState(item.nextServiceDate || '');
+  const [serviceIntervalDays, setServiceIntervalDays] = useState(
+    item.serviceIntervalDays == null ? '' : String(item.serviceIntervalDays)
+  );
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
   );
@@ -377,6 +386,12 @@ export function ItemDetailsModal({
         .map((o) => ({ sku: o.sku.trim(), label: (o.label || '').trim() })),
       weight: weight === '' ? '' : Number(weight),
       reorderPoint: reorderPoint === '' ? null : Math.max(0, Number(reorderPoint)),
+      // Asset value + maintenance scheduling (server re-sanitizes: numbers clamped >=0, dates pinned to ISO).
+      purchasePrice: purchasePrice === '' ? null : Math.max(0, Number(purchasePrice)),
+      replacementCost: replacementCost === '' ? null : Math.max(0, Number(replacementCost)),
+      purchaseDate: purchaseDate || null,
+      nextServiceDate: nextServiceDate || null,
+      serviceIntervalDays: serviceIntervalDays === '' ? null : Math.max(0, Number(serviceIntervalDays)),
       // tagIds are passed through unchanged (the picker is a later wave; we never drop them).
       tagIds: Array.isArray(item.tagIds) ? item.tagIds : [],
       // #27 kit BOM — drop rows with no target; the server re-sanitizes too. Only sent when the
@@ -1152,6 +1167,36 @@ export function ItemDetailsModal({
             </div>
           ) : null}
 
+          {/* Asset value + light service schedule — universal (both tracking modes). Drives the
+              Condition & Loss report's $-lost and the "Due for service" catalog filter. */}
+          <div className="flex flex-col gap-3 border-t border-border pt-4">
+            <Eyebrow>Asset value &amp; service</Eyebrow>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="item-price">Purchase price</Label>
+                <Input id="item-price" type="number" min={0} step="0.01" inputMode="decimal" value={purchasePrice} placeholder="$ / unit" onChange={(e) => setPurchasePrice(e.target.value)} disabled={!canEdit} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="item-replace">Replacement cost</Label>
+                <Input id="item-replace" type="number" min={0} step="0.01" inputMode="decimal" value={replacementCost} placeholder="optional" onChange={(e) => setReplacementCost(e.target.value)} disabled={!canEdit} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="item-pdate">Purchase date</Label>
+                <Input id="item-pdate" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} disabled={!canEdit} />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="item-nextsvc">Next service date</Label>
+                <Input id="item-nextsvc" type="date" value={nextServiceDate} onChange={(e) => setNextServiceDate(e.target.value)} disabled={!canEdit} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="item-svcint">Service interval (days)</Label>
+                <Input id="item-svcint" type="number" min={0} inputMode="numeric" value={serviceIntervalDays} placeholder="optional" onChange={(e) => setServiceIntervalDays(e.target.value)} disabled={!canEdit} />
+              </div>
+            </div>
+          </div>
+
           {/* Service status lifecycle (mark out-of-service / log repair) — universal (caller's handler
               or the /api/item/[id]/service fallback), so it shows everywhere the editor opens. */}
           {item.id ? (
@@ -1220,6 +1265,8 @@ function ServiceStatusPanel({
   const [mode, setMode] = useState<null | 'oos' | 'repair'>(null);
   const [note, setNote] = useState('');
   const [category, setCategory] = useState<'damage' | 'maintenance'>('damage');
+  const [repairCost, setRepairCost] = useState('');
+  const [assignedTech, setAssignedTech] = useState('');
   const [pending, startTransition] = useTransition();
   const by = actorName || 'user';
 
@@ -1247,7 +1294,12 @@ function ServiceStatusPanel({
       return;
     }
     startTransition(async () => {
-      const patch = returnItemToService(item, { resolution: note.trim(), by });
+      const patch = returnItemToService(item, {
+        resolution: note.trim(),
+        by,
+        repairCost: repairCost === '' ? null : Math.max(0, Number(repairCost)),
+        assignedTech: assignedTech.trim(),
+      });
       const res = await onServiceChange(patch);
       if (res.error && !res.ok) {
         toast.error(res.error);
@@ -1256,6 +1308,8 @@ function ServiceStatusPanel({
       toast.success('Returned to service');
       setMode(null);
       setNote('');
+      setRepairCost('');
+      setAssignedTech('');
       onDone();
     });
   }
@@ -1325,6 +1379,10 @@ function ServiceStatusPanel({
       {mode === 'repair' ? (
         <div className="flex flex-col gap-2 rounded-md border border-[color:var(--success)]/60 bg-[color:var(--success)]/[0.06] p-3">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was done? Replaced part, recalibrated, returned to stock, etc." />
+          <div className="grid grid-cols-2 gap-2">
+            <Input type="number" min={0} step="0.01" inputMode="decimal" value={repairCost} onChange={(e) => setRepairCost(e.target.value)} placeholder="Repair cost (optional)" />
+            <Input value={assignedTech} onChange={(e) => setAssignedTech(e.target.value)} placeholder="Tech (optional)" />
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => { setMode(null); setNote(''); }} disabled={pending}>Cancel</Button>
             <Button type="button" size="sm" onClick={doRepair} disabled={pending} style={{ color: 'var(--success)', borderColor: 'var(--success)' }}>
@@ -1371,9 +1429,15 @@ function RepairHistoryPanel({ flags }: { flags: ItemFlag[] }) {
                 </span>
               </div>
               <div className="text-foreground">{f.note || '(no description)'}</div>
-              {f.status === 'resolved' && f.resolution ? (
+              {f.status === 'resolved' && (f.resolution || f.repairCost != null || f.assignedTech) ? (
                 <div className="mt-1.5 border-t border-border pt-1.5 text-muted-foreground">
-                  Resolved{f.resolvedBy ? ` by ${f.resolvedBy}` : ''}: {f.resolution}
+                  Resolved{f.resolvedBy ? ` by ${f.resolvedBy}` : ''}{f.resolution ? `: ${f.resolution}` : ''}
+                  {f.assignedTech || f.repairCost != null ? (
+                    <span className="ml-1 text-[10px]">
+                      {f.assignedTech ? `· tech ${f.assignedTech}` : ''}
+                      {f.repairCost != null ? ` · ${formatMoney(f.repairCost)}` : ''}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
             </div>

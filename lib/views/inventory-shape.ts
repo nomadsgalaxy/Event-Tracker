@@ -90,6 +90,9 @@ export interface ItemFlag {
   resolvedAt?: string;
   resolvedBy?: string;
   resolution?: string;
+  // Light service workflow (no work-order system): the repair cost + the tech who handled it.
+  repairCost?: number | null;
+  assignedTech?: string;
 }
 
 export interface SkuOption {
@@ -156,6 +159,13 @@ export interface InventoryPayload {
   reorderPoint?: number | null;
   storageNotes?: string;
   status?: 'out_of_service' | null;
+  // Maintenance scheduling (light): next due date (ISO 'YYYY-MM-DD') + a recurring interval in days.
+  nextServiceDate?: string | null;
+  serviceIntervalDays?: number | null;
+  // Asset value (per-unit, USD for now). replacementCost wins over purchasePrice for loss valuation.
+  purchasePrice?: number | null;
+  purchaseDate?: string | null; // ISO date 'YYYY-MM-DD' ('' / null when unset)
+  replacementCost?: number | null;
   distribution?: DistributionRow[]; // BULK
   units?: ItemUnit[]; // SERIAL (#22)
   flags?: ItemFlag[];
@@ -269,6 +279,15 @@ export function itemIsOutOfService(item: InventoryPayload): boolean {
   return itemHasOpenServiceFlag(item);
 }
 
+/** Due (or overdue) for scheduled service: a nextServiceDate (ISO date) is set and is today or past.
+ *  ISO 'YYYY-MM-DD' strings compare lexicographically, so a plain <= is the date comparison. */
+export function itemIsDueForService(item: InventoryPayload, todayIso?: string): boolean {
+  const due = item?.nextServiceDate;
+  if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return false;
+  const today = todayIso || new Date().toISOString().slice(0, 10);
+  return due <= today;
+}
+
 // ── Flag mutators (pure; mirror index.html addFlag / resolveFlag ~L9423) ────────────────────
 /** Build the next flags[] for ADDING an open flag (addFlag). Returns a NEW array (never mutates). */
 export function addFlag(
@@ -333,8 +352,10 @@ export function markItemOutOfService(
  *  resolution text. Returns the next patch shape { status, flags }. */
 export function returnItemToService(
   item: InventoryPayload,
-  { resolution, by }: { resolution?: string; by?: string }
+  { resolution, by, repairCost, assignedTech }: { resolution?: string; by?: string; repairCost?: number | null; assignedTech?: string }
 ): { status: null; flags: ItemFlag[] } {
+  const cost = repairCost != null && Number.isFinite(Number(repairCost)) ? Number(repairCost) : undefined;
+  const tech = assignedTech && assignedTech.trim() ? assignedTech.trim() : undefined;
   const flags = (item.flags || []).map((f) =>
     f && f.status === 'open' && (f.category === 'damage' || f.category === 'maintenance')
       ? {
@@ -343,6 +364,8 @@ export function returnItemToService(
           resolvedAt: new Date().toISOString(),
           resolvedBy: by || 'unknown',
           resolution: resolution || 'Returned to service',
+          ...(cost != null ? { repairCost: cost } : {}),
+          ...(tech ? { assignedTech: tech } : {}),
         }
       : f
   );
@@ -427,6 +450,7 @@ export const INVENTORY_FILTERS = [
   'has-storage',
   'restock',
   'repair_queue',
+  'due_for_service',
   ...ITEM_KINDS,
 ] as const;
 export type InventoryFilter = (typeof INVENTORY_FILTERS)[number];
@@ -444,6 +468,8 @@ export function itemPassesFilter(item: InventoryPayload, id: string, filter: str
       return itemIsLowStock(item);
     case 'repair_queue':
       return itemIsOutOfService(item);
+    case 'due_for_service':
+      return itemIsDueForService(item);
     default:
       if ((ITEM_KINDS as readonly string[]).includes(filter)) {
         return (item.kind || item.type) === filter;

@@ -73,6 +73,7 @@ export interface InvKindRow {
   storage: number;
   total: number;
   weightKg: number;
+  assetValue: number; // sum of (units) * purchasePrice across items in this kind (USD; 0 when unpriced)
 }
 export interface LowStockRow {
   name: string;
@@ -92,6 +93,7 @@ export interface InventoryReport {
   totalStorage: number;
   totalStock: number;
   totalWeightKg: number;
+  totalAssetValue: number; // sum of (units) * purchasePrice across all items (USD; 0 when unpriced)
   utilizationPct: number;
   oosCount: number;
   itemCount: number;
@@ -104,6 +106,7 @@ export function buildInventoryReport(items: ItemEntry[]): InventoryReport {
   let totalDeployed = 0;
   let totalStorage = 0;
   let totalWeightKg = 0;
+  let totalAssetValue = 0;
   let oosCount = 0;
 
   for (const { payload: it } of items) {
@@ -113,17 +116,22 @@ export function buildInventoryReport(items: ItemEntry[]): InventoryReport {
     // Per-kind weight rollup, faithful to _itemWeightKg * _itemTotal (index.html ~L30007-30012):
     // the item's per-unit tare weight (kg) times its total units (deployed + in storage).
     const wRoll = weightKg(it.weight) * (dep + sto);
+    // Asset value: per-unit purchase price times total units (deployed + storage); 0 when unpriced.
+    const price = it.purchasePrice != null && Number.isFinite(Number(it.purchasePrice)) ? Number(it.purchasePrice) : 0;
+    const vRoll = price * (dep + sto);
     const b =
-      byKind.get(kind) ?? { kind, rows: 0, deployed: 0, storage: 0, total: 0, weightKg: 0 };
+      byKind.get(kind) ?? { kind, rows: 0, deployed: 0, storage: 0, total: 0, weightKg: 0, assetValue: 0 };
     b.rows += 1;
     b.deployed += dep;
     b.storage += sto;
     b.total += dep + sto;
     b.weightKg += wRoll;
+    b.assetValue += vRoll;
     byKind.set(kind, b);
     totalDeployed += dep;
     totalStorage += sto;
     totalWeightKg += wRoll;
+    totalAssetValue += vRoll;
     if (itemIsOutOfService(it)) oosCount += 1;
   }
 
@@ -153,6 +161,7 @@ export function buildInventoryReport(items: ItemEntry[]): InventoryReport {
     totalStorage,
     totalStock,
     totalWeightKg,
+    totalAssetValue,
     utilizationPct,
     oosCount,
     itemCount: items.length,
@@ -290,6 +299,7 @@ export interface ShrinkRow {
   qty: number;
   eventName: string;
   reason: string;
+  dollarsLost: number; // qty * (replacementCost ?? purchasePrice ?? 0); 0 when the item is unpriced
 }
 export interface ConditionReport {
   flagsByCategory: FlagCategoryRow[];
@@ -297,6 +307,7 @@ export interface ConditionReport {
   perItem: DamageRow[];
   shrink: ShrinkRow[];
   shrinkUnits: number;
+  shrinkDollars: number; // sum of dollarsLost across all shrink rows (USD)
   closedCount: number;
 }
 
@@ -355,10 +366,18 @@ export function buildConditionReport(items: ItemEntry[], events: EventEntry[]): 
   const closed = events.filter(({ payload: e }) => e.state === 'closed');
   const shrink: ShrinkRow[] = [];
   let shrinkUnits = 0;
+  let shrinkDollars = 0;
+  // Value a lost unit at replacementCost, else purchasePrice, else 0 (uses the CURRENT price, not a
+  // historical snapshot — fine for a running loss figure).
+  const unitLossPrice = (it: ItemEntry['payload']): number => {
+    const p = it.replacementCost ?? it.purchasePrice;
+    return p != null && Number.isFinite(Number(p)) ? Number(p) : 0;
+  };
   for (const { id: eventId, payload: e } of closed) {
     const eventCases = new Set(e.cases ?? []);
     const eventName = e.name || eventId;
     for (const { id, payload: it } of items) {
+      const price = unitLossPrice(it);
       if (it.tracking === 'serial') {
         for (const u of itemUnits(it)) {
           if (!u.location || u.location === 'storage' || !eventCases.has(u.location)) continue;
@@ -367,7 +386,8 @@ export function buildConditionReport(items: ItemEntry[], events: EventEntry[]): 
           const stillPacked = u.state === 'packed' && !k;
           if (isMissing || stillPacked) {
             shrinkUnits += 1;
-            shrink.push({ itemName: itemName(id, it), qty: 1, eventName, reason: isMissing ? 'Signed missing' : 'Never returned (still packed)' });
+            shrinkDollars += price;
+            shrink.push({ itemName: itemName(id, it), qty: 1, eventName, reason: isMissing ? 'Signed missing' : 'Never returned (still packed)', dollarsLost: price });
           }
         }
         continue;
@@ -382,13 +402,14 @@ export function buildConditionReport(items: ItemEntry[], events: EventEntry[]): 
         if (isMissing || stillPacked) {
           const qty = Number(d.qty || 0) || 0;
           shrinkUnits += qty;
-          shrink.push({ itemName: itemName(id, it), qty, eventName, reason: isMissing ? 'Signed missing' : 'Never returned (still packed)' });
+          shrinkDollars += qty * price;
+          shrink.push({ itemName: itemName(id, it), qty, eventName, reason: isMissing ? 'Signed missing' : 'Never returned (still packed)', dollarsLost: qty * price });
         }
       }
     }
   }
 
-  return { flagsByCategory, openFlagTotal, perItem, shrink, shrinkUnits, closedCount: closed.length };
+  return { flagsByCategory, openFlagTotal, perItem, shrink, shrinkUnits, shrinkDollars, closedCount: closed.length };
 }
 
 // ── 4. PEOPLE & TRAVEL ────────────────────────────────────────────────────────────────────

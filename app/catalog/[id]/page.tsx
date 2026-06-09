@@ -35,6 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/util/utils';
+import { formatMoney } from '@/lib/util/money';
 import {
   itemIsSerial,
   itemUnits,
@@ -48,6 +49,7 @@ import {
   itemRollupState,
   itemIsLowStock,
   itemIsOutOfService,
+  itemIsDueForService,
   itemStateTone,
   ITEM_STATE_LABEL,
   kindIcon,
@@ -138,6 +140,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   const eids = itemEventIds(it);
   const low = itemIsLowStock(it);
   const oos = itemIsOutOfService(it);
+  const dueForService = itemIsDueForService(it);
   const units = itemUnits(it);
 
   // bulk: only the distribution rows that actually carry a placement (caseId or eventId).
@@ -200,6 +203,12 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 Out of service
               </Badge>
             )}
+            {dueForService && (
+              <Badge variant="outline" className="gap-1 text-warning border-warning/50">
+                <AlertTriangle size={12} aria-hidden />
+                Due for service
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -213,6 +222,10 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             <Stat label={serial ? 'Total units' : 'Stock total'} value={stock} />
             <Stat label="Cases" value={cids.length} />
             {it.reorderPoint != null && <Stat label="Reorder point" value={it.reorderPoint} />}
+            {it.purchasePrice != null && <Stat label="Unit value" value={formatMoney(it.purchasePrice)} />}
+            {it.nextServiceDate && (
+              <Stat label="Next service" value={it.nextServiceDate} accent={dueForService} />
+            )}
           </div>
           {it.storageNotes && (
             <>

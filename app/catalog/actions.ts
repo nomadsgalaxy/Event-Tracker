@@ -249,6 +249,11 @@ export async function createItemAction(name: string): Promise<CatalogActionState
       stockTotal: null,
       reorderPoint: null,
       storageNotes: '',
+      purchasePrice: null,
+      purchaseDate: null,
+      replacementCost: null,
+      nextServiceDate: null,
+      serviceIntervalDays: null,
       tagIds: [],
       requirements: [],
     };
