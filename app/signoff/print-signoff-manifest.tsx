@@ -178,6 +178,26 @@ export function PrintSignoffManifest({
           </div>
         ) : null}
 
+        {/* Chain of custody — typed name + signature/photo of the handoff, when captured. */}
+        {ship.custodyCapture && (ship.custodyCapture.typedName || ship.custodyCapture.signatureDataUrl || ship.custodyCapture.photoDataUrl) ? (
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #999' }}>
+            <div className="lbl">Chain of custody</div>
+            {ship.custodyCapture.typedName ? (
+              <div className="val">Received / released by: {ship.custodyCapture.typedName}</div>
+            ) : null}
+            <div style={{ display: 'flex', gap: '16px', marginTop: '4px', flexWrap: 'wrap' }}>
+              {ship.custodyCapture.signatureDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={ship.custodyCapture.signatureDataUrl} alt="Signature" style={{ maxWidth: '220px', maxHeight: '90px', border: '1px solid #ccc' }} />
+              ) : null}
+              {ship.custodyCapture.photoDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={ship.custodyCapture.photoDataUrl} alt="Handoff" style={{ maxWidth: '180px', maxHeight: '140px', border: '1px solid #ccc' }} />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         {[...byCase.entries()].map(([caseLabel, rows]) => (
           <div key={caseLabel} className="case-block">
             <div className="case-head">

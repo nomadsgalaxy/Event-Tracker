@@ -2755,8 +2755,33 @@ async function snapshotCaseList(): Promise<SnapshotCaseLite[]> {
 // live inventory) so a crafted call can't ship an unready kit.
 interface CommitReadyArgs {
   eventId: string;
-  shipping: { carrier?: string; tracking?: string; pickupDate?: string; notes?: string };
+  shipping: {
+    carrier?: string;
+    tracking?: string;
+    pickupDate?: string;
+    notes?: string;
+    custodyCapture?: { typedName?: string; signatureDataUrl?: string; photoDataUrl?: string };
+  };
   actor: ActorBy;
+}
+
+// Sanitize an optional chain-of-custody capture: a trimmed name + size-bounded image data URLs.
+// Anything malformed/oversized is dropped to undefined (never throws), so a bad capture can't block
+// or bloat the ship write. Caps keep the event doc modest (the snapshot is also stored on the event).
+function sanitizeCustodyCapture(
+  c: CommitReadyArgs['shipping']['custodyCapture']
+): import('@/lib/types/types').CustodyCapture | undefined {
+  if (!c || typeof c !== 'object') return undefined;
+  const okUrl = (u: unknown, maxLen: number): string | undefined =>
+    typeof u === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(u) && u.length <= maxLen ? u : undefined;
+  const out: import('@/lib/types/types').CustodyCapture = {};
+  const name = String(c.typedName ?? '').trim().slice(0, 120);
+  if (name) out.typedName = name;
+  const sig = okUrl(c.signatureDataUrl, 200_000); // ~150 KB signature PNG
+  if (sig) out.signatureDataUrl = sig;
+  const photo = okUrl(c.photoDataUrl, 700_000); // ~525 KB photo JPEG
+  if (photo) out.photoDataUrl = photo;
+  return out.typedName || out.signatureDataUrl || out.photoDataUrl ? out : undefined;
 }
 export interface CommitReadyResult {
   ok: boolean;
@@ -2786,6 +2811,7 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
   }
 
   const cases = await snapshotCaseList();
+  const custody = sanitizeCustodyCapture(shipping?.custodyCapture);
   const ship = {
     carrier: String(shipping?.carrier ?? '').trim(),
     tracking: String(shipping?.tracking ?? '').trim(),
@@ -2795,7 +2821,7 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
   const now = Date.now();
   const snapshot = buildManifestSnapshot(stored.payload, inv, cases, actor, {
     reason: 'ship-kit',
-    shipping: ship,
+    shipping: { ...ship, ...(custody ? { custodyCapture: custody } : {}) },
     eventState: 'in_transit',
   });
 
@@ -2809,7 +2835,16 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
   };
   const nextSignoff = {
     ...(stored.payload.signoff || {}),
-    shipped: { at: now, byEmail: actor.email, byName: actor.name, role: actor.role, carrier: ship.carrier, tracking: ship.tracking, pickupDate: ship.pickupDate },
+    shipped: {
+      at: now,
+      byEmail: actor.email,
+      byName: actor.name,
+      role: actor.role,
+      carrier: ship.carrier,
+      tracking: ship.tracking,
+      pickupDate: ship.pickupDate,
+      ...(custody ? { custodyCapture: custody } : {}),
+    },
     manifestSnapshot: snapshot,
   };
 

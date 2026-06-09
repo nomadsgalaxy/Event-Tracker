@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -1139,6 +1139,74 @@ function CheckinSweepCard({
 }
 
 // ── Ship Kit modal ──────────────────────────────────────────────────────────────────────────────
+// A pointer-driven signature pad. Emits a PNG data URL on each stroke end (or '' when cleared). Pointer
+// events cover mouse + touch + pen with one handler; touch-none keeps the page from scrolling while drawing.
+function SignaturePad({ value, onChange }: { value: string; onChange: (dataUrl: string) => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const inked = useRef(false);
+  const at = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const c = ref.current!;
+    const r = c.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) / r.width) * c.width, y: ((e.clientY - r.top) / r.height) * c.height };
+  };
+  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const c = ref.current;
+    if (!c) return;
+    c.setPointerCapture(e.pointerId);
+    drawing.current = true;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const { x, y } = at(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    const ctx = ref.current?.getContext('2d');
+    if (!ctx) return;
+    const { x, y } = at(e);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = '#f4f4f5';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    inked.current = true;
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const c = ref.current;
+    if (c && inked.current) onChange(c.toDataURL('image/png'));
+  };
+  const clear = () => {
+    const c = ref.current;
+    const ctx = c?.getContext('2d');
+    if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
+    inked.current = false;
+    onChange('');
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <canvas
+        ref={ref}
+        width={440}
+        height={130}
+        className="w-full touch-none rounded-md border border-input bg-input/30"
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+      />
+      {value ? (
+        <button type="button" onClick={clear} className="self-end text-[11px] text-muted-foreground hover:text-foreground">
+          Clear signature
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function ShipKitModal({
   open,
   onOpenChange,
@@ -1154,15 +1222,63 @@ function ShipKitModal({
   const [tracking, setTracking] = useState(detail.shipDefaults.tracking);
   const [pickupDate, setPickupDate] = useState(detail.shipDefaults.pickupDate);
   const [notes, setNotes] = useState(detail.shipDefaults.notes);
+  const [typedName, setTypedName] = useState('');
+  const [signatureDataUrl, setSignatureDataUrl] = useState('');
+  const [photoDataUrl, setPhotoDataUrl] = useState('');
   const [pending, startTransition] = useTransition();
+
+  // Compress a chosen photo to a max 900px JPEG (evidence, not an avatar). Mirrors the profile-photo
+  // handler; re-encodes a still-large data URL so the stored capture stays modest in the event doc.
+  function handlePhoto(file: File | undefined) {
+    if (!file) return;
+    if (!/^image\//.test(file.type || '')) {
+      toast.error('Please choose an image file.');
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      toast.error('Image too large (max 12 MB).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => toast.error('Could not read that file.');
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => toast.error('That image could not be decoded.');
+      img.onload = () => {
+        try {
+          const max = 900;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('no 2d context');
+          ctx.drawImage(img, 0, 0, w, h);
+          let url = canvas.toDataURL('image/jpeg', 0.8);
+          if (url.length > 300000) url = canvas.toDataURL('image/jpeg', 0.55);
+          setPhotoDataUrl(url);
+        } catch {
+          toast.error('Could not process that image.');
+        }
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
 
   function submit() {
     if (!carrier.trim() || !tracking.trim()) {
       toast.warning('Carrier and tracking number are required.');
       return;
     }
+    const custodyCapture =
+      typedName.trim() || signatureDataUrl || photoDataUrl
+        ? { typedName: typedName.trim() || undefined, signatureDataUrl: signatureDataUrl || undefined, photoDataUrl: photoDataUrl || undefined }
+        : undefined;
     startTransition(async () => {
-      const res = await shipKitAction({ eventId: detail.id, carrier: carrier.trim(), tracking: tracking.trim(), pickupDate, notes: notes.trim() });
+      const res = await shipKitAction({ eventId: detail.id, carrier: carrier.trim(), tracking: tracking.trim(), pickupDate, notes: notes.trim(), custodyCapture });
       if (res.ok) {
         toast.success('Kit shipped — event set On Site.');
         onOpenChange(false);
@@ -1201,6 +1317,39 @@ function ShipKitModal({
             <Label htmlFor="ship-notes">Notes (optional)</Label>
             <Textarea id="ship-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything the receiving team should know — pallet count, dock requirements, etc." />
           </div>
+
+          {/* Chain of custody — all optional. A typed name + a drawn signature and/or a photo of the
+              handoff, captured on the manifest of record for damage/loss disputes. */}
+          <details className="rounded-md border border-border">
+            <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-foreground">
+              Chain of custody <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </summary>
+            <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ship-signer">Received / released by</Label>
+                <Input id="ship-signer" value={typedName} onChange={(e) => setTypedName(e.target.value)} placeholder="Name of the person taking custody" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Signature</Label>
+                <SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ship-photo">Photo</Label>
+                {photoDataUrl ? (
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photoDataUrl} alt="Handoff" className="h-16 w-16 rounded-md border border-border object-cover" />
+                    <button type="button" onClick={() => setPhotoDataUrl('')} className="text-xs text-muted-foreground hover:text-foreground">
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <Input id="ship-photo" type="file" accept="image/*" capture="environment" onChange={(e) => handlePhoto(e.target.files?.[0])} />
+                )}
+              </div>
+            </div>
+          </details>
+
           <div className="rounded-md border border-primary/25 bg-primary/[0.06] px-3 py-2.5 text-xs text-foreground">
             Shipping this kit sets <strong className="text-foreground">{detail.name}</strong> to{' '}
             <strong className="text-primary">On Site</strong> and keeps the assigned cases locked until return.

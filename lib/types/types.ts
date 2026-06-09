@@ -210,10 +210,18 @@ export interface ManifestSnapshot {
   eventState: string;
   eventDates: { start: string; end: string };
   venue: { name: string; city: string; address: string; booth: string };
-  shipping: { carrier: string; tracking: string; pickupDate: string; notes: string };
+  shipping: { carrier: string; tracking: string; pickupDate: string; notes: string; custodyCapture?: CustodyCapture };
   cases: { id: string; label: string; slug: string }[];
   rows: ManifestSnapshotRow[];
   totals: { rows: number; qty: number; cases: number; looseQty: number };
+}
+
+// Optional chain-of-custody capture at the ship-kit handoff (typed name + a drawn signature and/or a
+// photo, each a data URL). All fields optional — a missing or oversized capture never blocks the ship.
+export interface CustodyCapture {
+  typedName?: string;
+  signatureDataUrl?: string;
+  photoDataUrl?: string;
 }
 
 export interface ShipStamp {
@@ -224,6 +232,7 @@ export interface ShipStamp {
   carrier?: string;
   tracking?: string;
   pickupDate?: string;
+  custodyCapture?: CustodyCapture;
 }
 
 export interface CloseStamp {

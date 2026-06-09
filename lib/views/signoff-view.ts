@@ -418,6 +418,9 @@ export function buildManifestSnapshot(
       tracking: sStr('tracking'),
       pickupDate: sStr('pickupDate'),
       notes: sStr('notes'),
+      ...(o.shipping?.custodyCapture && typeof o.shipping.custodyCapture === 'object'
+        ? { custodyCapture: o.shipping.custodyCapture as import('@/lib/types/types').CustodyCapture }
+        : {}),
     },
     cases: caseList,
     rows,

@@ -97,6 +97,7 @@ export async function shipKitAction(args: {
   tracking: string;
   pickupDate: string;
   notes: string;
+  custodyCapture?: { typedName?: string; signatureDataUrl?: string; photoDataUrl?: string };
 }): Promise<SignoffActionState & { snapshot?: ManifestSnapshot | null }> {
   const id = String(args?.eventId ?? '').trim();
   if (!id) return { ok: false, error: 'Missing event.' };
@@ -112,6 +113,7 @@ export async function shipKitAction(args: {
         tracking: args.tracking,
         pickupDate: args.pickupDate,
         notes: args.notes,
+        custodyCapture: args.custodyCapture,
       },
       actor: by,
     });
