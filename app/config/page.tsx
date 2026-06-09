@@ -1,8 +1,36 @@
 import { requireRole } from '@/lib/auth/auth';
 import { getUsers } from '@/lib/db/data';
 import { getAccountPostures } from '@/lib/auth/auth-store';
+import { getProviderConfigs } from '@/lib/auth/settings-store';
 import { normalizeRole, effectiveRoles, can } from '@/lib/auth/rbac';
 import { UsersTable, type UserRow, type RoleOption } from './users-table';
+
+// A configured provider's button label is "Continue with Microsoft" — strip the lead-in to a short
+// name ("Microsoft") for the Users list; fall back to a title-cased id.
+function shortProviderName(label: string, id: string): string {
+  const l = (label || '').trim();
+  const m = l.match(/^(?:continue|sign[ -]?in|log[ -]?in)\s+with\s+(.+)$/i);
+  const name = (m ? m[1] : l).trim();
+  return name || id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+// Turn a stored `source` ('local' | 'oidc:google' | 'oidc:<id>' | 'github' | legacy 'google'/'oauth')
+// into the sign-in method the admin actually recognizes. The list used to print the raw value, so an
+// OIDC account showed the token "Oidc:google" instead of "Google".
+function methodLabel(source: string, providerLabels: Record<string, string>): string {
+  const s = (source || '').trim();
+  if (!s) return '';
+  const lc = s.toLowerCase();
+  if (lc === 'local') return 'Local';
+  if (lc === 'github') return 'GitHub';
+  if (lc === 'google' || lc === 'oidc:google') return 'Google';
+  if (lc === 'oidc' || lc === 'oauth') return 'OAuth';
+  if (lc.startsWith('oidc:')) {
+    const id = s.slice(5);
+    return providerLabels[id] || id.charAt(0).toUpperCase() + id.slice(1);
+  }
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 // app/config (Users) — the directory user-management panel. Server Component: reads the live
 // `users` directory and the admin's session (the layout already requireRole('admin')s the whole
@@ -17,16 +45,26 @@ import { UsersTable, type UserRow, type RoleOption } from './users-table';
 export const dynamic = 'force-dynamic';
 
 export default async function ConfigUsersPage() {
-  const [admin, userDocs, postures] = await Promise.all([
+  const [admin, userDocs, postures, providerCfgs] = await Promise.all([
     requireRole('admin'),
     getUsers(),
     getAccountPostures(),
+    getProviderConfigs(),
   ]);
+
+  const providerLabels: Record<string, string> = {};
+  for (const c of providerCfgs) providerLabels[c.id] = shortProviderName(c.label, c.id);
 
   const rows: UserRow[] = userDocs.map((doc) => {
     const p = doc.payload || {};
     const email = (p.email || doc._id || '').toLowerCase();
     const posture = postures.get(email);
+    const source =
+      typeof (p as { source?: unknown }).source === 'string'
+        ? (p as { source?: string }).source!
+        : posture?.source || '';
+    // Friendly label for the list; empty source falls back to the credential posture.
+    const sourceLabel = methodLabel(source, providerLabels) || (posture?.hasPassword ? 'Local' : posture ? 'OAuth' : '');
     return {
       email,
       // The DIRECTORY name (p.name) is what the admin edits inline; preferredName is the user's own
@@ -34,7 +72,8 @@ export default async function ConfigUsersPage() {
       name: p.name || '',
       preferredName: p.preferredName || '',
       role: normalizeRole(p.role),
-      source: typeof (p as { source?: unknown }).source === 'string' ? (p as { source?: string }).source! : posture?.source || '',
+      source,
+      sourceLabel,
       picture: typeof p.picture === 'string' ? p.picture : '',
       lastLoginAt: typeof p.lastLoginAt === 'number' ? p.lastLoginAt : null,
       isSelf: email === admin.email,

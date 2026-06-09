@@ -91,6 +91,8 @@ export interface UserRow {
   preferredName: string;
   role: string;
   source: string;
+  /** Friendly sign-in method for display ("Google" / "GitHub" / "Local" / a provider name). */
+  sourceLabel: string;
   picture: string;
   lastLoginAt: number | null;
   isSelf: boolean;
@@ -158,7 +160,7 @@ export function UsersTable({
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
-      `${r.email} ${r.name} ${r.preferredName} ${r.role} ${r.source}`.toLowerCase().includes(q)
+      `${r.email} ${r.name} ${r.preferredName} ${r.role} ${r.source} ${r.sourceLabel}`.toLowerCase().includes(q)
     );
   }, [rows, query]);
 
@@ -449,7 +451,7 @@ function UserRowView({
 
       <TableCell className="text-sm">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="capitalize text-muted-foreground">{r.source || '—'}</span>
+          <span className="text-muted-foreground">{r.sourceLabel || '—'}</span>
           {r.twofaEnrolled && (
             <Badge variant="secondary" className="text-[10px]">
               2FA

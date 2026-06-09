@@ -348,6 +348,9 @@ export async function signInWithOidc(profile: SsoProfile, providerId: string): P
     const set: Record<string, unknown> = { updatedAt: now };
     if (profile.picture) set['payload.picture'] = profile.picture;
     if (!dir.payload?.name && profile.name) set['payload.name'] = profile.name;
+    // Heal a legacy/missing method so the Users list never mislabels a returning SSO user as "Local".
+    // Fill-only: never overwrite an existing value (e.g. a deliberate adminConvertToLocal → 'local').
+    if (!(dir.payload as { source?: unknown })?.source) set['payload.source'] = source;
     await users.updateOne({ _id: email }, { $set: set });
   }
 
