@@ -50,6 +50,8 @@ import {
   itemIsLowStock,
   itemIsOutOfService,
   itemIsDueForService,
+  unitIsOutOfService,
+  unitIsDueForService,
   itemStateTone,
   ITEM_STATE_LABEL,
   kindIcon,
@@ -306,7 +308,8 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 {units.map((u, i) => {
                   const dep = unitIsDeployed(u);
                   const loc = dep ? caseLabels[u.location as string] || u.location : 'Storage';
-                  const uOpen = (u.flags || []).some((f) => f && f.status === 'open');
+                  const uOos = unitIsOutOfService(u);
+                  const uDue = unitIsDueForService(u);
                   return (
                     <TableRow key={u.id || u.serial || i} className="hover:bg-muted/40">
                       <TableCell className="pl-4 font-mono text-xs text-foreground">
@@ -333,10 +336,16 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                               {u.state}
                             </Badge>
                           )}
-                          {uOpen && (
-                            <Badge variant="destructive" className="gap-1">
+                          {uOos && (
+                            <Badge variant="outline" className="gap-1 text-warning border-warning/50">
                               <Flag size={10} aria-hidden />
-                              Flagged
+                              Out of service
+                            </Badge>
+                          )}
+                          {uDue && !uOos && (
+                            <Badge variant="outline" className="gap-1 text-warning border-warning/50">
+                              <AlertTriangle size={10} aria-hidden />
+                              Due
                             </Badge>
                           )}
                         </span>

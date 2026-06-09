@@ -65,6 +65,11 @@ export interface ItemUnit {
   state?: ItemState;
   sku?: string;
   flags?: ItemFlag[];
+  // Per-unit service (serial items): each physical unit is tracked individually, so one unit can be
+  // out of service without taking the whole item type down. Mirrors the item-level fields.
+  status?: 'out_of_service' | null;
+  nextServiceDate?: string | null; // ISO 'YYYY-MM-DD'
+  serviceIntervalDays?: number | null;
   // NFC spool tracking: a consumable's physical spool is a serial unit linked to its tag by UID, with
   // the grams remaining read from the tag (OpenPrintTag actual − consumed). See [[nfc-consumable-tags]].
   tagUid?: string;
@@ -273,19 +278,45 @@ export function itemHasOpenServiceFlag(item: InventoryPayload): boolean {
   );
 }
 
+// ── Per-unit service (serial items) ───────────────────────────────────────────────────
+const isDuePast = (due: string | null | undefined, todayIso?: string): boolean => {
+  if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return false;
+  return due <= (todayIso || new Date().toISOString().slice(0, 10));
+};
+
+export function unitHasOpenServiceFlag(u: ItemUnit): boolean {
+  return (u?.flags || []).some((f) => f && f.status === 'open' && (f.category === 'damage' || f.category === 'maintenance'));
+}
+/** A single physical unit is out of service: its own status, or an open damage/maintenance flag. */
+export function unitIsOutOfService(u: ItemUnit): boolean {
+  if (!u) return false;
+  return u.status === 'out_of_service' || unitHasOpenServiceFlag(u);
+}
+export function unitIsDueForService(u: ItemUnit, todayIso?: string): boolean {
+  return isDuePast(u?.nextServiceDate, todayIso);
+}
+/** Count of live units currently out of service (serial items). */
+export function unitsOutOfServiceCount(item: InventoryPayload): number {
+  if (!itemIsSerial(item)) return 0;
+  return itemUnits(item).filter(unitIsOutOfService).length;
+}
+
 export function itemIsOutOfService(item: InventoryPayload): boolean {
   if (!item) return false;
   if (item.status === 'out_of_service') return true;
-  return itemHasOpenServiceFlag(item);
+  if (itemHasOpenServiceFlag(item)) return true;
+  // Serial: the type is "out of service" (for the catalog repair-queue filter/badge) when ANY of its
+  // physical units is — but the whole type is never force-marked; that happens per unit.
+  if (itemIsSerial(item)) return itemUnits(item).some(unitIsOutOfService);
+  return false;
 }
 
 /** Due (or overdue) for scheduled service: a nextServiceDate (ISO date) is set and is today or past.
- *  ISO 'YYYY-MM-DD' strings compare lexicographically, so a plain <= is the date comparison. */
+ *  For serial items, ANY unit being due counts (so the catalog filter surfaces the item). */
 export function itemIsDueForService(item: InventoryPayload, todayIso?: string): boolean {
-  const due = item?.nextServiceDate;
-  if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return false;
-  const today = todayIso || new Date().toISOString().slice(0, 10);
-  return due <= today;
+  if (isDuePast(item?.nextServiceDate, todayIso)) return true;
+  if (itemIsSerial(item)) return itemUnits(item).some((u) => unitIsDueForService(u, todayIso));
+  return false;
 }
 
 // ── Flag mutators (pure; mirror index.html addFlag / resolveFlag ~L9423) ────────────────────
@@ -370,6 +401,48 @@ export function returnItemToService(
       : f
   );
   return { status: null, flags };
+}
+
+// ── Per-unit service mutators (serial items; mirror the item-level builders but for one unit) ──────
+/** Mark ONE unit out of service: set its status + raise a damage/maintenance flag on the unit.
+ *  Returns a NEW units[] (never mutates). Other units are untouched. */
+export function markUnitOutOfService(
+  units: ItemUnit[],
+  unitId: string,
+  { note, severity, category, by }: { note?: string; severity?: string; category?: string; by?: string }
+): ItemUnit[] {
+  return (units || []).map((u) => {
+    if (u.id !== unitId) return u;
+    const flags = note && note.trim() ? addFlag({ flags: u.flags }, { note: note.trim(), severity: severity || 'high', category: category || 'damage', by }) : u.flags || [];
+    return { ...u, status: 'out_of_service', flags };
+  });
+}
+
+/** Return ONE unit to service: clear its status + resolve its open damage/maintenance flags. */
+export function returnUnitToService(
+  units: ItemUnit[],
+  unitId: string,
+  { resolution, by, repairCost, assignedTech }: { resolution?: string; by?: string; repairCost?: number | null; assignedTech?: string }
+): ItemUnit[] {
+  const cost = repairCost != null && Number.isFinite(Number(repairCost)) ? Number(repairCost) : undefined;
+  const tech = assignedTech && assignedTech.trim() ? assignedTech.trim() : undefined;
+  return (units || []).map((u) => {
+    if (u.id !== unitId) return u;
+    const flags = (u.flags || []).map((f) =>
+      f && f.status === 'open' && (f.category === 'damage' || f.category === 'maintenance')
+        ? {
+            ...f,
+            status: 'resolved' as const,
+            resolvedAt: new Date().toISOString(),
+            resolvedBy: by || 'unknown',
+            resolution: resolution || 'Returned to service',
+            ...(cost != null ? { repairCost: cost } : {}),
+            ...(tech ? { assignedTech: tech } : {}),
+          }
+        : f
+    );
+    return { ...u, status: null, flags };
+  });
 }
 
 // ── Storage stock (mirrors itemStockTotal / itemInStorage / itemHasStorage) ────────────

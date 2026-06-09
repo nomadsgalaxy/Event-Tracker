@@ -1278,6 +1278,16 @@ function cleanDistRow(d: DistributionRow): DistributionRow {
   return row;
 }
 
+// A real ISO 'YYYY-MM-DD' calendar date (rejects 2024-13-45 etc.). Used for purchase + service dates.
+function isIsoDate(v: unknown): v is string {
+  const s = String(v ?? '').trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
 // Sanitize one serial unit (#22) to the known lean shape.
 function cleanUnit(u: ItemUnit): ItemUnit {
   const loc = u.location ? String(u.location) : 'storage';
@@ -1290,7 +1300,13 @@ function cleanUnit(u: ItemUnit): ItemUnit {
       ? u.state
       : 'draft',
     sku: u.sku ? String(u.sku).trim() : '',
-    flags: Array.isArray(u.flags) ? u.flags : [],
+    flags: Array.isArray(u.flags) ? u.flags.map(cleanFlag) : [],
+    // Per-unit service (serial items): the out-of-service status + the per-unit service schedule.
+    status: u.status === 'out_of_service' ? 'out_of_service' : null,
+    ...(isIsoDate(u.nextServiceDate) ? { nextServiceDate: u.nextServiceDate } : { nextServiceDate: null }),
+    ...(u.serviceIntervalDays != null && Number.isFinite(Number(u.serviceIntervalDays))
+      ? { serviceIntervalDays: Math.max(0, Number(u.serviceIntervalDays)) }
+      : {}),
     // Preserve the NFC spool link + remaining weight through the full editor save (auto-set by the tag
     // read flow; the editor never authors them, but it must not strip them either).
     ...(u.tagUid ? { tagUid: String(u.tagUid) } : {}),
@@ -1397,14 +1413,7 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
       case 'purchaseDate':
       case 'nextServiceDate': {
         const s = String(raw ?? '').trim();
-        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-        let ok = false;
-        if (m) {
-          const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-          const dt = new Date(Date.UTC(y, mo - 1, d));
-          ok = dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
-        }
-        set[`payload.${key}`] = ok ? s : null;
+        set[`payload.${key}`] = isIsoDate(s) ? s : null;
         break;
       }
       case 'skuOptions': {

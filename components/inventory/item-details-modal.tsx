@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Check, ChevronsUpDown, Loader2, Plus, Printer, ScanLine, X } from 'lucide-react';
@@ -41,6 +41,11 @@ import {
   itemTotalQty as itemDeployedQty,
   markItemOutOfService,
   returnItemToService,
+  markUnitOutOfService,
+  returnUnitToService,
+  unitIsOutOfService,
+  unitIsDueForService,
+  itemIsSerial,
   evaluateModelRequirements,
   partRefLabel,
   ITEM_KINDS,
@@ -88,6 +93,12 @@ interface UnitFormRow {
   // save so editing the item never severs a spool's tag link or drops its remaining weight.
   tagUid?: string;
   remainingWeight?: number | null;
+  // Per-unit service, carried through a save (the edit grid never resets them; the per-unit service
+  // controls below edit them). Preserving flags also fixes the prior bug where a save wiped them.
+  flags?: ItemFlag[];
+  status?: 'out_of_service' | null;
+  nextServiceDate?: string | null;
+  serviceIntervalDays?: number | null;
 }
 
 function uid(): string {
@@ -268,6 +279,10 @@ export function ItemDetailsModal({
       state: u.state || 'draft',
       tagUid: u.tagUid,
       remainingWeight: u.remainingWeight,
+      flags: Array.isArray(u.flags) ? u.flags : [],
+      status: u.status ?? null,
+      nextServiceDate: u.nextServiceDate ?? '',
+      serviceIntervalDays: u.serviceIntervalDays ?? null,
     }))
   );
   // #27 kit BOM — per-model requirements[] rows. Edited only when allInventory is supplied (the
@@ -420,7 +435,11 @@ export function ItemDetailsModal({
           location: u.location || 'storage',
           sku: (u.sku || '').trim(),
           state: (u.state as ItemUnit['state']) || 'draft',
-          flags: [],
+          // Preserve per-unit flags + service status across the save (was wrongly reset to []).
+          flags: Array.isArray(u.flags) ? u.flags : [],
+          status: u.status ?? null,
+          ...(u.nextServiceDate ? { nextServiceDate: u.nextServiceDate } : {}),
+          ...(u.serviceIntervalDays != null ? { serviceIntervalDays: u.serviceIntervalDays } : {}),
           ...(u.tagUid ? { tagUid: u.tagUid } : {}),
           ...(typeof u.remainingWeight === 'number' ? { remainingWeight: u.remainingWeight } : {}),
         })),
@@ -1167,10 +1186,10 @@ export function ItemDetailsModal({
             </div>
           ) : null}
 
-          {/* Asset value + light service schedule — universal (both tracking modes). Drives the
-              Condition & Loss report's $-lost and the "Due for service" catalog filter. */}
+          {/* Asset value (per-unit, both modes) + the item-level service schedule (BULK only — serial
+              items schedule + take units out of service individually, below). */}
           <div className="flex flex-col gap-3 border-t border-border pt-4">
-            <Eyebrow>Asset value &amp; service</Eyebrow>
+            <Eyebrow>Asset value{tracking !== 'serial' ? ' & service' : ''}</Eyebrow>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="item-price">Purchase price</Label>
@@ -1185,22 +1204,27 @@ export function ItemDetailsModal({
                 <Input id="item-pdate" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} disabled={!canEdit} />
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="item-nextsvc">Next service date</Label>
-                <Input id="item-nextsvc" type="date" value={nextServiceDate} onChange={(e) => setNextServiceDate(e.target.value)} disabled={!canEdit} />
+            {tracking !== 'serial' ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="item-nextsvc">Next service date</Label>
+                  <Input id="item-nextsvc" type="date" value={nextServiceDate} onChange={(e) => setNextServiceDate(e.target.value)} disabled={!canEdit} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="item-svcint">Service interval (days)</Label>
+                  <Input id="item-svcint" type="number" min={0} inputMode="numeric" value={serviceIntervalDays} placeholder="optional" onChange={(e) => setServiceIntervalDays(e.target.value)} disabled={!canEdit} />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="item-svcint">Service interval (days)</Label>
-                <Input id="item-svcint" type="number" min={0} inputMode="numeric" value={serviceIntervalDays} placeholder="optional" onChange={(e) => setServiceIntervalDays(e.target.value)} disabled={!canEdit} />
-              </div>
-            </div>
+            ) : null}
           </div>
 
-          {/* Service status lifecycle (mark out-of-service / log repair) — universal (caller's handler
-              or the /api/item/[id]/service fallback), so it shows everywhere the editor opens. */}
-          {item.id ? (
+          {/* Service: BULK items mark the whole type out of service; SERIAL items track each unit
+              individually (one broken unit doesn't take the type down). */}
+          {item.id && tracking !== 'serial' ? (
             <ServiceStatusPanel item={item} actorName={effActorName} onServiceChange={effServiceChange} onDone={() => onOpenChange(false)} />
+          ) : null}
+          {tracking === 'serial' ? (
+            <UnitServicePanel units={units} setUnits={setUnits} actorName={effActorName} canEdit={canEdit} />
           ) : null}
 
           {/* Flag / repair history (rich — shows the resolution text). Universal, like the service panel. */}
@@ -1250,6 +1274,71 @@ function SummaryStat({ label, value, accent }: { label: string; value: string | 
 // optional reason) or log a repair / return-to-service (resolution note → clears status + resolves
 // open damage/maintenance flags). The next { status, flags } patch flows through the host's gated
 // onServiceChange write. The pure markItemOutOfService / returnItemToService builders are shared.
+// ── UnitServicePanel — per-unit out-of-service + service schedule (serial items) ───────────────
+// Each physical unit is tracked individually. Edits mutate the local units state and persist with the
+// item's Save (consistent with the rest of the unit editor). markUnitOutOfService with no note sets
+// just the status; an existing damage/maintenance flag (e.g. from a scan) also counts as OOS.
+function UnitServicePanel({
+  units,
+  setUnits,
+  actorName,
+  canEdit,
+}: {
+  units: UnitFormRow[];
+  setUnits: Dispatch<SetStateAction<UnitFormRow[]>>;
+  actorName?: string;
+  canEdit: boolean;
+}) {
+  const by = actorName || 'user';
+  const setField = (id: string, patch: Partial<UnitFormRow>) => setUnits((s) => s.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+  const markOos = (id: string) =>
+    setUnits((s) => markUnitOutOfService(s as unknown as ItemUnit[], id, { by, category: 'maintenance', note: 'Marked out of service', severity: 'med' }) as unknown as UnitFormRow[]);
+  const ret = (id: string) => setUnits((s) => returnUnitToService(s as unknown as ItemUnit[], id, { by }) as unknown as UnitFormRow[]);
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3">
+      <Eyebrow>Per-unit service</Eyebrow>
+      <p className="text-[11px] text-muted-foreground">Each serial is serviced individually. Changes apply when you Save.</p>
+      <div className="overflow-hidden rounded-md border border-border">
+        {units.length === 0 ? (
+          <p className="px-2.5 py-3 text-xs italic text-muted-foreground">No units yet.</p>
+        ) : (
+          units.map((u, i) => {
+            const oos = unitIsOutOfService(u as unknown as ItemUnit);
+            const due = unitIsDueForService(u as unknown as ItemUnit);
+            return (
+              <div key={u.id} className={cn('flex flex-wrap items-center gap-2 px-2.5 py-2 text-xs', i && 'border-t border-border')}>
+                <span className="min-w-0 flex-1 truncate font-mono text-foreground">{u.serial || '(no serial)'}</span>
+                {oos ? (
+                  <span className="rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>Out of service</span>
+                ) : (
+                  <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: 'var(--success)' }}>In service</span>
+                )}
+                {due ? <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: 'var(--warning)' }}>Due</span> : null}
+                <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  Next
+                  <Input type="date" value={u.nextServiceDate || ''} disabled={!canEdit} onChange={(e) => setField(u.id, { nextServiceDate: e.target.value })} className="h-7 w-[140px] text-xs" />
+                </label>
+                {canEdit ? (
+                  oos ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => ret(u.id)} style={{ color: 'var(--success)', borderColor: 'var(--success)' }}>
+                      Return
+                    </Button>
+                  ) : (
+                    <Button type="button" size="sm" variant="outline" onClick={() => markOos(u.id)} style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                      Out of service
+                    </Button>
+                  )
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ServiceStatusPanel({
   item,
   actorName,
