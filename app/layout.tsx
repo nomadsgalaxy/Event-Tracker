@@ -30,8 +30,13 @@ export const metadata: Metadata = {
 //
 // FULL-BLEED: there is NO global centered content column here — the old `<main className="mx-auto
 // max-w-6xl …">` cap is removed. Sidebar screens (Archetype A) run edge-to-edge with their own rail;
-// stack screens (Archetype B) apply their own `px-6 py-6`. The `pb-16` on <main> reserves room for
-// the fixed mobile tab bar so the last row is never hidden behind it (md+ drops the reserve).
+// stack screens (Archetype B) apply their own `px-6 py-6`.
+//
+// SCROLL FLOOR: on mobile the MobileNavBar is `fixed` and overlays the bottom of the viewport, so
+// <body> carries bottom padding equal to the bar height (+ the iOS safe-area inset). That makes the
+// whole column — main AND the AppFooter — sit ABOVE the bar, so the last row is never hidden behind
+// it and the footer (a normal, non-sticky block) is the true bottom of the scroll. md+ drops the
+// reserve since the bar is desktop-hidden.
 //
 // The shell is a Server Component; the interactive bits live in small client islands inside TopBar /
 // MobileNavBar (nav active-state, ⋯ overflow, user menu, install, bell). Auth is read inside those
@@ -44,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Applies the signed-in user's saved accent theme app-wide (no FOUC, no client-only read). */}
         <ThemeStyle />
       </head>
-      <body className="flex min-h-dvh flex-col bg-background text-foreground antialiased">
+      <body className="flex min-h-dvh flex-col bg-background text-foreground antialiased pb-[calc(4rem_+_env(safe-area-inset-bottom))] md:pb-0">
         <TooltipProvider delayDuration={200}>
           <DemoBanner />
           <TopBar />

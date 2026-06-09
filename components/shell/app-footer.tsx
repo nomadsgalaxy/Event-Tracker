@@ -1,12 +1,14 @@
-// app-footer.tsx — the persistent attribution footer, STICKY to the bottom of the viewport.
-// "EventTracker by NomadsGalaxy", with EventTracker → eventtracker.dev and NomadsGalaxy →
-// nomadsgalaxy.com. Server Component (no interactivity). `sticky bottom-0` keeps it pinned to the
-// viewport bottom even while the page scrolls (it still reserves its own space, so nothing is hidden
-// behind it); a solid bg lets content scroll under it. On mobile it sits ABOVE the fixed MobileNavBar
-// (bottom-16 clears the 64px bar); md+ drops the reserve since the mobile bar is desktop-hidden.
+// app-footer.tsx — the persistent attribution footer. "EventTracker by NomadsGalaxy", with
+// EventTracker -> eventtracker.dev and NomadsGalaxy -> nomadsgalaxy.com. Server Component (no
+// interactivity). It's a NORMAL block at the END of the shell's flex column, NOT sticky: a sticky
+// footer floats over scrolled content and hides the last rows, so the page never feels like it
+// reaches the bottom. As a plain block the viewport content stops at the footer's top and you can
+// scroll all the way down. On mobile the fixed MobileNavBar still overlays the viewport bottom, so
+// the shell reserves that height with bottom padding on <body> (app/layout.tsx) and the footer lands
+// just above the bar.
 export function AppFooter() {
   return (
-    <footer className="sticky bottom-16 z-30 border-t border-border bg-background px-4 py-2.5 text-center text-xs text-muted-foreground md:bottom-0">
+    <footer className="border-t border-border bg-background px-4 py-2.5 text-center text-xs text-muted-foreground">
       <a
         href="https://eventtracker.dev"
         target="_blank"
