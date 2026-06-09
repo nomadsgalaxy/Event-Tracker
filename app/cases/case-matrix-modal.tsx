@@ -33,6 +33,12 @@ const SIZE_OPTIONS: { k: MatrixSize; label: string; sub: string }[] = [
   { k: 'shipping', label: '4×6″', sub: 'Shipping' },
 ];
 
+// The physical label stock each preset prints on — injected as `@page { size }` at print time so the
+// label lands on the right media (a Dymo/Zebra label printer) instead of a default Letter page.
+const PAGE_DIMS: Record<MatrixSize, string> = { one: '1in 1in', two: '2in 2in', shipping: '4in 6in' };
+const LABEL_SIZE_KEY = 'eit:labelSize';
+const isMatrixSize = (v: unknown): v is MatrixSize => v === 'one' || v === 'two' || v === 'shipping';
+
 // Print CSS — a faithful port of the Python MatrixPrintModal label system (index.html ensurePrintCSS
 // `.eit-print-label` / size-one / size-two / size-shipping). The label is a CENTERED card: 1″ is the
 // bare code (no border/text), 2″ is a 1px-bordered 2in card holding a 1.4in code + name (9pt) + slug
@@ -123,6 +129,23 @@ export function CaseMatrixModal({
 }) {
   const [size, setSize] = useState<MatrixSize>('two');
   const [mounted, setMounted] = useState(false);
+  // Remember the last-chosen label size per device (a lightweight default; no server round-trip).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LABEL_SIZE_KEY);
+      if (isMatrixSize(saved)) setSize(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function chooseSize(k: MatrixSize) {
+    setSize(k);
+    try {
+      localStorage.setItem(LABEL_SIZE_KEY, k);
+    } catch {
+      /* ignore */
+    }
+  }
   // Dymo-Connect probe is mount-gated (navigator only exists on the client) so the initial SSR
   // render is deterministic — no hydration mismatch.
   const [dymo, setDymo] = useState<{ available: boolean } | null>(null);
@@ -148,9 +171,15 @@ export function CaseMatrixModal({
   function print() {
     document.body.setAttribute('data-print', 'case-matrix');
     document.body.setAttribute('data-size', size);
+    // Inject the chosen stock size as @page so the browser targets the label media, not Letter.
+    const pageStyle = document.createElement('style');
+    pageStyle.id = 'eit-matrix-page';
+    pageStyle.textContent = `@page { size: ${PAGE_DIMS[size]}; margin: 0; }`;
+    document.head.appendChild(pageStyle);
     const restore = () => {
       document.body.removeAttribute('data-print');
       document.body.removeAttribute('data-size');
+      document.getElementById('eit-matrix-page')?.remove();
       window.removeEventListener('afterprint', restore);
     };
     window.addEventListener('afterprint', restore);
@@ -189,7 +218,7 @@ export function CaseMatrixModal({
             <button
               key={o.k}
               type="button"
-              onClick={() => setSize(o.k)}
+              onClick={() => chooseSize(o.k)}
               aria-pressed={size === o.k}
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-md border p-2 text-center transition-colors',
