@@ -10,6 +10,7 @@ import {
 import { itemQtyLooseAtEvent, itemOpenFlag, type InventoryPayload } from '@/lib/views/inventory-shape';
 import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/views/case-view';
+import { getCaseDateConflicts } from '@/lib/views/event-readiness';
 import { caseCode, itemCode, eventCode } from '@/lib/integrations/eitm';
 import { activeTenantHash36 } from '@/lib/auth/settings-store';
 import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
@@ -227,12 +228,24 @@ export default async function ManifestPage({
       const avail = getCaseAvailability(c._id, eventsForAvail);
       // Unavailable iff held by a DIFFERENT event than the one being edited.
       const unavailable = avail.status === 'unavailable' && avail.eventId !== selected?._id;
+      // Soft double-book warning: other events whose dates OVERLAP this one for the same case but
+      // that are NOT in-flight (so not hard-locked above). Only when this event has a start date.
+      const conflicts =
+        !unavailable && selected?.payload.startDate
+          ? getCaseDateConflicts(c._id, eventsForAvail, selected.payload.startDate, selected.payload.endDate, selected._id)
+          : [];
+      const conflictLabel = conflicts.length
+        ? conflicts
+            .map((x) => `${x.name}${x.start ? ` (${x.start}${x.end && x.end !== x.start ? `–${x.end}` : ''})` : ''}`)
+            .join('; ')
+        : '';
       return {
         id: c._id,
         slug: c.payload.slug && c.payload.slug !== c._id ? c.payload.slug : '',
         label: c.payload.label || c.payload.slug || c._id,
         unavailable,
         statusLabel: unavailable ? caseStatusLabel(avail.event) : '',
+        conflictLabel,
       };
     });
 

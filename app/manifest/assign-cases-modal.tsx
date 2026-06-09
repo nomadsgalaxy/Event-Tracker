@@ -34,6 +34,8 @@ export interface AssignCaseRow {
   unavailable: boolean;
   /** The "Packing for X" / "At X" status phrase when unavailable (else ''). */
   statusLabel: string;
+  /** Soft double-book warning: other date-overlapping (non-locked) events for this case (else ''). */
+  conflictLabel?: string;
 }
 
 export function AssignCasesModal({
@@ -58,6 +60,7 @@ export function AssignCasesModal({
   onAddLoose: () => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(assignedIds));
+  const [pendingConflict, setPendingConflict] = useState<AssignCaseRow | null>(null);
   const [pending, startTransition] = useTransition();
 
   // Re-seed the selection whenever the modal (re)opens or the assigned set changes (after a save).
@@ -74,6 +77,16 @@ export function AssignCasesModal({
       else next.delete(id);
       return next;
     });
+  }
+
+  // Adding a case that date-overlaps another (non-locked) event soft-confirms first; everything else
+  // toggles immediately. Unassigning never warns.
+  function requestToggle(c: AssignCaseRow, on: boolean) {
+    if (on && c.conflictLabel && !priorSet.has(c.id) && !selected.has(c.id)) {
+      setPendingConflict(c);
+      return;
+    }
+    toggle(c.id, on);
   }
 
   function save() {
@@ -94,6 +107,7 @@ export function AssignCasesModal({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[90vh] flex-col gap-4 sm:max-w-xl">
         <DialogHeader>
@@ -128,7 +142,7 @@ export function AssignCasesModal({
                     <Checkbox
                       checked={sel}
                       disabled={locked}
-                      onCheckedChange={(v) => !locked && toggle(c.id, v === true)}
+                      onCheckedChange={(v) => !locked && requestToggle(c, v === true)}
                       aria-label={`Assign ${c.label}`}
                     />
                     <div className="min-w-0 flex-1">
@@ -139,6 +153,11 @@ export function AssignCasesModal({
                       {locked ? (
                         <div className="mt-0.5 flex items-center gap-1 text-[10px]" style={{ color: 'var(--warning)' }}>
                           <Lock size={10} aria-hidden /> {c.statusLabel}
+                        </div>
+                      ) : !locked && c.conflictLabel ? (
+                        <div className="mt-0.5 flex items-start gap-1 text-[10px]" style={{ color: 'var(--warning)' }} title={c.conflictLabel}>
+                          <Lock size={10} aria-hidden className="mt-px shrink-0" />
+                          <span className="truncate">Overlaps {c.conflictLabel}</span>
                         </div>
                       ) : null}
                     </div>
@@ -177,6 +196,34 @@ export function AssignCasesModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Soft double-book confirm — overlapping (non-locked) event. */}
+    <Dialog open={!!pendingConflict} onOpenChange={(o) => !o && setPendingConflict(null)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Assign despite an overlap?</DialogTitle>
+          <DialogDescription>
+            <strong className="text-foreground">{pendingConflict?.label}</strong> overlaps another event on
+            these dates: {pendingConflict?.conflictLabel}. Assigning it here may double-book the case.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setPendingConflict(null)} autoFocus>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (pendingConflict) toggle(pendingConflict.id, true);
+              setPendingConflict(null);
+            }}
+            style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+          >
+            Assign anyway
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
