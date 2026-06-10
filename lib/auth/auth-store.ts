@@ -293,6 +293,10 @@ export async function setInitialPassword(email: string, sessRole: Role, newPassw
       role,
       source: rec?.source ?? 'oidc',
       createdAt: rec?.createdAt ?? now,
+      // A DELIBERATELY-set password converts the posture: without this, the SSO auto-heal
+      // (signInWithOidc: ssoProvisioned + pw != null -> pw:null) silently wipes it on the
+      // very next Google sign-in and the user loops on "set a password" forever.
+      ssoProvisioned: false,
     },
     true // upsert: a self-serve SSO sign-in may have no auth record yet
   );
@@ -589,6 +593,10 @@ export async function adminResetPassword({
     failed: 0,
     lockedUntil: 0,
     mustChangePassword: true,
+    // Reset / "Set local password" is the documented switch-back-to-LOCAL path. Clearing
+    // ssoProvisioned stops the SSO auto-heal from silently wiping the temp password (and the
+    // mustChangePassword flag) on the user's next Google sign-in — which would void the rotation.
+    ssoProvisioned: false,
   };
   if (clear2fa) {
     patch.totp = null;

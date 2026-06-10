@@ -186,10 +186,14 @@ export async function createApiKey(
   const id = crypto.randomBytes(6).toString('hex');
   const secret = crypto.randomBytes(32).toString('base64url');
   const scope = scopeLabelFor(caps);
-  keys.push({ id, label: cleanLabel, scope, caps, hash: hashPassword(secret), createdAt: Date.now(), lastUsedAt: null });
+  const entry: StoredApiKey = { id, label: cleanLabel, scope, caps, hash: hashPassword(secret), createdAt: Date.now(), lastUsedAt: null };
 
+  // Atomic $push (not a whole-array $set) so a concurrent create/revoke can't silently undo this
+  // write or resurrect a just-revoked key (the read-modify-write race).
   const db = await getDb();
-  await db.collection<AuthDoc>(AUTH_COLLECTION).updateOne({ _id: e }, { $set: { apiKeys: keys, updatedAt: Date.now() } });
+  await db
+    .collection<AuthDoc>(AUTH_COLLECTION)
+    .updateOne({ _id: e }, { $push: { apiKeys: entry }, $set: { updatedAt: Date.now() } } as never);
   const token = `${TOKEN_PREFIX}${id}.${secret}`;
   return { ok: true, id, label: cleanLabel, scope, caps, token };
 }
@@ -203,11 +207,12 @@ export async function revokeApiKey(email: string, id: string): Promise<RevokeKey
   if (!keyId) return { ok: false, error: 'id required', code: 400 };
   const r = await rec(e);
   if (!r) return { ok: false, error: 'account not found', code: 404 };
-  const before: StoredApiKey[] = (r.apiKeys as StoredApiKey[] | undefined) ?? [];
-  const after = before.filter((k) => k.id !== keyId);
+  // Atomic $pull so a concurrent create's array write can't resurrect the revoked key.
   const db = await getDb();
-  await db.collection<AuthDoc>(AUTH_COLLECTION).updateOne({ _id: e }, { $set: { apiKeys: after, updatedAt: Date.now() } });
-  return { ok: true, revoked: keyId, removed: before.length - after.length };
+  const res = await db
+    .collection<AuthDoc>(AUTH_COLLECTION)
+    .updateOne({ _id: e }, { $pull: { apiKeys: { id: keyId } }, $set: { updatedAt: Date.now() } } as never);
+  return { ok: true, revoked: keyId, removed: res.modifiedCount > 0 ? 1 : 0 };
 }
 
 // ── Verification (the REST consumer path) ─────────────────────────────────────────────────────────
@@ -284,6 +289,20 @@ export async function verifyApiKey(token: unknown): Promise<VerifiedKey | null> 
   if (!(await verifyPasswordAsync(secret, entry.hash))) return null;
 
   const ownerEmail = norm(owner._id);
+
+  // An OFFBOARDED (soft-deleted) owner's keys die with the account. The auth-doc hard-delete on
+  // offboarding is best-effort, so the directory tombstone is the authority — resolveLiveRole only
+  // FLOORS a deleted user to read-only, which would still leave read caps alive.
+  try {
+    const db = await getDb();
+    const dir = await db
+      .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>('users')
+      .findOne({ _id: ownerEmail }, { projection: { deletedAt: 1, 'payload.deletedAt': 1 } });
+    if (dir && (dir.deletedAt || dir.payload?.deletedAt)) return null;
+  } catch {
+    return null; // fail closed: can't prove the owner is live
+  }
+
   const role = await resolveLiveRole(ownerEmail);
   const liveCaps = effectiveGrants()[role] ?? new Set<string>();
   const storedCaps = new Set(storedCapList(entry));

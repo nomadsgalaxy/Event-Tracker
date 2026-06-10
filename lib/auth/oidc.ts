@@ -148,8 +148,8 @@ interface Jwk {
 }
 let jwksCache: { keys: Jwk[]; exp: number } | null = null;
 
-async function googleJwks(): Promise<Jwk[]> {
-  if (jwksCache && jwksCache.exp > Date.now()) return jwksCache.keys;
+async function googleJwks(force = false): Promise<Jwk[]> {
+  if (!force && jwksCache && jwksCache.exp > Date.now()) return jwksCache.keys;
   const res = await fetch(GOOGLE_JWKS, { cache: 'no-store' });
   if (!res.ok) throw new Error('JWKS fetch failed');
   const body = (await res.json()) as { keys?: Jwk[] };
@@ -168,7 +168,10 @@ async function verifyIdToken(jwt: string): Promise<Record<string, unknown>> {
   if (parts.length !== 3) throw new Error('id_token: malformed');
   const header = JSON.parse(b64urlBuf(parts[0]).toString('utf-8')) as { alg?: string; kid?: string };
   if (header.alg !== 'RS256') throw new Error('id_token: unexpected alg'); // reject none / HS256 confusion
-  const jwk = (await googleJwks()).find((k) => k.kid === header.kid);
+  let jwk = (await googleJwks()).find((k) => k.kid === header.kid);
+  // Key rotation: an unknown kid usually means the cached JWKS is stale (1h TTL) — re-fetch once
+  // before failing, so a Google key rotation doesn't black out sign-ins until the TTL expires.
+  if (!jwk) jwk = (await googleJwks(true)).find((k) => k.kid === header.kid);
   if (!jwk) throw new Error('id_token: unknown signing key');
   const pub = crypto.createPublicKey({ key: jwk as crypto.JsonWebKey, format: 'jwk' });
   const ok = crypto.verify('RSA-SHA256', Buffer.from(`${parts[0]}.${parts[1]}`), pub, b64urlBuf(parts[2]));
@@ -284,7 +287,7 @@ async function allowedDomain(email: string): Promise<boolean> {
 
 export type OidcSignInResult =
   | { ok: true; email: string; role: Role; isNew: boolean }
-  | { ok: false; reason: 'unverified' | 'offboarded' | 'not_allowed' };
+  | { ok: false; reason: 'unverified' | 'offboarded' | 'not_allowed' | 'must_change_password' };
 
 interface DirUser {
   _id: string;
@@ -379,6 +382,17 @@ export async function signInWithOidc(profile: SsoProfile, providerId: string): P
       { $set: { pw: null, mustChangePassword: false, updatedAt: now } }
     );
 
+  // Forced-rotation gate (checked AFTER the auto-heal so a legacy SSO reclaim still passes): a LOCAL
+  // account with a pending admin-forced password change must complete it — SSO must not be a bypass
+  // that leaves the admin believing a compromised credential was rotated when it wasn't.
+  const authRec = await db.collection<AuthRec>(AUTH).findOne(
+    { _id: email },
+    { projection: { mustChangePassword: 1, pw: 1 } }
+  );
+  if (authRec && (authRec as { mustChangePassword?: boolean }).mustChangePassword && authRec.pw != null) {
+    return { ok: false, reason: 'must_change_password' };
+  }
+
   // Record the provider identity on the auth record (shows under Account → Security → linked logins).
   // The sign-in already succeeded for this verified email, so binding the user's OWN identity to their
   // OWN record is not an escalation. Guard against hijack: skip if this (provider, sub) is already
@@ -389,12 +403,12 @@ export async function signInWithOidc(profile: SsoProfile, providerId: string): P
       const authCol = db.collection<AuthRec>(AUTH);
       const other = await authCol.findOne({ _id: { $ne: email }, oauthIdentities: { $elemMatch: { provider: pid, sub } } });
       if (!other) {
-        const rec = await authCol.findOne({ _id: email }, { projection: { oauthIdentities: 1 } });
-        const ids = Array.isArray(rec?.oauthIdentities) ? rec!.oauthIdentities! : [];
-        if (!ids.some((i) => i.provider === pid && i.sub === sub)) {
-          ids.push({ provider: pid, sub, iss: profile.iss || '', email, linkedAt: now });
-          await authCol.updateOne({ _id: email }, { $set: { oauthIdentities: ids, updatedAt: now } });
-        }
+        // Atomic append-if-absent (a filtered $push, not read-modify-write) so two concurrent
+        // sign-ins binding different providers can't overwrite each other's identity entry.
+        await authCol.updateOne(
+          { _id: email, oauthIdentities: { $not: { $elemMatch: { provider: pid, sub } } } } as Record<string, unknown>,
+          { $push: { oauthIdentities: { provider: pid, sub, iss: profile.iss || '', email, linkedAt: now } }, $set: { updatedAt: now } } as never
+        );
       }
     } catch {
       /* binding is best-effort; never block sign-in on it */

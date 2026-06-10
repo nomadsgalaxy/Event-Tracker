@@ -92,9 +92,9 @@ interface Jwk {
 }
 const _jwksCache = new Map<string, { keys: Jwk[]; exp: number }>();
 
-async function fetchJwksForProvider(jwksUri: string): Promise<Jwk[]> {
+async function fetchJwksForProvider(jwksUri: string, force = false): Promise<Jwk[]> {
   const cached = _jwksCache.get(jwksUri);
-  if (cached && cached.exp > Date.now()) return cached.keys;
+  if (!force && cached && cached.exp > Date.now()) return cached.keys;
   const res = await fetch(jwksUri, { cache: 'no-store' });
   if (!res.ok) throw new Error('jwks fetch failed');
   const body = (await res.json()) as { keys?: Jwk[] };
@@ -121,7 +121,9 @@ async function verifyOidcToken(
   if (parts.length !== 3) throw new Error('id_token: malformed');
   const header = JSON.parse(b64urlBuf(parts[0]).toString('utf-8')) as { alg?: string; kid?: string };
   if (header.alg !== 'RS256') throw new Error('id_token: unexpected alg');
-  const jwk = (await fetchJwksForProvider(jwksUri)).find((k) => k.kid === header.kid);
+  let jwk = (await fetchJwksForProvider(jwksUri)).find((k) => k.kid === header.kid);
+  // Key rotation: unknown kid usually means a stale cached JWKS — re-fetch once before failing.
+  if (!jwk) jwk = (await fetchJwksForProvider(jwksUri, true)).find((k) => k.kid === header.kid);
   if (!jwk) throw new Error('id_token: unknown signing key');
   const pub = crypto.createPublicKey({ key: jwk as crypto.JsonWebKey, format: 'jwk' });
   const ok = crypto.verify('RSA-SHA256', Buffer.from(`${parts[0]}.${parts[1]}`), pub, b64urlBuf(parts[2]));

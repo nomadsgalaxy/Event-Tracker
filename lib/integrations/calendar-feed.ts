@@ -1,7 +1,7 @@
 import 'server-only';
 import crypto from 'node:crypto';
 import { getDb } from '@/lib/db/mongo';
-import { AUTH_COLLECTION, type AuthDoc } from '@/lib/auth/auth';
+import { AUTH_COLLECTION, resolveLiveRole, type AuthDoc } from '@/lib/auth/auth';
 import { encSecret, decSecret } from '@/lib/auth/totp';
 import { rankOf } from '@/lib/auth/rbac';
 
@@ -130,10 +130,21 @@ export async function resolveFeedToken(
     .findOne({ $or: [{ 'calFeed.hash': h }, { 'calFeedGlobal.hash': h }] });
   if (!doc) return null;
   const email = doc._id;
+
+  // An OFFBOARDED (soft-deleted) user's feed tokens die with the account — the auth-doc hard-delete
+  // is best-effort, so the tombstone is the authority here (same rule as every session/key mint).
+  const dir = await db
+    .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>('users')
+    .findOne({ _id: email }, { projection: { deletedAt: 1, 'payload.deletedAt': 1 } });
+  if (dir && (dir.deletedAt || dir.payload?.deletedAt)) return null;
+
+  // The GLOBAL feed gate re-checks the LIVE directory role (not the auth-doc snapshot, which can go
+  // stale — e.g. a manager demoted in the directory must lose the global feed immediately).
+  const liveRole = await resolveLiveRole(email);
   if (doc.calFeedGlobal?.hash === h) {
-    if (rankOf(doc.role ?? 'read-only') < MGR_MIN_RANK) return { forbidden: true };
-    return { email, scope: 'global', role: doc.role ?? 'read-only' };
+    if (rankOf(liveRole) < MGR_MIN_RANK) return { forbidden: true };
+    return { email, scope: 'global', role: liveRole };
   }
   if (doc.calFeed?.hash !== h) return null;
-  return { email, scope: 'personal', role: doc.role ?? 'read-only' };
+  return { email, scope: 'personal', role: liveRole };
 }

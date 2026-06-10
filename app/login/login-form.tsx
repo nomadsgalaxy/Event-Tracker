@@ -310,6 +310,7 @@ export default function LoginForm({ next, enabledProviders }: { next?: string; e
       unverified: 'Your email address isn’t verified with the provider.',
       cancelled: 'Sign-in was cancelled.',
       unconfigured: 'That sign-in provider isn’t configured.',
+      must_change_password: 'An admin reset your password — sign in with the temporary password below to set a new one.',
     };
     toast.error('Sign-in failed', { description: MSG[sso] || 'Please try again.' });
   }, []);
