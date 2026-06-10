@@ -288,7 +288,7 @@ export type OidcSignInResult =
 
 interface DirUser {
   _id: string;
-  payload?: { email?: string; name?: string; picture?: string; role?: string; source?: string; deletedAt?: number | null };
+  payload?: { email?: string; name?: string; picture?: string; role?: string; source?: string; lastLoginAt?: number; deletedAt?: number | null };
   deletedAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
@@ -340,13 +340,17 @@ export async function signInWithOidc(profile: SsoProfile, providerId: string): P
   if (isNew) {
     await users.insertOne({
       _id: email,
-      payload: { email, name: profile.name || email, picture: profile.picture || '', role: 'read-only', source },
+      payload: { email, name: profile.name || email, picture: profile.picture || '', role: 'read-only', source, lastLoginAt: now },
       createdAt: now,
       updatedAt: now,
     });
   } else {
-    const set: Record<string, unknown> = { updatedAt: now };
-    if (profile.picture) set['payload.picture'] = profile.picture;
+    const set: Record<string, unknown> = { updatedAt: now, 'payload.lastLoginAt': now };
+    // Picture precedence: the OAuth photo is the DEFAULT; a user-uploaded picture (a data: URL from
+    // Account > Profile) always WINS and is never overwritten. A stored remote URL is refreshed from
+    // the provider each login (Google photo URLs expire), and an empty slot is filled.
+    const storedPic = String((dir.payload as { picture?: unknown })?.picture ?? '');
+    if (profile.picture && !storedPic.startsWith('data:')) set['payload.picture'] = profile.picture;
     if (!dir.payload?.name && profile.name) set['payload.name'] = profile.name;
     // Heal a legacy/missing method so the Users list never mislabels a returning SSO user as "Local".
     // Fill-only: never overwrite an existing value (e.g. a deliberate adminConvertToLocal → 'local').

@@ -25,9 +25,9 @@ import { USER_MENU_NAV } from './nav-model';
 // Action (clears the session cookie + redirects to /login) via a real <form> + submit <button> so
 // it works without JS and keeps menu keyboard semantics.
 //
-// Identity comes from the session (lib/auth.CurrentUser): we only get the email + the live role, so
-// the display name is derived from the email local-part and the avatar falls back to initials. A
-// later wave can thread preferredName/picture once the directory record is read into the shell.
+// Identity: the TopBar reads the DIRECTORY record server-side (getUserChrome) and threads the
+// preferredName/name + profile picture here; the email local-part + initials are the fallback when
+// the directory has neither (e.g. a brand-new SSO user before their first profile edit).
 
 interface UserMenuProps {
   email: string;
@@ -35,6 +35,10 @@ interface UserMenuProps {
   /** Human role label + its token color (resolved by the server from the rbac role table). */
   roleLabel: string;
   roleColor: string;
+  /** Directory display name (preferredName -> name). Falls back to the email local-part. */
+  displayName?: string;
+  /** Profile picture (an Account data-URL upload or the OAuth provider photo URL). */
+  picture?: string;
 }
 
 /** Derive a friendly display name from an email local-part: "ada.lovelace@x" → "Ada Lovelace". */
@@ -56,8 +60,8 @@ function initials(name: string): string {
 
 const MENU_ICON = { account: Settings2, activity: ScrollText } as const;
 
-export function UserMenu({ email, role, roleLabel, roleColor }: UserMenuProps) {
-  const name = displayNameFromEmail(email);
+export function UserMenu({ email, role, roleLabel, roleColor, displayName, picture }: UserMenuProps) {
+  const name = displayName || displayNameFromEmail(email);
 
   return (
     <DropdownMenu>
@@ -69,7 +73,7 @@ export function UserMenu({ email, role, roleLabel, roleColor }: UserMenuProps) {
         aria-label={`Account menu for ${name}`}
       >
         <Avatar className="size-7">
-          <AvatarImage src={undefined} alt="" />
+          <AvatarImage src={picture || undefined} alt="" />
           <AvatarFallback className="text-xs">{initials(name)}</AvatarFallback>
         </Avatar>
         <span className="hidden max-w-32 truncate font-medium text-foreground sm:inline">

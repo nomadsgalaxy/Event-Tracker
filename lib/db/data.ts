@@ -151,6 +151,22 @@ export async function getUserDisplayName(email: string): Promise<string> {
   return (p?.preferredName || p?.name || e).trim() || e;
 }
 
+// The shell-chrome identity read (TopBar avatar + name): preferredName -> name -> '' plus the
+// profile picture (a data-URL upload or the OAuth provider photo URL). One lean projected read.
+export async function getUserChrome(email: string): Promise<{ displayName: string; picture: string }> {
+  const e = String(email ?? '').trim().toLowerCase();
+  if (!e) return { displayName: '', picture: '' };
+  const db = await getDb();
+  const doc = await db
+    .collection<UserDoc>('users')
+    .findOne({ _id: e }, { projection: { 'payload.preferredName': 1, 'payload.name': 1, 'payload.picture': 1 } });
+  const p = doc?.payload as { preferredName?: string; name?: string; picture?: string } | undefined;
+  return {
+    displayName: (p?.preferredName || p?.name || '').trim(),
+    picture: typeof p?.picture === 'string' ? p.picture : '',
+  };
+}
+
 // Resolve a user's preferred WEIGHT unit ('kg' | 'lbs') from their directory unitPrefs (#11). Used
 // so the catalog/case grid + detail + editor enter/show weight in the user's unit. Defaults to 'lbs'
 // (the app default) when unset/unknown. One lean projected read; pins the _id to a scalar.

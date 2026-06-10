@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { getCurrentUser } from '@/lib/auth/auth';
+import { getUserChrome } from '@/lib/db/data';
 import { companyForEmail } from '@/lib/auth/settings-store';
 import { getNotifications, getTravelReminders } from '@/lib/views/notifications';
 import { rankOf, DEFAULT_ROLES } from '@/lib/auth/rbac';
@@ -34,6 +35,10 @@ export async function TopBar() {
   const reminders = user ? await getTravelReminders(user.email) : [];
 
   const roleDef = user ? ROLE_BY_ID[user.role] : undefined;
+
+  // Directory identity for the avatar + display name (preferredName/name + the profile picture —
+  // an Account upload or the OAuth photo). Best-effort: a store hiccup falls back to email-derived.
+  const chrome = user ? await getUserChrome(user.email).catch(() => ({ displayName: '', picture: '' })) : null;
 
   // The company chip label comes from the admin-set branding store (default name, or the per-domain
   // override mapped from the signed-in email). Empty ⇒ the DbStatus default 'EVENT TRACKER'. Read
@@ -83,6 +88,8 @@ export async function TopBar() {
             role={user.role}
             roleLabel={roleDef?.label ?? user.role}
             roleColor={roleDef?.color ?? 'var(--primary)'}
+            displayName={chrome?.displayName || undefined}
+            picture={chrome?.picture || undefined}
           />
         ) : (
           <Button asChild size="sm">
