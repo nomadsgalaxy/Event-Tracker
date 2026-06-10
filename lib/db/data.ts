@@ -51,6 +51,31 @@ export async function getTags(): Promise<TagDoc[]> {
     .toArray();
 }
 
+// ── Road Kits ─────────────────────────────────────────────────────────────────────────────
+// A Road Kit is a saved, named BUNDLE of road cases that travel together (e.g. "Large-Format
+// Kit" = cases A4/A5/B1). Stored in its own `roadkits` collection (same envelope as tags/cases).
+// Events reference kits by id via payload.roadKitIds[] — the "assigned" kits used to GROUP the
+// event's cases on the manifest. Assigning a kit unions its caseIds into the event's flat
+// cases[] (which stays authoritative for everything else). One live round-trip; no cache.
+export type RoadKitDoc = Envelope<RoadKitPayload>;
+export interface RoadKitPayload {
+  id?: string;
+  name?: string;
+  caseIds?: string[]; // the cases in this kit (ids into the `cases` collection)
+  notes?: string;
+  color?: string | null; // optional hex tint for the manifest section header
+  deletedAt?: number | null;
+}
+
+export async function getRoadKits(): Promise<RoadKitDoc[]> {
+  const db = await getDb();
+  return db
+    .collection<RoadKitDoc>('roadkits')
+    .find(NOT_DELETED)
+    .sort({ 'payload.name': 1 })
+    .toArray();
+}
+
 // ── Cases (road / flight cases) ───────────────────────────────────────────────────────────
 // Live reads off the `cases` collection (same envelope as events). Sorted by label so the
 // catalog list is stable. Retired cases are NOT excluded here — they're tombstone-free

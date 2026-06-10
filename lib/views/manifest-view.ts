@@ -107,8 +107,27 @@ export interface ManifestTotals {
   flagged: number;
 }
 
+// A Road Kit, for grouping the event's caseGroups on the manifest.
+export interface ManifestRoadKit {
+  id: string;
+  name: string;
+  color?: string | null;
+  caseIds: string[];
+}
+
+// One manifest section: a kit's case groups, or the catch-all (kitId null) for ungrouped cases.
+export interface ManifestKitSection {
+  kitId: string | null;
+  name: string;
+  color: string | null;
+  caseGroups: ManifestCaseGroup[];
+}
+
 export interface EventManifest {
   caseGroups: ManifestCaseGroup[];
+  /** Per-kit sections (event.roadKitIds → its present cases + an "Other cases" catch-all). EMPTY
+   *  when the event has no assigned kits — render the flat caseGroups in that case. */
+  kitSections: ManifestKitSection[];
   looseGroup: ManifestLooseGroup | null;
   kindGroups: ManifestKindRollup[];
   totals: ManifestTotals;
@@ -172,7 +191,8 @@ export function buildEventManifest(
   event: EventPayload,
   eventId: string,
   inventory: InventoryPayload[],
-  casesById: Record<string, CasePayload>
+  casesById: Record<string, CasePayload>,
+  roadKits?: ManifestRoadKit[]
 ): EventManifest {
   const caseIds = new Set(event.cases ?? []);
 
@@ -333,7 +353,32 @@ export function buildEventManifest(
     }
   }
 
-  return { caseGroups, looseGroup, kindGroups, totals };
+  // ── Per-kit sections ─────────────────────────────────────────────────────────────────────
+  // Group the flat caseGroups by the kits ASSIGNED to this event (event.roadKitIds), in that order.
+  // A case in two assigned kits lands in the first (first-match wins, never double-counted). Cases
+  // in no assigned kit fall to an "Other cases" catch-all. Empty unless kits are assigned (then the
+  // UI renders flat). A kit with zero present cases is dropped (no empty section).
+  const kitSections: ManifestKitSection[] = [];
+  const assignedKitIds = Array.isArray(event.roadKitIds) ? event.roadKitIds : [];
+  if (assignedKitIds.length > 0 && (roadKits?.length ?? 0) > 0) {
+    const kitById = new Map((roadKits ?? []).map((k) => [k.id, k]));
+    const claimed = new Set<string>();
+    for (const kid of assignedKitIds) {
+      const kit = kitById.get(kid);
+      if (!kit) continue;
+      const inKit = new Set(kit.caseIds);
+      const groups = caseGroups.filter((g) => inKit.has(g.caseId) && !claimed.has(g.caseId));
+      if (groups.length === 0) continue;
+      for (const g of groups) claimed.add(g.caseId);
+      kitSections.push({ kitId: kit.id, name: kit.name, color: kit.color ?? null, caseGroups: groups });
+    }
+    const leftovers = caseGroups.filter((g) => !claimed.has(g.caseId));
+    if (kitSections.length > 0 && leftovers.length > 0) {
+      kitSections.push({ kitId: null, name: 'Other cases', color: null, caseGroups: leftovers });
+    }
+  }
+
+  return { caseGroups, kitSections, looseGroup, kindGroups, totals };
 }
 
 // ── Sidebar event-list row (lean projection) ──────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { requireUser } from '@/lib/auth/auth';
 import { can } from '@/lib/auth/rbac';
-import { getEvents, getCases, getInventory, getTags, type TagDoc } from '@/lib/db/data';
+import { getEvents, getCases, getInventory, getTags, getRoadKits, type TagDoc } from '@/lib/db/data';
 import {
   buildEventManifest,
   type EventManifest,
@@ -20,7 +20,7 @@ import { getWarehouses, getEmergencyContact, caseReturnAndContact } from '../war
 import { ManifestScreen } from './manifest-screen';
 import type { ManifestCodes } from './print-manifest';
 import type { ShippingLabelExtras } from './print-shipping-labels';
-import type { AssignCaseRow } from './assign-cases-modal';
+import type { AssignCaseRow, AssignKitOption } from './assign-cases-modal';
 import type { ItemDetailsCase } from '@/components/inventory/item-details-modal';
 
 // app/manifest — the EVENT MANIFEST POOL (DESIGN_ALIGNMENT §4.3, Archetype A). The contextual LEFT
@@ -75,7 +75,7 @@ export default async function ManifestPage({
 }: {
   searchParams: Promise<{ event?: string }>;
 }) {
-  const [user, eventDocs, caseDocs, invDocs, tagDocs, warehouseDocs, fleetEmergency] = await Promise.all([
+  const [user, eventDocs, caseDocs, invDocs, tagDocs, warehouseDocs, fleetEmergency, kitDocs] = await Promise.all([
     requireUser(),
     getEvents(),
     getCases(),
@@ -83,6 +83,7 @@ export default async function ManifestPage({
     getTags(),
     getWarehouses(),
     getEmergencyContact(),
+    getRoadKits(),
   ]);
   const sp = await searchParams;
 
@@ -102,6 +103,15 @@ export default async function ManifestPage({
   const casesById: Record<string, CasePayload> = {};
   for (const c of caseDocs) casesById[c._id] = c.payload;
 
+  // Road Kits (assignable bundles) — shared by the manifest grouping AND the Assign-cases kit picker.
+  // AssignKitOption is structurally the manifest-view ManifestRoadKit, so one list serves both.
+  const roadKits: AssignKitOption[] = kitDocs.map((d) => ({
+    id: d._id,
+    name: d.payload.name || d._id,
+    caseIds: Array.isArray(d.payload.caseIds) ? d.payload.caseIds.filter(Boolean) : [],
+    color: d.payload.color ?? null,
+  }));
+
   // Events sorted chronologically (undated sink to the bottom), mirroring ManifestPool's sort.
   const sorted = eventDocs.slice().sort((a, b) => {
     const ad = a.payload.startDate || '';
@@ -120,7 +130,7 @@ export default async function ManifestPage({
   // Precompute every event's manifest so the sidebar shows honest scanned/total/flagged.
   const manifestById: Record<string, EventManifest> = {};
   const listRows: ManifestEventListRow[] = sorted.map((e) => {
-    const m = buildEventManifest(e.payload, e._id, inventory, casesById);
+    const m = buildEventManifest(e.payload, e._id, inventory, casesById, roadKits);
     manifestById[e._id] = m;
     const loose = inventory.reduce((s, it) => s + itemQtyLooseAtEvent(it, e._id), 0);
     // Resolve applied tagIds → VISIBLE chips (hidden tags filtered out via tagById).
@@ -249,7 +259,10 @@ export default async function ManifestPage({
       };
     });
 
-  // 5. The loose-add picker inventory: every live item (lean {id, payload}).
+  // 5. The selected event's currently-assigned kit ids (seeds the kit toggles).
+  const assignedKitIds = selected ? (selected.payload.roadKitIds ?? []) : [];
+
+  // 6. The loose-add picker inventory: every live item (lean {id, payload}).
   const looseInventory = invDocs.map((d) => ({ id: d._id, payload: d.payload }));
 
   // Whether THIS viewer leads the selected event (UX seam only — mirrors the source's lead-aware copy).
@@ -274,6 +287,8 @@ export default async function ManifestPage({
       casesForEditor={casesForEditor}
       assignCaseRows={assignCaseRows}
       assignedIds={assignedIds}
+      roadKits={roadKits}
+      assignedKitIds={assignedKitIds}
       looseInventory={looseInventory}
       tagsById={Object.fromEntries(tagById)}
     />

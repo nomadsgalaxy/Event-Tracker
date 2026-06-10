@@ -43,18 +43,20 @@ function revalidateManifest() {
   revalidatePath('/catalog');
 }
 
-/** Save the Assign-cases modal selection → event.cases. pallets.edit (authorized+). */
+/** Save the Assign-cases modal selection → event.cases (+ assigned road kits). pallets.edit. */
 export async function setEventCasesAction(
   eventId: string,
-  caseIds: string[]
+  caseIds: string[],
+  roadKitIds?: string[]
 ): Promise<ManifestActionState> {
   const id = String(eventId ?? '').trim();
   if (!id) return { error: 'Missing event id.' };
   const ids = Array.isArray(caseIds) ? caseIds.map((c) => String(c)) : [];
+  const kitIds = Array.isArray(roadKitIds) ? roadKitIds.map((c) => String(c)) : undefined;
 
   const user = await requireRole('authorized');
   try {
-    const res = await setEventCases({ eventId: id, caseIds: ids, actorEmail: user.email, actorRole: user.role });
+    const res = await setEventCases({ eventId: id, caseIds: ids, roadKitIds: kitIds, actorEmail: user.email, actorRole: user.role });
     revalidateManifest();
     revalidatePath(`/event/${id}`);
     if (res.rejected.length > 0) {

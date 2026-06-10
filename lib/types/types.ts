@@ -295,6 +295,10 @@ export interface EventPayload {
   venue?: VenuePayload;
   staff?: Staffer[];
   cases?: string[];
+  // The Road Kits assigned to this event (ids into the `roadkits` collection). Assigning a kit
+  // unions its caseIds into cases[] (which stays authoritative); roadKitIds drives the manifest's
+  // per-kit grouping. A case can sit in cases[] without belonging to any assigned kit ("loose").
+  roadKitIds?: string[];
   lead?: string; // email
   outbound?: ShipLeg;
   return?: ShipLeg;

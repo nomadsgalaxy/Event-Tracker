@@ -221,7 +221,7 @@ export function PrintManifest({
   codes?: ManifestCodes;
 }) {
   if (!manifest || !row) return null;
-  const { caseGroups, looseGroup, totals } = manifest;
+  const { caseGroups, kitSections, looseGroup, totals } = manifest;
   const printedAt = new Date().toISOString().slice(0, 16).replace('T', ' ');
   const caseSvg = codes?.caseSvgByCaseId ?? {};
   const eventSvg = codes?.eventSvg ?? '';
@@ -266,22 +266,46 @@ export function PrintManifest({
           digital record (scan the case or event code) so the two stay in sync.
         </div>
 
-        {caseGroups.map((g) => (
-          <div key={g.caseId} className="case-block">
-            <div className="case-head">
-              <span className="case-head-text">
-                <span className="name">{g.label}</span>
-                <span className="count">{g.rows.length} {g.rows.length === 1 ? 'item' : 'items'}</span>
-              </span>
-              {caseSvg[g.caseId] ? (
-                <span className="case-qr">
-                  <Svg svg={caseSvg[g.caseId]} />
+        {(() => {
+          const caseBlock = (g: (typeof caseGroups)[number]) => (
+            <div key={g.caseId} className="case-block">
+              <div className="case-head">
+                <span className="case-head-text">
+                  <span className="name">{g.label}</span>
+                  <span className="count">{g.rows.length} {g.rows.length === 1 ? 'item' : 'items'}</span>
                 </span>
-              ) : null}
+                {caseSvg[g.caseId] ? (
+                  <span className="case-qr">
+                    <Svg svg={caseSvg[g.caseId]} />
+                  </span>
+                ) : null}
+              </div>
+              <ManifestTable rows={g.rows} />
             </div>
-            <ManifestTable rows={g.rows} />
-          </div>
-        ))}
+          );
+          // Group by assigned Road Kit when present; else flat (matches the on-screen manifest).
+          if (kitSections.length > 0) {
+            return kitSections.map((sec) => (
+              <div key={sec.kitId ?? '__other__'}>
+                <div
+                  style={{
+                    margin: '16px 0 6px',
+                    fontWeight: 700,
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    borderBottom: '2px solid #000',
+                    paddingBottom: '2px',
+                  }}
+                >
+                  {sec.name} · {sec.caseGroups.length} {sec.caseGroups.length === 1 ? 'case' : 'cases'}
+                </div>
+                {sec.caseGroups.map(caseBlock)}
+              </div>
+            ));
+          }
+          return caseGroups.map(caseBlock);
+        })()}
 
         {looseGroup && looseGroup.rows.length > 0 ? (
           <div className="case-block">

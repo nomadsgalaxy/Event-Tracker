@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Boxes,
@@ -13,6 +14,7 @@ import {
   PackageOpen,
   ArchiveX,
   Share2,
+  Package,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -402,6 +404,12 @@ export function CatalogScreen({
       </Button>
       {isCases ? (
         <>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/catalog/kits">
+              <Package size={14} aria-hidden />
+              <span className="hidden sm:inline">Road kits</span>
+            </Link>
+          </Button>
           {canEditCases ? <CaseCsvImportButton existingIds={caseIds} /> : null}
           {canEditCases ? <NewCaseButton weightUnit={weightUnit} warehouses={warehouses} /> : null}
         </>

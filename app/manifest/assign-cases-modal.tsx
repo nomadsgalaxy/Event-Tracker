@@ -38,12 +38,22 @@ export interface AssignCaseRow {
   conflictLabel?: string;
 }
 
+// A Road Kit the event can assign as a unit (adds all its available cases + groups them on the manifest).
+export interface AssignKitOption {
+  id: string;
+  name: string;
+  caseIds: string[];
+  color?: string | null;
+}
+
 export function AssignCasesModal({
   open,
   onOpenChange,
   eventName,
   assignedIds,
+  assignedKitIds = [],
   cases,
+  kits = [],
   canAddLoose,
   onSave,
   onAddLoose,
@@ -53,22 +63,56 @@ export function AssignCasesModal({
   eventName: string;
   /** The case ids currently on the event (seeds the checkbox selection). */
   assignedIds: string[];
+  /** The Road Kit ids currently assigned to the event (seeds the kit toggles). */
+  assignedKitIds?: string[];
   cases: AssignCaseRow[];
+  /** The Road Kits available to assign (empty hides the section). */
+  kits?: AssignKitOption[];
   /** Loose-policy gate (lead+) — shows the "or add a loose item" link. */
   canAddLoose: boolean;
-  onSave: (caseIds: string[]) => Promise<{ ok?: boolean; error?: string }>;
+  onSave: (caseIds: string[], kitIds: string[]) => Promise<{ ok?: boolean; error?: string }>;
   onAddLoose: () => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(assignedIds));
+  const [selectedKits, setSelectedKits] = useState<Set<string>>(() => new Set(assignedKitIds));
   const [pendingConflict, setPendingConflict] = useState<AssignCaseRow | null>(null);
   const [pending, startTransition] = useTransition();
 
   // Re-seed the selection whenever the modal (re)opens or the assigned set changes (after a save).
   useEffect(() => {
-    if (open) setSelected(new Set(assignedIds));
-  }, [open, assignedIds]);
+    if (open) {
+      setSelected(new Set(assignedIds));
+      setSelectedKits(new Set(assignedKitIds));
+    }
+  }, [open, assignedIds, assignedKitIds]);
 
   const priorSet = useMemo(() => new Set(assignedIds), [assignedIds]);
+  // Cases that can't be auto-added by a kit (held by another in-flight event, not already on this event).
+  const lockedSet = useMemo(
+    () => new Set(cases.filter((c) => c.unavailable && !priorSet.has(c.id)).map((c) => c.id)),
+    [cases, priorSet]
+  );
+  const caseIdSet = useMemo(() => new Set(cases.map((c) => c.id)), [cases]);
+
+  // Toggle a kit: ON assigns it + adds its available cases; OFF just stops grouping (leaves the cases,
+  // so unchecking a kit never silently yanks cases the user may still want).
+  function toggleKit(kit: AssignKitOption, on: boolean) {
+    setSelectedKits((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(kit.id);
+      else next.delete(kit.id);
+      return next;
+    });
+    if (on) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const cid of kit.caseIds) {
+          if (caseIdSet.has(cid) && !lockedSet.has(cid)) next.add(cid);
+        }
+        return next;
+      });
+    }
+  }
 
   function toggle(id: string, on: boolean) {
     setSelected((prev) => {
@@ -91,8 +135,13 @@ export function AssignCasesModal({
 
   function save() {
     const ids = Array.from(selected);
+    // Only persist kits that still have at least one of their cases on the event (an empty group is noise).
+    const kitIds = Array.from(selectedKits).filter((kid) => {
+      const kit = kits.find((k) => k.id === kid);
+      return kit ? kit.caseIds.some((cid) => selected.has(cid)) : false;
+    });
     startTransition(async () => {
-      const res = await onSave(ids);
+      const res = await onSave(ids, kitIds);
       if (res.error && !res.ok) {
         toast.error(res.error);
         return;
@@ -118,6 +167,33 @@ export function AssignCasesModal({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          {kits.length > 0 ? (
+            <div className="mb-3 flex flex-col gap-1.5">
+              <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Road kits</div>
+              <div className="flex flex-wrap gap-1.5">
+                {kits.map((k) => {
+                  const on = selectedKits.has(k.id);
+                  return (
+                    <button
+                      key={k.id}
+                      type="button"
+                      onClick={() => toggleKit(k, !on)}
+                      aria-pressed={on}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                        on ? 'border-primary bg-primary/15 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                      )}
+                    >
+                      <span className="size-2 rounded-full" style={{ background: k.color || 'var(--muted-foreground)' }} aria-hidden />
+                      {k.name}
+                      <span className="tabular-nums opacity-70">{k.caseIds.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Tap a kit to add its cases and group them on the manifest.</p>
+            </div>
+          ) : null}
           {cases.length === 0 ? (
             <p className="px-1 py-6 text-center text-sm text-muted-foreground">No cases in the catalog yet.</p>
           ) : (

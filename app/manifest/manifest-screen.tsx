@@ -27,7 +27,7 @@ import type { ItemPatch } from '@/lib/db/write';
 import { ManifestCaseCard, ManifestLooseCard, type ManifestRowActions } from './manifest-case-card';
 import { PrintButton, PrintManifest, type ManifestCodes } from './print-manifest';
 import { PrintShippingLabelsButton, PrintShippingLabels, type ShippingLabelExtras } from './print-shipping-labels';
-import { AssignCasesModal, type AssignCaseRow } from './assign-cases-modal';
+import { AssignCasesModal, type AssignCaseRow, type AssignKitOption } from './assign-cases-modal';
 import { ItemDetailsModal, type ItemDetailsCase } from '@/components/inventory/item-details-modal';
 import { FlagItemModal, ResolveFlagModal } from '@/components/inventory/flag-modals';
 import { AddItemToCaseModal } from '@/components/inventory/add-item-to-case-modal';
@@ -143,6 +143,8 @@ export function ManifestScreen({
   casesForEditor,
   assignCaseRows,
   assignedIds,
+  roadKits,
+  assignedKitIds,
   looseInventory,
   tagsById,
 }: {
@@ -172,6 +174,10 @@ export function ManifestScreen({
   assignCaseRows: AssignCaseRow[];
   /** The event's currently-assigned case ids (seeds the Assign-cases selection). */
   assignedIds: string[];
+  /** All Road Kits available to assign (id, name, caseIds, color). */
+  roadKits: AssignKitOption[];
+  /** The event's currently-assigned Road Kit ids (seeds the kit toggles). */
+  assignedKitIds: string[];
   /** The loose-add picker inventory (lean {id, payload}). */
   looseInventory: { id: string; payload: InventoryPayload }[];
   /** tagId -> resolved DashTag (for the ItemDetailsModal applied-tag chips). */
@@ -220,7 +226,7 @@ export function ManifestScreen({
     );
   }
 
-  const { caseGroups, looseGroup, kindGroups, totals } = manifest;
+  const { caseGroups, kitSections, looseGroup, kindGroups, totals } = manifest;
   const pct = totals.total > 0 ? Math.round((totals.packed / totals.total) * 100) : 0;
   const progressColor =
     totals.flagged > 0 ? 'var(--warning)' : pct === 100 ? 'var(--st-ready)' : 'var(--primary)';
@@ -391,14 +397,24 @@ export function ManifestScreen({
 
         {hasContent ? (
           <div className="flex flex-col gap-3">
-            {caseGroups.map((g) => (
-              <ManifestCaseCard
-                key={g.caseId}
-                group={g}
-                codeSvg={caseCodeSvgByCaseId?.[g.caseId]}
-                actions={rowActions}
-              />
-            ))}
+            {kitSections.length > 0
+              ? kitSections.map((sec) => (
+                  <div key={sec.kitId ?? '__other__'} className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 px-0.5 pt-1">
+                      <span className="size-2 shrink-0 rounded-full" style={{ background: sec.color || 'var(--muted-foreground)' }} aria-hidden />
+                      <span className="text-xs font-semibold tracking-wide text-foreground uppercase">{sec.name}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {sec.caseGroups.length} {sec.caseGroups.length === 1 ? 'case' : 'cases'}
+                      </span>
+                    </div>
+                    {sec.caseGroups.map((g) => (
+                      <ManifestCaseCard key={g.caseId} group={g} codeSvg={caseCodeSvgByCaseId?.[g.caseId]} actions={rowActions} />
+                    ))}
+                  </div>
+                ))
+              : caseGroups.map((g) => (
+                  <ManifestCaseCard key={g.caseId} group={g} codeSvg={caseCodeSvgByCaseId?.[g.caseId]} actions={rowActions} />
+                ))}
             {looseGroup ? <ManifestLooseCard group={looseGroup} actions={rowActions} /> : null}
           </div>
         ) : (
@@ -455,9 +471,11 @@ export function ManifestScreen({
           onOpenChange={setAssignOpen}
           eventName={selectedRow.name || 'this event'}
           assignedIds={assignedIds}
+          assignedKitIds={assignedKitIds}
           cases={assignCaseRows}
+          kits={roadKits}
           canAddLoose={canManageLoose}
-          onSave={(ids) => setEventCasesAction(selectedId, ids)}
+          onSave={(ids, kitIds) => setEventCasesAction(selectedId, ids, kitIds)}
           onAddLoose={() => setLooseOpen(true)}
         />
       ) : null}

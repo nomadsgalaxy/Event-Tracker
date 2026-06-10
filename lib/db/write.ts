@@ -10,7 +10,7 @@ import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, R
 import type { InventoryDoc, InventoryPayload, DistributionRow, ItemUnit, ItemFlag, SkuOption, KitRequirement } from '@/lib/views/inventory-shape';
 import { addFlag as buildAddFlag } from '@/lib/views/inventory-shape';
 import { buildManifestSnapshot, buildCheckinSweep, type SnapshotCaseLite } from '@/lib/views/signoff-view';
-import type { TagDoc, TagPayload } from '@/lib/db/data';
+import type { TagDoc, TagPayload, RoadKitDoc, RoadKitPayload } from '@/lib/db/data';
 
 // lib/db/write.ts — the single server-side write path for the Next.js stack.
 //
@@ -67,6 +67,7 @@ const EDITABLE_FIELDS = [
   'pallets',
   'tagIds',
   'primaryTagId',
+  'roadKitIds',
 ] as const;
 
 export type EventPatch = Partial<Pick<EventPayload, (typeof EDITABLE_FIELDS)[number]>>;
@@ -1125,6 +1126,8 @@ interface SetEventCasesArgs {
   eventId: string;
   /** The requested case ids (the modal's selected Set, as an array). */
   caseIds: string[];
+  /** The Road Kits assigned to this event (for manifest grouping). Validated against live kits. */
+  roadKitIds?: string[];
   actorEmail: string;
   actorRole: string;
 }
@@ -1139,6 +1142,7 @@ export interface SetEventCasesResult extends SaveEventResult {
 export async function setEventCases({
   eventId,
   caseIds,
+  roadKitIds,
   actorEmail,
   actorRole,
 }: SetEventCasesArgs): Promise<SetEventCasesResult> {
@@ -1210,11 +1214,25 @@ export async function setEventCases({
     cases.push(cid);
   }
 
-  const now = Date.now();
-  const res = await events.updateOne(
-    { _id, ...NOT_DELETED },
-    { $set: { 'payload.cases': cases, 'payload.id': _id, updatedAt: now } }
-  );
+  // Road Kit assignments: keep only ids of LIVE kits (deduped, scalar). Only persisted when the
+  // caller passes the field, so a plain case-only save leaves any existing groupings untouched.
+  const set: Record<string, unknown> = { 'payload.cases': cases, 'payload.id': _id, updatedAt: Date.now() };
+  if (Array.isArray(roadKitIds)) {
+    const liveKitIds = new Set(
+      (await db.collection<RoadKitDoc>('roadkits').find(NOT_DELETED).toArray()).map((k) => k._id)
+    );
+    const kits: string[] = [];
+    const kseen = new Set<string>();
+    for (const raw of roadKitIds) {
+      const kid = String(raw);
+      if (!kid || kseen.has(kid) || !liveKitIds.has(kid)) continue;
+      kseen.add(kid);
+      kits.push(kid);
+    }
+    set['payload.roadKitIds'] = kits;
+  }
+
+  const res = await events.updateOne({ _id, ...NOT_DELETED }, { $set: set });
   return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount, cases, rejected };
 }
 
@@ -3517,6 +3535,134 @@ export async function deleteTag({
     { $set: { 'payload.deletedAt': now, deletedAt: now, updatedAt: now } }
   );
   return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount, eventUses, itemUses };
+}
+
+// ─── Road Kits: CRUD for the reusable case bundles ───────────────────────────────────────────────
+// A Road Kit is a named set of cases (lib/db/data RoadKitPayload). Gated by pallets.edit (authorized+,
+// the case-assignment tier — the warehouse people who build + assign cases own kits too). Same
+// envelope + soft-delete discipline as tags. caseIds are kept as scalars (no existence check here:
+// a case can be deleted after being added; the manifest/library degrade gracefully).
+
+function cleanKitCaseIds(raw: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of Array.isArray(raw) ? raw : []) {
+    const cid = String(v ?? '').trim();
+    if (!cid || seen.has(cid)) continue;
+    seen.add(cid);
+    out.push(cid);
+  }
+  return out;
+}
+
+export interface RoadKitWriteResult extends SaveEventResult {
+  id: string;
+}
+
+export async function createRoadKit({
+  name,
+  caseIds,
+  notes,
+  color,
+  actorRole,
+}: {
+  name: string;
+  caseIds?: string[];
+  notes?: string;
+  color?: string | null;
+  actorRole: string;
+}): Promise<RoadKitWriteResult> {
+  if (!can('pallets.edit', actorRole)) {
+    throw new WriteForbiddenError('You do not have permission to manage road kits.');
+  }
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) throw new Error('A kit name is required.');
+  const db = await getDb();
+  const col = db.collection<RoadKitDoc>('roadkits');
+
+  const lower = trimmed.toLowerCase();
+  const live = await col.find(NOT_DELETED).toArray();
+  const dupe = live.find((k) => String(k.payload?.name ?? '').trim().toLowerCase() === lower);
+  if (dupe) return { ok: true, matched: 0, modified: 0, id: dupe._id };
+
+  const id = generateId();
+  const now = Date.now();
+  const payload: RoadKitPayload = {
+    id,
+    name: trimmed,
+    caseIds: cleanKitCaseIds(caseIds),
+    notes: String(notes ?? '').trim().slice(0, 500),
+    color: typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : null,
+    deletedAt: null,
+  };
+  await col.insertOne({ _id: id, payload, createdAt: now, updatedAt: now, deletedAt: null } as RoadKitDoc);
+  return { ok: true, matched: 1, modified: 1, id };
+}
+
+export async function saveRoadKit({
+  id,
+  patch,
+  actorRole,
+}: {
+  id: string;
+  patch: { name?: string; caseIds?: string[]; notes?: string; color?: string | null };
+  actorRole: string;
+}): Promise<SaveEventResult> {
+  if (!can('pallets.edit', actorRole)) {
+    throw new WriteForbiddenError('You do not have permission to manage road kits.');
+  }
+  const _id = String(id);
+  const db = await getDb();
+  const col = db.collection<RoadKitDoc>('roadkits');
+  const stored = await col.findOne({ _id, ...NOT_DELETED });
+  if (!stored) throw new Error('Road kit not found (or deleted).');
+
+  const set: Record<string, unknown> = { 'payload.id': _id, updatedAt: Date.now() };
+  if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+    const next = String(patch.name ?? '').trim();
+    if (!next) throw new Error('A kit name is required.');
+    const live = await col.find(NOT_DELETED).toArray();
+    const clash = live.find((k) => k._id !== _id && String(k.payload?.name ?? '').trim().toLowerCase() === next.toLowerCase());
+    if (clash) throw new Error('Another road kit already uses that name.');
+    set['payload.name'] = next;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'caseIds')) set['payload.caseIds'] = cleanKitCaseIds(patch.caseIds);
+  if (Object.prototype.hasOwnProperty.call(patch, 'notes')) set['payload.notes'] = String(patch.notes ?? '').trim().slice(0, 500);
+  if (Object.prototype.hasOwnProperty.call(patch, 'color')) {
+    const c = patch.color;
+    set['payload.color'] = typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : null;
+  }
+  const res = await col.updateOne({ _id, ...NOT_DELETED }, { $set: set });
+  return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount };
+}
+
+/** Soft-delete a kit + prune its id off every event's roadKitIds[]. The event's cases[] is left
+ *  intact (deleting the bundle doesn't unpack the show — the cases just stop being grouped). */
+export async function deleteRoadKit({
+  id,
+  actorRole,
+}: {
+  id: string;
+  actorRole: string;
+}): Promise<SaveEventResult> {
+  if (!can('pallets.edit', actorRole)) {
+    throw new WriteForbiddenError('You do not have permission to manage road kits.');
+  }
+  const _id = String(id);
+  const db = await getDb();
+  const col = db.collection<RoadKitDoc>('roadkits');
+  const stored = await col.findOne({ _id, ...NOT_DELETED });
+  if (!stored) return { ok: true, matched: 0, modified: 0 };
+
+  const now = Date.now();
+  await db
+    .collection<EventDoc>('events')
+    .updateMany({ 'payload.roadKitIds': _id }, { $pull: { 'payload.roadKitIds': _id }, $set: { updatedAt: now } } as never);
+  const res = await col.updateOne(
+    { _id, ...NOT_DELETED },
+    { $set: { 'payload.deletedAt': now, deletedAt: now, updatedAt: now } }
+  );
+  return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount };
 }
 
 // ─── Inventory: flag an item (condition / loss note) ─────────────────────────────────────────────
