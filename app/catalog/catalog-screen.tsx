@@ -455,7 +455,7 @@ export function CatalogScreen({
           <SidebarItem
             icon={Boxes}
             count={itemTotal}
-            active={!isCases}
+            active={view === 'inventory'}
             onClick={() => {
               pickView('inventory');
               after();
@@ -579,7 +579,7 @@ export function CatalogScreen({
     filter === 'all'
       ? 'All'
       : filter.startsWith('kit:')
-        ? `Kit ${filter.slice(4)}`
+        ? `Equipment ${filter.slice(4)}`
         : (STATE_FILTERS.find((f) => f.id === filter)?.label ?? 'All');
   const activeWarehouseLabel =
     warehouse === 'all'
