@@ -1,6 +1,6 @@
 import { requireUser } from '@/lib/auth/auth';
 import { can } from '@/lib/auth/rbac';
-import { getCases, getEvents, getInventory, getUserWeightUnit, getTags, getUserDisplayName } from '@/lib/db/data';
+import { getCases, getEvents, getInventory, getUserWeightUnit, getTags, getUserDisplayName, getRoadKits } from '@/lib/db/data';
 import { getCaseLabels, getEventNames } from '@/lib/views/inventory';
 import { itemCode } from '@/lib/integrations/eitm';
 import type { ItemDetailsCase, KitCandidateItem } from '@/components/inventory/item-details-modal';
@@ -65,7 +65,7 @@ export default async function CatalogPage({
 }: {
   searchParams: Promise<{ view?: string; warehouse?: string; filter?: string }>;
 }) {
-  const [user, caseDocs, eventDocs, invDocs, warehouseDocs, fleetEmergency, caseLabels, eventNames, tagDocs] = await Promise.all([
+  const [user, caseDocs, eventDocs, invDocs, warehouseDocs, fleetEmergency, caseLabels, eventNames, tagDocs, kitDocs] = await Promise.all([
     requireUser(),
     getCases(),
     getEvents(),
@@ -75,6 +75,7 @@ export default async function CatalogPage({
     getCaseLabels(),
     getEventNames(),
     getTags(),
+    getRoadKits(),
   ]);
 
   const sp = await searchParams;
@@ -273,6 +274,7 @@ export default async function CatalogPage({
       warehouseOptions={warehouseOptions}
       kitOptions={kitOptions}
       unplacedCases={unplacedCases}
+      roadKitCount={kitDocs.length}
       canEdit={canEdit}
       canEditCases={canEditCases}
       weightUnit={weightUnit}

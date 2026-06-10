@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Boxes,
@@ -188,6 +187,7 @@ export function CatalogScreen({
   warehouseOptions,
   kitOptions,
   unplacedCases,
+  roadKitCount,
   canEdit,
   canEditCases,
   weightUnit,
@@ -213,6 +213,8 @@ export function CatalogScreen({
   warehouseOptions: WarehouseOption[];
   kitOptions: KitOption[];
   unplacedCases: number;
+  /** Live Road Kit count for the sidebar nav entry. */
+  roadKitCount: number;
   canEdit: boolean;
   /** pallets.edit — gates the case create/edit/delete/transfer + the card action menu. */
   canEditCases: boolean;
@@ -404,12 +406,6 @@ export function CatalogScreen({
       </Button>
       {isCases ? (
         <>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/catalog/kits">
-              <Package size={14} aria-hidden />
-              <span className="hidden sm:inline">Road kits</span>
-            </Link>
-          </Button>
           {canEditCases ? <CaseCsvImportButton existingIds={caseIds} /> : null}
           {canEditCases ? <NewCaseButton weightUnit={weightUnit} warehouses={warehouses} /> : null}
         </>
@@ -447,6 +443,10 @@ export function CatalogScreen({
             }}
           >
             Inventory
+          </SidebarItem>
+          {/* Road Kits — a sibling DESTINATION (its own route), not a view toggle/filter. */}
+          <SidebarItem icon={Package} count={roadKitCount} href="/catalog/kits" onClick={after}>
+            Road Kits
           </SidebarItem>
         </SidebarSection>
 
