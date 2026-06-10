@@ -33,6 +33,7 @@ import {
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { CaseGrid } from './case-grid';
 import { InventoryView, type InventoryItemRow, type InventoryEventOption } from './inventory-view';
+import { RoadKitsManager, type KitRow, type KitCaseOption } from './kits/kits-manager';
 import { InventoryCsvImportButton } from './inventory-csv-import';
 import type { CatalogRow } from './catalog-list';
 import type { ItemDetailsCase, KitCandidateItem } from '@/components/inventory/item-details-modal';
@@ -121,7 +122,7 @@ export interface KitOption {
   count: number;
 }
 
-type CatalogView = 'cases' | 'inventory';
+type CatalogView = 'cases' | 'inventory' | 'kits';
 
 // The CATALOG-section filter ids (the cross-view "FILTER" rail). These narrow the CASES grid in
 // full; for INVENTORY the ones that don't apply to an item degrade gracefully (assigned/unassigned
@@ -188,6 +189,8 @@ export function CatalogScreen({
   kitOptions,
   unplacedCases,
   roadKitCount,
+  roadKitRows,
+  roadKitCaseOptions,
   canEdit,
   canEditCases,
   weightUnit,
@@ -215,6 +218,9 @@ export function CatalogScreen({
   unplacedCases: number;
   /** Live Road Kit count for the sidebar nav entry. */
   roadKitCount: number;
+  /** Road Kit rows (the kits view content) + the case picker options for the kit editor. */
+  roadKitRows: KitRow[];
+  roadKitCaseOptions: KitCaseOption[];
   canEdit: boolean;
   /** pallets.edit — gates the case create/edit/delete/transfer + the card action menu. */
   canEditCases: boolean;
@@ -276,13 +282,25 @@ export function CatalogScreen({
     setView(v);
     syncUrl({ view: v });
   };
+  // Warehouse + filter are grid (cases/inventory) concepts. Picking one from the kits view drops you
+  // onto the Roadcases grid with that filter applied, rather than leaving an invisible no-op.
   const pickWarehouse = (w: string) => {
     setWarehouse(w);
-    syncUrl({ warehouse: w });
+    if (view === 'kits') {
+      setView('cases');
+      syncUrl({ warehouse: w, view: 'cases' });
+    } else {
+      syncUrl({ warehouse: w });
+    }
   };
   const pickFilter = (f: CaseFilterId) => {
     setFilter(f);
-    syncUrl({ filter: f });
+    if (view === 'kits') {
+      setView('cases');
+      syncUrl({ filter: f, view: 'cases' });
+    } else {
+      syncUrl({ filter: f });
+    }
   };
 
   // ── Warehouse narrowing (shared by both views) ──────────────────────────────────────────
@@ -352,6 +370,7 @@ export function CatalogScreen({
   const caseTotal = caseRows.length;
   const itemTotal = itemRows.length;
   const isCases = view === 'cases';
+  const isKits = view === 'kits';
 
   // The header right-actions — Export CSV / Import CSV / New. Export builds a CSV CLIENT-SIDE from
   // the rows already in hand (the data is loaded; no dead API link / no round-trip) and downloads
@@ -444,8 +463,17 @@ export function CatalogScreen({
           >
             Inventory
           </SidebarItem>
-          {/* Road Kits — a sibling DESTINATION (its own route), not a view toggle/filter. */}
-          <SidebarItem icon={Package} count={roadKitCount} href="/catalog/kits" onClick={after}>
+          {/* Road Kits — a third VIEW of the catalog (peer to Roadcases/Inventory), so the sidebar
+              is retained on the kits content. */}
+          <SidebarItem
+            icon={Package}
+            count={roadKitCount}
+            active={isKits}
+            onClick={() => {
+              pickView('kits');
+              after();
+            }}
+          >
             Road Kits
           </SidebarItem>
         </SidebarSection>
@@ -519,7 +547,7 @@ export function CatalogScreen({
         </SidebarSection>
 
         {kitOptions.length > 0 ? (
-          <SidebarSection label="Kits">
+          <SidebarSection label="Equipment">
             {kitOptions.map((k) => {
               const id = `kit:${k.sku}`;
               return (
@@ -540,8 +568,8 @@ export function CatalogScreen({
         ) : null}
 
         <p className="px-2 pt-2 text-xs leading-relaxed text-muted-foreground">
-          Roadcases and Inventory are two views of one catalog. Warehouse and kit filters narrow both
-          — pick a warehouse to scope to its return-address pool.
+          Roadcases and Inventory are two views of one catalog. Warehouse and equipment filters narrow
+          both — pick a warehouse to scope to its return-address pool.
         </p>
       </>
     );
@@ -571,28 +599,36 @@ export function CatalogScreen({
       <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
         <ScreenHeader
           eyebrow={
-            isCases
-              ? `Roadcases · ${caseTotal} total`
-              : `Inventory · ${itemTotal} total`
+            isKits
+              ? `Road Kits · ${roadKitRows.length} total`
+              : isCases
+                ? `Roadcases · ${caseTotal} total`
+                : `Inventory · ${itemTotal} total`
           }
           title={
-            isCases
-              ? `${visibleCases.length} ${visibleCases.length === 1 ? 'case' : 'cases'}`
-              : `${visibleItems.length} ${visibleItems.length === 1 ? 'item' : 'items'}`
+            isKits
+              ? `${roadKitRows.length} ${roadKitRows.length === 1 ? 'kit' : 'kits'}`
+              : isCases
+                ? `${visibleCases.length} ${visibleCases.length === 1 ? 'case' : 'cases'}`
+                : `${visibleItems.length} ${visibleItems.length === 1 ? 'item' : 'items'}`
           }
           subtitle={
-            isCases
-              ? `Road & flight cases — which event holds each, and what's packed inside.${
-                  activeWarehouseLabel ? ` · ${activeWarehouseLabel}` : ''
-                }${filter !== 'all' ? ` · ${activeFilterLabel}` : ''}`
-              : `All inventory across every case — bulk and serialized items read live from the database.${
-                  activeWarehouseLabel ? ` · ${activeWarehouseLabel}` : ''
-                }`
+            isKits
+              ? 'Reusable bundles of cases that travel together. Assign a whole kit to an event from Manifest, and the manifest groups its cases under the kit.'
+              : isCases
+                ? `Road & flight cases — which event holds each, and what's packed inside.${
+                    activeWarehouseLabel ? ` · ${activeWarehouseLabel}` : ''
+                  }${filter !== 'all' ? ` · ${activeFilterLabel}` : ''}`
+                : `All inventory across every case — bulk and serialized items read live from the database.${
+                    activeWarehouseLabel ? ` · ${activeWarehouseLabel}` : ''
+                  }`
           }
-          actions={headerActions}
+          actions={isKits ? undefined : headerActions}
         />
 
-        {isCases ? (
+        {isKits ? (
+          <RoadKitsManager kits={roadKitRows} caseOptions={roadKitCaseOptions} canEdit={canEditCases} />
+        ) : isCases ? (
           <>
             <div className="relative w-full sm:max-w-xs">
               <Search

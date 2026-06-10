@@ -41,6 +41,7 @@ import {
   type KitOption,
 } from './catalog-screen';
 import type { CatalogRow } from './catalog-list';
+import type { KitRow, KitCaseOption } from './kits/kits-manager';
 
 // app/catalog — the MERGED CATALOG screen (DESIGN_ALIGNMENT §2.2 / §4.6). ONE nav destination
 // ('Catalog', /catalog) that internally splits into Roadcases + Inventory via a LEFT SIDEBAR, with
@@ -79,7 +80,7 @@ export default async function CatalogPage({
   ]);
 
   const sp = await searchParams;
-  const initialView = sp.view === 'inventory' ? 'inventory' : 'cases';
+  const initialView = sp.view === 'inventory' ? 'inventory' : sp.view === 'kits' ? 'kits' : 'cases';
 
   const inventory = invDocs.map((d) => d.payload);
   const eventsForAssign = eventDocs.map((e) => ({ _id: e._id, payload: e.payload }));
@@ -262,6 +263,25 @@ export default async function CatalogPage({
   }));
   const itemIds = invDocs.map((d) => d._id);
 
+  // ── Road Kits view: the kit rows (with resolved case labels) + the case picker options ─────────
+  const caseLabelById = new Map<string, string>();
+  for (const d of caseDocs) caseLabelById.set(d._id, d.payload.label || d.payload.slug || d._id);
+  const roadKitCaseOptions: KitCaseOption[] = caseDocs
+    .filter((d) => !isCaseRetired(d.payload))
+    .map((d) => ({ id: d._id, label: d.payload.label || d.payload.slug || d._id }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const roadKitRows: KitRow[] = kitDocs.map((d) => {
+    const ids = Array.isArray(d.payload.caseIds) ? d.payload.caseIds.filter(Boolean) : [];
+    return {
+      id: d._id,
+      name: d.payload.name || d._id,
+      notes: d.payload.notes || '',
+      color: d.payload.color ?? null,
+      caseIds: ids,
+      cases: ids.map((cid) => ({ id: cid, label: caseLabelById.get(cid) || cid })),
+    };
+  });
+
   return (
     <CatalogScreen
       initialView={initialView}
@@ -275,6 +295,8 @@ export default async function CatalogPage({
       kitOptions={kitOptions}
       unplacedCases={unplacedCases}
       roadKitCount={kitDocs.length}
+      roadKitRows={roadKitRows}
+      roadKitCaseOptions={roadKitCaseOptions}
       canEdit={canEdit}
       canEditCases={canEditCases}
       weightUnit={weightUnit}
