@@ -32,6 +32,7 @@ import {
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { KpiStrip, KpiCard } from '@/components/ui/kpi-strip';
 import { FindCommand } from '@/components/dashboard/find-command';
+import { ImportIcsButton } from '@/components/events/import-ics-button';
 import { DashboardHero } from '@/components/dashboard/dashboard-hero';
 import { DashboardTimeline } from '@/components/dashboard/dashboard-timeline';
 import type { DashboardData } from '@/lib/types/types-dashboard';
@@ -154,6 +155,7 @@ export default function DashboardClient({ data, canCreate, tempUnit = 'F' }: Das
           actions={
             <>
               <FindCommand events={findEvents} />
+              {canCreate ? <ImportIcsButton /> : null}
               {canCreate ? (
                 <Button asChild size="sm">
                   <Link href="/event/new">

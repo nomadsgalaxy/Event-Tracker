@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireRole, requireUser } from '@/lib/auth/auth';
 import { getUserDisplayName } from '@/lib/db/data';
 import { saveEvent, createEvent, softDeleteEvent, markEventOnsite, WriteForbiddenError, type EventPatch } from '@/lib/db/write';
+import { parseIcs, icsLocationToVenue } from '@/lib/integrations/ics';
 import type { EventState } from '@/lib/types/types';
 
 // app/event/actions.ts — the event-editor Server Action.
@@ -280,4 +281,77 @@ export async function markEventOnsiteAction(id: string): Promise<MarkOnsiteState
   revalidatePath('/manifest');
   revalidatePath('/signoff');
   return { ok: true };
+}
+
+// ── Import events from an iCalendar (.ics) file ──────────────────────────────────────────────────
+// The client previews the parsed VEVENTs (lib/integrations/ics is isomorphic) and posts the RAW file
+// text + the selected event indexes; the server RE-PARSES (never trusts the client's parse) and
+// creates one DRAFT event per selection through the same gated createEvent path as the editor
+// (event.create, manager+, server-minted ids). Door times are deliberately not imported — only the
+// show dates, venue guess, website, and GEO coordinates.
+
+export interface ImportIcsState {
+  ok?: boolean;
+  error?: string;
+  created?: { id: string; name: string }[];
+}
+
+const ICS_MAX_BYTES = 1_000_000; // a calendar file, not a media upload
+const ICS_MAX_EVENTS = 25;
+
+export async function importIcsEventsAction(icsText: string, selectedIndexes?: number[]): Promise<ImportIcsState> {
+  let user;
+  try {
+    user = await requireRole('authorized');
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authorized.' };
+  }
+
+  const text = String(icsText ?? '');
+  if (!text.trim()) return { ok: false, error: 'The file is empty.' };
+  if (text.length > ICS_MAX_BYTES) return { ok: false, error: 'That .ics file is too large (max 1 MB).' };
+
+  const all = parseIcs(text).filter((ev) => ev.startDate); // undated shells aren't importable
+  if (all.length === 0) return { ok: false, error: 'No calendar events with dates were found in that file.' };
+
+  const wanted = Array.isArray(selectedIndexes) && selectedIndexes.length > 0
+    ? all.filter((_, i) => selectedIndexes.includes(i))
+    : all;
+  if (wanted.length === 0) return { ok: false, error: 'No events selected.' };
+  if (wanted.length > ICS_MAX_EVENTS) return { ok: false, error: `Too many events (max ${ICS_MAX_EVENTS} per import).` };
+
+  const created: { id: string; name: string }[] = [];
+  for (const ev of wanted) {
+    const guess = icsLocationToVenue(ev.location);
+    const venue: Record<string, unknown> = {};
+    if (guess.name) venue.name = guess.name;
+    if (guess.address) venue.address = guess.address;
+    if (guess.city) venue.city = guess.city;
+    if (guess.state) venue.state = guess.state;
+    if (guess.zip) venue.zip = guess.zip;
+    if (ev.lat != null && ev.lng != null) {
+      venue.lat = ev.lat;
+      venue.lng = ev.lng;
+    }
+    const patch: EventPatch = {
+      name: ev.summary || 'Untitled event',
+      startDate: ev.startDate,
+      endDate: ev.endDate || ev.startDate,
+      ...(guess.city ? { city: guess.city } : {}),
+      ...(Object.keys(venue).length ? { venue } : {}),
+      ...(ev.url ? { website: ev.url } : {}),
+    };
+    try {
+      const res = await createEvent({ patch, actorEmail: user.email, actorRole: user.role });
+      created.push({ id: res.id, name: patch.name || 'Untitled event' });
+    } catch (e) {
+      if (e instanceof WriteForbiddenError) return { ok: false, error: e.message, created };
+      return { ok: false, error: e instanceof Error ? e.message : 'Import failed.', created };
+    }
+  }
+
+  revalidatePath('/');
+  revalidatePath('/calendar');
+  for (const c of created) revalidatePath(`/event/${c.id}`);
+  return { ok: true, created };
 }
