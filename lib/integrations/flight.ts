@@ -167,12 +167,23 @@ function normalize(data: unknown, number: string): FlightLeg | null {
 }
 
 /**
- * Look up a flight by number + date through AeroDataBox. Returns { available:false } when no key is
- * configured; { available:true, leg } on a hit (with live status + delay); { available:true, leg:null }
- * when the provider is wired but no flight matched. NEVER throws. No auth — callers add their own gate.
- * Records the response's RapidAPI quota headers into the shared quota state on the way through.
+ * Look up a flight by number + date — the single accessor the sweep + manual lookup call. PROVIDER
+ * ORDER: FlightAware AeroAPI first (it carries the live estimated/actual times, so it catches real
+ * delays the AeroDataBox free tier returns as "Basic"/on-time). When FlightAware is CONFIGURED it is
+ * authoritative — AeroDataBox is not consulted at all (it's a pure no-key fallback now). NEVER throws.
  */
 export async function fetchFlight(rawNumber: string, rawDate: string): Promise<FlightFetchResult> {
+  const { fetchFlightAware } = await import('@/lib/integrations/flightaware');
+  const fa = await fetchFlightAware(rawNumber, rawDate);
+  if (fa.available) return fa; // FlightAware keyed → authoritative (incl. leg:null = it looked, no match)
+  return fetchFlightAeroDataBox(rawNumber, rawDate);
+}
+
+/**
+ * AeroDataBox lookup (the legacy/free fallback — schedule-only on the free tier, so it misses delays).
+ * Only reached when FlightAware has no key. Records the RapidAPI quota headers for the sweep's governor.
+ */
+export async function fetchFlightAeroDataBox(rawNumber: string, rawDate: string): Promise<FlightFetchResult> {
   const key = await flightApiKey();
   if (!key) return { available: false };
 

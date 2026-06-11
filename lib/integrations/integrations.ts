@@ -24,6 +24,11 @@ async function flightApiKey(): Promise<string> {
   return getIntegrationKey('flightKey');
 }
 
+/** The FlightAware AeroAPI key — the PRIMARY flight-status source (live delays). */
+async function flightAwareKey(): Promise<string> {
+  return getIntegrationKey('flightAwareKey');
+}
+
 /**
  * The optional-integration availability flags the editor (a Server Component → client island) needs.
  * Mirrors the `auth.flightLookup` / Maps-key advertisement in /eit-status.json: the client learns
@@ -38,11 +43,13 @@ export interface IntegrationStatus {
 }
 
 export async function integrationStatus(): Promise<IntegrationStatus> {
-  const [g, f] = await Promise.all([googleApiKey(), flightApiKey()]);
+  const [g, f, fa] = await Promise.all([googleApiKey(), flightApiKey(), flightAwareKey()]);
   return {
     placesAvailable: g.length > 0,
-    flightLookupAvailable: f.length > 0,
+    // Flight lookup is wired when EITHER provider has a key (FlightAware is preferred; AeroDataBox is
+    // the free fallback). The auto-refresh sweep also no-ops only when BOTH are unconfigured.
+    flightLookupAvailable: f.length > 0 || fa.length > 0,
   };
 }
 
-export { googleApiKey, flightApiKey };
+export { googleApiKey, flightApiKey, flightAwareKey };

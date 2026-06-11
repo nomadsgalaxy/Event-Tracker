@@ -42,6 +42,7 @@ export type IntegrationKeyName =
   | 'googleApiKey' // Maps / Places / Geocoding (shared Google key)
   | 'weatherKey' // Google Weather API (often the same Google key)
   | 'flightKey' // AeroDataBox / RapidAPI flight lookup
+  | 'flightAwareKey' // FlightAware AeroAPI (live delays — the primary flight-status source)
   | 'easypostKey' // EasyPost shipment tracking (parcel + LTL)
   | 'track17Key' // 17TRACK free-tier fallback
   | 'aftershipKey'; // AfterShip aggregator (UniShippers/LTL)
@@ -54,6 +55,7 @@ const ENV_FALLBACK: Record<IntegrationKeyName, string[]> = {
   googleApiKey: ['GOOGLE_PLACES_API_KEY', 'GOOGLE_API_KEY'],
   weatherKey: ['GOOGLE_WEATHER_API_KEY', 'GOOGLE_API_KEY'],
   flightKey: ['AERODATABOX_API_KEY', 'FLIGHT_API_KEY', 'FLIGHT_RAPIDAPI_KEY', 'RAPIDAPI_KEY'],
+  flightAwareKey: ['FLIGHTAWARE_API_KEY', 'AEROAPI_KEY'],
   easypostKey: ['EASYPOST_API_KEY'],
   track17Key: ['SEVENTEENTRACK_API_KEY', 'TRACK17_API_KEY'],
   aftershipKey: ['AFTERSHIP_API_KEY'],
@@ -208,6 +210,7 @@ interface AppConfigDoc {
   _id: string;
   googleApiKey?: string; // plaintext (Maps / Places / Weather)
   flightKeyEnc?: string; // enc_secret blob (AeroDataBox)
+  flightAwareKeyEnc?: string; // enc_secret blob (FlightAware AeroAPI)
   shipKeyEnc?: string; // enc_secret blob (EasyPost)
   aftershipKeyEnc?: string; // enc_secret blob (AfterShip)
 }
@@ -280,6 +283,8 @@ function appConfigKey(name: IntegrationKeyName, doc: AppConfigDoc | null): strin
       return String(doc.googleApiKey || '').trim();
     case 'flightKey':
       return decAppConfigSecret(doc.flightKeyEnc) || '';
+    case 'flightAwareKey':
+      return decAppConfigSecret(doc.flightAwareKeyEnc) || '';
     case 'easypostKey':
       return decAppConfigSecret(doc.shipKeyEnc) || '';
     case 'aftershipKey':

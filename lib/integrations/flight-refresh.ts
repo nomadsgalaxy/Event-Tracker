@@ -1,7 +1,7 @@
 import 'server-only';
 import { type Filter } from 'mongodb';
 import { getDb, NOT_DELETED } from '@/lib/db/mongo';
-import { flightApiKey } from '@/lib/integrations/integrations';
+import { flightApiKey, flightAwareKey } from '@/lib/integrations/integrations';
 import { fetchFlight, getFlightQuota, type FlightLeg } from '@/lib/integrations/flight';
 import { createFlightAlert } from '@/lib/views/notifications';
 import type { EventDoc, EventPayload, TravelLeg } from '@/lib/types/types';
@@ -96,8 +96,9 @@ export interface FlightRefreshResult {
 }
 
 export async function runFlightRefresh(opts: { now?: number; maxCalls?: number } = {}): Promise<FlightRefreshResult> {
-  const key = await flightApiKey();
-  if (!key) return { checked: 0, updated: 0, alerts: 0, calls: 0, reason: 'no-key' };
+  // Run when EITHER provider is keyed (FlightAware is primary; AeroDataBox the legacy fallback).
+  const [faKey, adbKey] = await Promise.all([flightAwareKey(), flightApiKey()]);
+  if (!faKey && !adbKey) return { checked: 0, updated: 0, alerts: 0, calls: 0, reason: 'no-key' };
 
   const now = opts.now ?? Date.now();
   const maxCalls = opts.maxCalls ?? MAX_CALLS;

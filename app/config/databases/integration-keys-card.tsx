@@ -21,7 +21,7 @@ import { IS_DEMO, DEMO_LOCK_NOTE } from '@/lib/util/demo-flag';
 // and the keys apply for EVERYONE (env || store resolution in lib/weather, lib/integrations,
 // flight-actions). Mirrors the Python IntegrationKeysCard, adapted to the keys this app actually uses.
 
-export type KeyName = 'googleApiKey' | 'weatherKey' | 'flightKey' | 'easypostKey' | 'track17Key' | 'aftershipKey';
+export type KeyName = 'googleApiKey' | 'weatherKey' | 'flightKey' | 'flightAwareKey' | 'easypostKey' | 'track17Key' | 'aftershipKey';
 
 export interface KeyStatus {
   name: KeyName;
@@ -62,14 +62,14 @@ const GROUPS: KeyGroup[] = [
     ],
   },
   {
-    title: 'Flight lookup',
+    title: 'Flight lookup & delay alerts',
     defaultOpen: false,
     keys: [
       {
-        name: 'flightKey',
-        label: 'AeroDataBox / RapidAPI key',
-        hint: 'Auto-fills carrier + times from a flight number in the travel form. Proxied server-side — never sent to a browser. The free AeroDataBox tier is enough.',
-        placeholder: 'msh… (x-rapidapi-key)',
+        name: 'flightAwareKey',
+        label: 'FlightAware AeroAPI key — live status & delays',
+        hint: 'The primary flight source: real estimated/actual times, so delays and cancellations are detected (the free AeroDataBox tier only returns schedules and misses them). Get a key at flightaware.com/aeroapi — the personal tier includes a free monthly credit. Proxied server-side — never sent to a browser.',
+        placeholder: 'your AeroAPI key (x-apikey)',
       },
     ],
   },
