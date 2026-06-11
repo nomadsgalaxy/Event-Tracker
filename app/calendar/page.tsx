@@ -24,16 +24,16 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ month?: string; view?: string }>;
 }) {
-  // Parallel: the live read + the auth gate. requireUser redirects before render if signed out.
-  const [calData, user, params] = await Promise.all([
-    getCalendarData(),
-    requireUser(),
-    searchParams,
-  ]);
-  const { events, tags } = calData;
-
+  // Auth gate first (redirects before render if signed out), then the live read — the read needs the
+  // viewer's role to decide whether flight-status (travel PII) markers are computed for the ribbon.
+  const [user, params] = await Promise.all([requireUser(), searchParams]);
   // event.create is manager+ in the seeded matrix; gate the "New event" affordance on the live role.
   const canCreate = can('event.create', user.role);
+  // Flight-delay markers on the travel ribbon are travel PII — manager+ only (can() with no ctx is the
+  // flat role check). The leg blobs never reach the client; only the rolled-up status flag does.
+  const canViewTravelPII = can('staff.pii.view', user.role);
+  const calData = await getCalendarData(canViewTravelPII);
+  const { events, tags } = calData;
 
   // Resolve the initial month from ?month=YYYY-MM, falling back to the current month on anything
   // missing/malformed (parseMonthKey returns null → fail to "now", never throw). The initial VIEW

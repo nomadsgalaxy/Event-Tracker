@@ -166,16 +166,24 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                 ) : null}
                 {travelers.length > 0 ? (
                   <div className="mt-1.5 flex flex-wrap gap-0.5">
-                    {travelers.map((t, ti) => (
-                      <span
-                        key={ti}
-                        title={`${t.staff.name || t.staff.email} traveling for ${t.event.name}`}
-                        className="inline-flex cursor-help items-center rounded-[2px] px-1 text-[8px] font-bold leading-3 text-white"
-                        style={{ background: 'var(--st-upcoming)' }}
-                      >
-                        ✈ {initialsOf(t.staff)}
-                      </span>
-                    ))}
+                    {travelers.map((t, ti) => {
+                      const alert = t.staff.flightAlert;
+                      const bg = alert === 'cancelled' ? 'var(--destructive)' : alert === 'delayed' ? 'var(--st-packing)' : 'var(--st-upcoming)';
+                      const who = t.staff.name || t.staff.email;
+                      const title = alert
+                        ? `${who}: flight ${alert} — ${t.event.name}`
+                        : `${who} traveling for ${t.event.name}`;
+                      return (
+                        <span
+                          key={ti}
+                          title={title}
+                          className="inline-flex cursor-help items-center gap-0.5 rounded-[2px] px-1 text-[8px] font-bold leading-3 text-white"
+                          style={{ background: bg }}
+                        >
+                          {alert ? '⚠' : '✈'} {initialsOf(t.staff)}
+                        </span>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

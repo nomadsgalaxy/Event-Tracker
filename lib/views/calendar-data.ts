@@ -56,7 +56,16 @@ export interface CalendarData {
  * the default config this stays a single events+tags read and the chips render nothing (matching the
  * Python with no key). Once a key lands, the parse path is already 1:1 and the chips light up.
  */
-export async function getCalendarData(): Promise<CalendarData> {
+// A flight leg counts toward the ribbon's alert when its last-known status is a hard problem. 'diverted'
+// rolls up with 'cancelled' (both = the plan broke); 'delayed' is the softer amber marker.
+function legAlert(leg: unknown): 'delayed' | 'cancelled' | null {
+  const st = String((leg as { status?: unknown })?.status ?? '');
+  if (st === 'cancelled' || st === 'diverted') return 'cancelled';
+  if (st === 'delayed') return 'delayed';
+  return null;
+}
+
+export async function getCalendarData(canViewPII = false): Promise<CalendarData> {
   const [eventDocs, tagDocs] = await Promise.all([getEvents(), getTags()]);
 
   // Visible tag directory (hidden tags can be applied but never render a chip — same as the Python's
@@ -89,17 +98,32 @@ export async function getCalendarData(): Promise<CalendarData> {
       // Staff onsite ranges for the ✈ travel ribbon (Week header). Carry only the fields the
       // ribbon needs (name/email + onsite range + legacy travelDays) — NOT the PII hotel/travel
       // blobs, which the calendar never shows.
-      const staff = (Array.isArray(p.staff) ? p.staff : []).map((m) => ({
-        name: typeof m?.name === 'string' ? m.name : '',
-        email: typeof m?.email === 'string' ? m.email : '',
-        onsiteStart: typeof m?.onsiteStart === 'string' ? m.onsiteStart : undefined,
-        onsiteEnd: typeof m?.onsiteEnd === 'string' ? m.onsiteEnd : undefined,
-        travelDays: Array.isArray((m as { travelDays?: unknown })?.travelDays)
-          ? ((m as { travelDays?: unknown[] }).travelDays!.filter(
-              (d): d is string => typeof d === 'string',
-            ))
-          : undefined,
-      }));
+      const staff = (Array.isArray(p.staff) ? p.staff : []).map((m) => {
+        // Flight status is travel PII — only computed for manager+ viewers (canViewPII). The leg blobs
+        // themselves never cross the wire; only the worst rolled-up status flag does.
+        let flightAlert: 'delayed' | 'cancelled' | undefined;
+        if (canViewPII) {
+          const t = (m as { travel?: { mode?: string; outbound?: unknown; return?: unknown } })?.travel;
+          if (t && t.mode === 'flight') {
+            const a = legAlert(t.outbound);
+            const b = legAlert(t.return);
+            if (a === 'cancelled' || b === 'cancelled') flightAlert = 'cancelled';
+            else if (a === 'delayed' || b === 'delayed') flightAlert = 'delayed';
+          }
+        }
+        return {
+          name: typeof m?.name === 'string' ? m.name : '',
+          email: typeof m?.email === 'string' ? m.email : '',
+          onsiteStart: typeof m?.onsiteStart === 'string' ? m.onsiteStart : undefined,
+          onsiteEnd: typeof m?.onsiteEnd === 'string' ? m.onsiteEnd : undefined,
+          travelDays: Array.isArray((m as { travelDays?: unknown })?.travelDays)
+            ? ((m as { travelDays?: unknown[] }).travelDays!.filter(
+                (d): d is string => typeof d === 'string',
+              ))
+            : undefined,
+          ...(flightAlert ? { flightAlert } : {}),
+        };
+      });
 
       // Per-venue forecast window (null/{} until the weather key is wired). The whole 10-day window
       // is fetched once per coord pair and the views index it by day key.

@@ -87,6 +87,9 @@ export interface CalStaffer {
   onsiteStart?: string;
   onsiteEnd?: string;
   travelDays?: string[];
+  /** Worst flight status across this staffer's legs — only set for PII-authorized viewers (manager+).
+   *  Drives the travel ribbon's delay/cancel marker. Absent = on time / no flight / not authorized. */
+  flightAlert?: 'delayed' | 'cancelled';
 }
 
 /** The shipping leg the calendar reads for pickup/return markers (index.html buildSegmentIndex). */

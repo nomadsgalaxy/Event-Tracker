@@ -60,8 +60,10 @@ export async function register(): Promise<void> {
       console.warn('[flight-refresh] sweep failed:', e instanceof Error ? e.message : e);
     }
   };
-  // First sweep ~2 min after boot (let the app settle), then hourly. The per-leg cadence inside the
-  // sweep (day-before ~12h / day-of ~3h) does the real throttling, so an hourly tick is cheap.
+  // First sweep ~2 min after boot (let the app settle), then every 20 min. The per-leg cadence inside
+  // the sweep (day-before ~12h / day-of ~3h / final-approach ~24min) does the real throttling, so a
+  // frequent tick is cheap — it just lets a near-departure flight be re-polled often enough to catch a
+  // last-hour delay; the budget governor still caps non-imminent spend.
   setTimeout(() => void sweep(), 2 * 60_000);
-  setInterval(() => void sweep(), 60 * 60_000);
+  setInterval(() => void sweep(), 20 * 60_000);
 }

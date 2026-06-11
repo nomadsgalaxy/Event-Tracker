@@ -30,8 +30,11 @@ const WINDOW_AHEAD_H = 36; // start polling ~a day and a half out (covers "the d
 const WINDOW_BEHIND_H = 6; // keep polling a few hours past departure (catch a late delay) — when departUtc known
 const WINDOW_BEHIND_UNKNOWN_H = 18; // wider behind-window until the first lookup stamps departUtc (absorb tz skew)
 const DAYOF_H = 12; // within this many hours of departure = "day of" cadence
+const FINAL_WINDOW_H = 3; // within this many hours of departure = "final approach" — delays surface here
 const RECHECK_DAYBEFORE_H = 12; // day-before: re-poll at most every 12h (≈ twice)
 const RECHECK_DAYOF_H = 3; // day-of: re-poll every ~3h (when quota allows)
+const RECHECK_FINAL_H = 0.4; // final window: re-poll ~every 24min so a late delay is caught before wheels-up
+const MAX_IMMINENT_PER_SWEEP = 4; // cap the per-sweep burst on imminent flights (reserve + hard stop still apply)
 const NOTIFY_MIN = 15; // alert when delayed ≥ this, or the delay GROWS by ≥ this
 const MAX_CALLS = 60; // hard per-sweep backstop (the governor is the real limiter)
 const RESERVE_UNITS = 30; // never auto-spend the budget below this (leaves room for manual lookups)
@@ -81,6 +84,7 @@ interface DueLeg {
   number: string;
   date: string; // YYYY-MM-DD — the IMMUTABLE flightDate (else the leg's current departAt date)
   depMs: number; // best available departure instant (departUtc when known) — for window + urgency sort
+  imminent: boolean; // within FINAL_WINDOW_H of departure — checked aggressively (bypasses the budget pace)
 }
 
 export interface FlightRefreshResult {
@@ -127,7 +131,10 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
         const behindH = hasUtc ? WINDOW_BEHIND_H : WINDOW_BEHIND_UNKNOWN_H;
         if (hToDep > WINDOW_AHEAD_H || hToDep < -behindH) continue;
         const last = Number(leg.lastCheckedAt ?? 0);
-        const recheckH = hToDep <= DAYOF_H ? RECHECK_DAYOF_H : RECHECK_DAYBEFORE_H;
+        // Three cadences: sparse day-before, moderate day-of, tight in the final approach (where a
+        // delay actually surfaces). "imminent" legs are exempt from the slow monthly budget pace below.
+        const imminent = hToDep <= FINAL_WINDOW_H;
+        const recheckH = imminent ? RECHECK_FINAL_H : hToDep <= DAYOF_H ? RECHECK_DAYOF_H : RECHECK_DAYBEFORE_H;
         if (last && now - last < recheckH * 3_600_000) continue;
         due.push({
           eventId: ev._id,
@@ -140,6 +147,7 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
           number,
           date: String(leg.flightDate || departAt.slice(0, 10)),
           depMs,
+          imminent,
         });
       }
     });
@@ -155,15 +163,26 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
   let updated = 0;
   let alerts = 0;
   let calls = 0;
+  let imminentCalls = 0; // per-sweep burst counter for near-departure flights
 
   for (const d of due) {
     const ck = `${d.number}|${d.date}`;
     const cached = cache.has(ck);
     if (!cached) {
       if (calls >= maxCalls) break; // hard backstop
-      const interval = minCallIntervalMs(now);
-      if (!Number.isFinite(interval)) break; // budget exhausted → stop until reset
-      if (_lastCallAt && now - _lastCallAt < interval) break; // paced; due is urgency-sorted so the rest wait
+      // The reserve floor + monthly exhaustion are HARD stops for everyone (leaves room for manual
+      // lookups; never overspends the budget). Imminent flights bypass the SLOW monthly pace below so a
+      // last-hour delay is actually caught — capped per sweep, and still inside the reserve floor.
+      const q = getFlightQuota();
+      if (q && q.remaining - RESERVE_UNITS <= 0) break; // reserve reached → stop spending
+      if (d.imminent) {
+        if (imminentCalls >= MAX_IMMINENT_PER_SWEEP) continue; // burst cap — skip extra imminent legs this sweep
+        imminentCalls++;
+      } else {
+        const interval = minCallIntervalMs(now);
+        if (!Number.isFinite(interval)) break; // budget exhausted → stop until reset
+        if (_lastCallAt && now - _lastCallAt < interval) break; // paced; due is urgency-sorted so the rest wait
+      }
     }
     checked++;
 
