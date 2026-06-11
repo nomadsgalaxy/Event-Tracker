@@ -457,10 +457,16 @@ function AccommodationsBlock({ acc }: { acc: AccommodationsProfile }) {
   const dietary = Array.isArray(acc.dietary) ? acc.dietary : [];
   const accessibility = Array.isArray(acc.accessibility) ? acc.accessibility : [];
   const allergies = acc.allergies && acc.allergies.text ? acc.allergies : null;
-  const contacts = [
-    ...(acc.emergencyContact ? [acc.emergencyContact] : []),
-    ...(Array.isArray(acc.emergencyContacts) ? acc.emergencyContacts : []),
-  ].filter((c) => c && (c.name || c.phone));
+  // The legacy singular `emergencyContact` is a MIRROR of contacts[0] (the writers stamp both), so
+  // concatenating it with the array duplicates the first contact. Array wins; singular is only the
+  // fallback for a record written before the array existed (same rule as normEmergencyContacts).
+  const contacts = (
+    Array.isArray(acc.emergencyContacts) && acc.emergencyContacts.length > 0
+      ? acc.emergencyContacts
+      : acc.emergencyContact
+        ? [acc.emergencyContact]
+        : []
+  ).filter((c) => c && (c.name || c.phone));
   const hasAny =
     dietary.length || accessibility.length || allergies || acc.medical || acc.notes || contacts.length;
   if (!hasAny) return null;
