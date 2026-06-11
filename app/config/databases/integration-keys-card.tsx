@@ -21,7 +21,15 @@ import { IS_DEMO, DEMO_LOCK_NOTE } from '@/lib/util/demo-flag';
 // and the keys apply for EVERYONE (env || store resolution in lib/weather, lib/integrations,
 // flight-actions). Mirrors the Python IntegrationKeysCard, adapted to the keys this app actually uses.
 
-export type KeyName = 'googleApiKey' | 'weatherKey' | 'flightKey' | 'flightAwareKey' | 'easypostKey' | 'track17Key' | 'aftershipKey';
+export type KeyName =
+  | 'googleApiKey'
+  | 'weatherKey'
+  | 'flightAwareKey'
+  | 'openskyClientId'
+  | 'openskyClientSecret'
+  | 'easypostKey'
+  | 'track17Key'
+  | 'aftershipKey';
 
 export interface KeyStatus {
   name: KeyName;
@@ -62,14 +70,26 @@ const GROUPS: KeyGroup[] = [
     ],
   },
   {
-    title: 'Flight lookup & delay alerts',
+    title: 'Flights — lookup, delay alerts & live progress',
     defaultOpen: false,
     keys: [
       {
         name: 'flightAwareKey',
         label: 'FlightAware AeroAPI key — live status & delays',
-        hint: 'The primary flight source: real estimated/actual times, so delays and cancellations are detected (the free AeroDataBox tier only returns schedules and misses them). Get a key at flightaware.com/aeroapi — the personal tier includes a free monthly credit. Proxied server-side — never sent to a browser.',
+        hint: 'The flight-status source: real estimated/actual times, so delays and cancellations are detected and alerted. Get a key at flightaware.com/aeroapi — the personal tier includes a free monthly credit. Proxied server-side — never sent to a browser.',
         placeholder: 'your AeroAPI key (x-apikey)',
+      },
+      {
+        name: 'openskyClientId',
+        label: 'OpenSky Network client ID — live flight progress',
+        hint: 'Powers the live in-air progress on a traveler’s flight (position, altitude, speed). Create a free API client at opensky-network.org (account → API clients); enter its client ID here and the secret below.',
+        placeholder: 'your-opensky-api-client',
+      },
+      {
+        name: 'openskyClientSecret',
+        label: 'OpenSky Network client secret',
+        hint: 'The OAuth2 secret that pairs with the client ID above. Used server-side only.',
+        placeholder: 'client secret',
       },
     ],
   },

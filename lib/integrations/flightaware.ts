@@ -8,16 +8,33 @@ const DELAY_BADGE_MIN = 5;
 
 // lib/integrations/flightaware.ts — FlightAware AeroAPI flight-status adapter.
 //
-// AeroDataBox's free tier returns schedule-only ("Basic") data, so it misses real airline delays.
 // FlightAware AeroAPI carries the live estimated/actual times — a 37-min delay on AA1691 shows as
-// estimated_out 37 min past scheduled_out. This adapter fetches by ident, picks the instance matching
-// the requested LOCAL date, and normalizes to the SAME FlightLeg shape the AeroDataBox path returns,
-// so the rest of the app (the auto-refresh sweep, the manual lookup) is provider-agnostic.
+// estimated_out 37 min past scheduled_out (the replaced AeroDataBox free tier returned schedule-only
+// "Basic" data and missed it). This adapter fetches by ident, picks the instance matching the
+// requested LOCAL date, and normalizes to the shared FlightLeg shape, so the rest of the app (the
+// auto-refresh sweep, the manual lookup) is provider-agnostic.
 //
 // AeroAPI accepts the IATA ident directly (AA1691 resolves to AAL1691) and returns the origin/dest
 // IANA timezones, which we use to render the stored datetime-local wall-clock + match the date.
 
 const FA_HOST = (process.env.FLIGHTAWARE_API_HOST || 'aeroapi.flightaware.com').trim();
+
+// ADAPTER-LEVEL spend backstop, covering EVERY caller (the sweep has its own tighter cap; this one
+// also bounds the editor's manual "Look up flight" action so a scripted/spammed caller can't drain
+// the monthly AeroAPI credit (~$5 ≈ 1000 calls) in a burst. ~80/day ≈ within budget even if maxed.
+const FA_DAILY_CAP = 80;
+let _faDayKey = '';
+let _faCallsToday = 0;
+function spendFaCall(now: number): boolean {
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (day !== _faDayKey) {
+    _faDayKey = day;
+    _faCallsToday = 0;
+  }
+  if (_faCallsToday >= FA_DAILY_CAP) return false;
+  _faCallsToday++;
+  return true;
+}
 
 interface FaTime {
   scheduled?: string;
@@ -95,6 +112,11 @@ function normalize(f: FaFlight, number: string): FlightLeg {
   else if (f.actual_out) status = 'departed';
   else status = delayMin >= DELAY_BADGE_MIN ? 'delayed' : 'on_time';
 
+  const parseUtc = (s: string | undefined): number | null => {
+    const ms = Date.parse(String(s ?? ''));
+    return Number.isNaN(ms) ? null : ms;
+  };
+
   return {
     carrier: f.operator_iata || f.operator || '',
     number,
@@ -107,13 +129,18 @@ function normalize(f: FaFlight, number: string): FlightLeg {
     status,
     delayMin,
     scheduledDate: localStamp(f.scheduled_out, originTz).slice(0, 10),
-    departUtc: Number.isNaN(Date.parse(String(f.scheduled_out ?? ''))) ? null : Date.parse(String(f.scheduled_out)),
+    departUtc: parseUtc(f.scheduled_out),
+    // Live-progress anchors: the ICAO ident is the OpenSky callsign; the best actual/estimated
+    // instants bound the time-based progress bar.
+    identIcao: String(f.ident || '').trim().toUpperCase(),
+    departActualUtc: parseUtc(f.actual_out || f.estimated_out),
+    arriveEstUtc: parseUtc(f.actual_in || f.estimated_in || f.scheduled_in),
   };
 }
 
 /**
  * Look up a flight by number + date through FlightAware AeroAPI. Returns { available:false } when no
- * key is configured (so the caller falls back to AeroDataBox); { available:true, leg } on a date match;
+ * key is configured (the caller degrades to manual entry); { available:true, leg } on a date match;
  * { available:true, leg:null } when the provider is wired but no instance matched the date. Never throws.
  */
 export async function fetchFlightAware(rawNumber: string, rawDate: string): Promise<FlightFetchResult> {
@@ -123,6 +150,9 @@ export async function fetchFlightAware(rawNumber: string, rawDate: string): Prom
   const number = String(rawNumber || '').trim().toUpperCase().replace(/\s+/g, '');
   const date = String(rawDate || '').trim().slice(0, 10);
   if (!number || !date) return { available: true, leg: null, error: 'Need a flight number and a date.' };
+  if (!spendFaCall(Date.now())) {
+    return { available: true, leg: null, error: 'Daily flight-lookup budget reached — try again tomorrow.' };
+  }
 
   const url = `https://${FA_HOST}/aeroapi/flights/${encodeURIComponent(number)}`;
   try {

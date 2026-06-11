@@ -49,6 +49,7 @@ import type { EventDetailView, StaffCardView } from '@/lib/types/types-event-det
 import { toast } from 'sonner';
 import { deleteEventAction, markEventOnsiteAction } from '@/app/event/actions';
 import { requestTravelInfoAction } from '@/app/notifications/actions';
+import { FlightProgress } from '@/components/events/flight-progress';
 
 // app/event/[id]/event-detail-tabs.tsx — the CLIENT shell for the Event DETAIL view.
 //
@@ -413,18 +414,18 @@ function HotelBlock({ hotel }: { hotel: HotelInfo }) {
   );
 }
 
-function TravelBlock({ travel }: { travel: TravelInfo }) {
+function TravelBlock({ travel, eventId, staffEmail }: { travel: TravelInfo; eventId: string; staffEmail: string }) {
   if (!travel || !(travel.outbound || travel.return)) return null;
-  const modeLabel =
-    travel.mode === 'flight'
-      ? 'Flight'
-      : travel.mode === 'train'
-        ? 'Train'
-        : travel.mode === 'drive'
-          ? 'Drive'
-          : 'Travel';
+  const isFlight = travel.mode === 'flight';
+  const modeLabel = isFlight ? 'Flight' : travel.mode === 'train' ? 'Train' : travel.mode === 'drive' ? 'Drive' : 'Travel';
   const out = legSummary(travel.outbound);
   const ret = legSummary(travel.return);
+  // Live in-air progress (OpenSky) — only meaningful for flight legs with a number; the widget
+  // self-gates to the enroute window and renders nothing otherwise.
+  const progress = (legKey: 'outbound' | 'return', leg: TravelLeg | undefined) =>
+    isFlight && leg?.number && staffEmail ? (
+      <FlightProgress eventId={eventId} staffEmail={staffEmail} legKey={legKey} leg={leg} />
+    ) : null;
   return (
     <div className="flex flex-col gap-1 pl-9 text-xs text-muted-foreground">
       <div className="flex items-start gap-2">
@@ -438,12 +439,14 @@ function TravelBlock({ travel }: { travel: TravelInfo }) {
         <div className="pl-[22px]">
           <span className="text-muted-foreground/80">Out: </span>
           {out}
+          {progress('outbound', travel.outbound)}
         </div>
       )}
       {ret && (
         <div className="pl-[22px]">
           <span className="text-muted-foreground/80">Return: </span>
           {ret}
+          {progress('return', travel.return)}
         </div>
       )}
     </div>
@@ -648,7 +651,7 @@ function StaffCard({
         </p>
       )}
       {s.hotel && (s.hotel.name || s.hotel.address || s.hotel.room) && <HotelBlock hotel={s.hotel} />}
-      {s.travel && <TravelBlock travel={s.travel} />}
+      {s.travel && <TravelBlock travel={s.travel} eventId={eventId} staffEmail={s.email || ''} />}
       {s.accommodations && <AccommodationsBlock acc={s.accommodations} />}
       {s.canRequest && (
         <RequestTravelButton eventId={eventId} subjectEmail={s.email} subjectName={s.name || s.email} />

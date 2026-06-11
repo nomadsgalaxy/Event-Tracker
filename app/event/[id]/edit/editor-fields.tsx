@@ -1271,7 +1271,7 @@ function TravelLeg({
         )}
         {isFlight && !flightLookupAvailable && (
           <span className="text-[10px] text-muted-foreground" title="No flight-lookup key configured">
-            Set AERODATABOX_API_KEY to auto-fill flights
+            Set a FlightAware AeroAPI key to auto-fill flights
           </span>
         )}
       </div>

@@ -4,7 +4,7 @@ import { getIntegrationKey } from '@/lib/auth/settings-store';
 // lib/integrations/integrations.ts — server-side "is this keyed provider wired?" probes.
 //
 // Faithful to the Python /eit-status.json model (index.html ~L8746): the server advertises which
-// optional, KEYED integrations are configured (Google Places/Maps, the AeroDataBox flight lookup)
+// optional, KEYED integrations are configured (Google Places/Maps, the FlightAware flight lookup)
 // WITHOUT ever shipping the key to the browser. The Next.js port mirrors that: the editor page is a
 // Server Component, so it reads these booleans server-side and threads them to the client island,
 // which only ever learns "available: true/false" — never the secret.
@@ -19,14 +19,18 @@ async function googleApiKey(): Promise<string> {
   return getIntegrationKey('googleApiKey');
 }
 
-/** The AeroDataBox / RapidAPI flight-lookup key (server-side proxy; never sent to the browser). */
-async function flightApiKey(): Promise<string> {
-  return getIntegrationKey('flightKey');
-}
-
-/** The FlightAware AeroAPI key — the PRIMARY flight-status source (live delays). */
+/** The FlightAware AeroAPI key — the flight-status source (live delays). Server-side only. */
 async function flightAwareKey(): Promise<string> {
   return getIntegrationKey('flightAwareKey');
+}
+
+/** The OpenSky Network OAuth2 client credentials — live aircraft positions (flight progress). */
+async function openskyCreds(): Promise<{ clientId: string; clientSecret: string }> {
+  const [clientId, clientSecret] = await Promise.all([
+    getIntegrationKey('openskyClientId'),
+    getIntegrationKey('openskyClientSecret'),
+  ]);
+  return { clientId, clientSecret };
 }
 
 /**
@@ -38,18 +42,16 @@ async function flightAwareKey(): Promise<string> {
 export interface IntegrationStatus {
   /** Google Places autocomplete is wired (a Google API key is configured). */
   placesAvailable: boolean;
-  /** Flight lookup is wired (the AeroDataBox/RapidAPI key is configured, used server-side). */
+  /** Flight lookup is wired (the FlightAware AeroAPI key is configured, used server-side). */
   flightLookupAvailable: boolean;
 }
 
 export async function integrationStatus(): Promise<IntegrationStatus> {
-  const [g, f, fa] = await Promise.all([googleApiKey(), flightApiKey(), flightAwareKey()]);
+  const [g, fa] = await Promise.all([googleApiKey(), flightAwareKey()]);
   return {
     placesAvailable: g.length > 0,
-    // Flight lookup is wired when EITHER provider has a key (FlightAware is preferred; AeroDataBox is
-    // the free fallback). The auto-refresh sweep also no-ops only when BOTH are unconfigured.
-    flightLookupAvailable: f.length > 0 || fa.length > 0,
+    flightLookupAvailable: fa.length > 0,
   };
 }
 
-export { googleApiKey, flightApiKey, flightAwareKey };
+export { googleApiKey, flightAwareKey, openskyCreds };

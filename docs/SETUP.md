@@ -91,8 +91,8 @@ the UI without a redeploy, and env always overrides.
 | `GOOGLE_API_KEY` (or `GOOGLE_PLACES_API_KEY`) | Address autocomplete / Places (server side). |
 | `GOOGLE_API_KEY` (or `GOOGLE_WEATHER_API_KEY`) | Venue weather forecast. |
 | `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY` | **build-time**, optional browser Places key (referrer-restricted). |
-| `AERODATABOX_API_KEY` (or `FLIGHT_API_KEY`, `FLIGHT_RAPIDAPI_KEY`, `RAPIDAPI_KEY`) | Flight lookup (AeroDataBox/RapidAPI). |
-| `AERODATABOX_API_HOST` | RapidAPI host (default `aerodatabox.p.rapidapi.com`). |
+| `FLIGHTAWARE_API_KEY` (or `AEROAPI_KEY`) | Flight lookup + delay alerts (FlightAware AeroAPI). |
+| `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET` | OpenSky Network API client (live flight progress). |
 | `EASYPOST_API_KEY` | EasyPost shipment tracking. |
 | `AFTERSHIP_API_KEY` | AfterShip / UniShippers tracking. |
 | `SEVENTEENTRACK_API_KEY` (or `TRACK17_API_KEY`) | 17TRACK free-tier tracking. |
@@ -189,7 +189,7 @@ still scans on the `/scan` screen.
 ## Integration keys
 
 For a from-scratch, click-by-click walkthrough of each provider (creating the Google key + which APIs
-to enable, AeroDataBox, the shipment trackers) see **[API_KEYS.md](API_KEYS.md)**. The short version:
+to enable, FlightAware/OpenSky, the shipment trackers) see **[API_KEYS.md](API_KEYS.md)**. The short version:
 
 Optional keys (Places, weather, flight lookup, shipment tracking) can be set two ways:
 

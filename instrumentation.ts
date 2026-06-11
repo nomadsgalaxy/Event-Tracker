@@ -3,9 +3,9 @@
 // Node runtime only (Mongo isn't reachable from the Edge). Two background jobs, by mode:
 //   • DEMO MODE: seed the read-only demo_seed DB (once) + a periodic GC of idle per-visitor sandbox
 //     databases (lib/demo.gcDemoSandboxes) so visitor churn can't grow Mongo unbounded.
-//   • PROD: the flight auto-refresh sweep (lib/integrations/flight-refresh) — re-polls AeroDataBox for
-//     flights departing within the day-before/day-of window and tracks delays. It no-ops until an
-//     AeroDataBox key is configured; kill switch: EIT_FLIGHT_REFRESH=0.
+//   • PROD: the flight auto-refresh sweep (lib/integrations/flight-refresh) — re-polls FlightAware for
+//     flights departing within the day-before/day-of window and tracks delays. It no-ops until a
+//     FlightAware AeroAPI key is configured; kill switch: EIT_FLIGHT_REFRESH=0.
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
@@ -63,7 +63,7 @@ export async function register(): Promise<void> {
   // First sweep ~2 min after boot (let the app settle), then every 20 min. The per-leg cadence inside
   // the sweep (day-before ~12h / day-of ~3h / final-approach ~24min) does the real throttling, so a
   // frequent tick is cheap — it just lets a near-departure flight be re-polled often enough to catch a
-  // last-hour delay; the budget governor still caps non-imminent spend.
+  // last-hour delay; a daily call cap in the sweep backstops total spend.
   setTimeout(() => void sweep(), 2 * 60_000);
   setInterval(() => void sweep(), 20 * 60_000);
 }

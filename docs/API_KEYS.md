@@ -6,7 +6,7 @@ weather and flight lookup hide, etc.). This guide walks you through each one fro
 
 - [How keys are stored](#how-keys-are-stored)
 - [Google: address autocomplete + venue weather](#google-address-autocomplete--venue-weather)
-- [Flight lookup (AeroDataBox)](#flight-lookup-aerodatabox)
+- [Flights (FlightAware + OpenSky)](#flights-flightaware--opensky)
 - [Shipment tracking (EasyPost / AfterShip / 17TRACK)](#shipment-tracking)
 - [Troubleshooting](#troubleshooting)
 - [Security notes](#security-notes)
@@ -86,17 +86,30 @@ For the strictest restriction, use two keys:
 - **Server key** - restricted by IP (or unrestricted), APIs limited to Geocoding + Weather. Provide
   it as the `GOOGLE_API_KEY` env var (or `GOOGLE_PLACES_API_KEY` / `GOOGLE_WEATHER_API_KEY`).
 
-## Flight lookup (AeroDataBox)
+## Flights (FlightAware + OpenSky)
 
-Powers the **Look up** button in an event's Team & Travel editor (flight number to carrier + times).
+Two optional providers, both server-side only (keys never reach the browser):
 
-1. Create a RapidAPI account at <https://rapidapi.com/>.
-2. Subscribe to **AeroDataBox** (it has a free tier).
-3. Copy your RapidAPI key (the `X-RapidAPI-Key` value).
-4. Paste it: **Config -> Databases & API -> Flight lookup key -> Save** (or set `AERODATABOX_API_KEY`).
+**FlightAware AeroAPI** powers the **Look up** button in an event's Team & Travel editor (flight
+number to carrier + times) AND the background delay/cancellation alerts. It carries live
+estimated/actual times, so real delays are detected.
 
-This key is used server-side only and is never sent to the browser. Without it, the Look-up button is
-inert and travel is entered manually.
+1. Create an account at <https://www.flightaware.com/aeroapi/portal/>.
+2. Generate an API key (the personal tier includes a free monthly usage credit; a payment method
+   must be on file for keys to activate).
+3. Paste it: **Config -> Databases & API -> Flights -> FlightAware AeroAPI key -> Save** (or set
+   `FLIGHTAWARE_API_KEY`).
+
+**OpenSky Network** powers the live in-air progress strip on a traveler's flight (position,
+altitude, speed). Optional - without it, status/delay tracking still works.
+
+1. Create an account at <https://opensky-network.org/> and add an **API client** under your account.
+2. Copy the client ID + secret from the downloaded credentials.
+3. Paste them: **Config -> Databases & API -> Flights -> OpenSky client ID / secret** (or set
+   `OPENSKY_CLIENT_ID` + `OPENSKY_CLIENT_SECRET`).
+
+Without a FlightAware key, the Look-up button is inert, travel is entered manually, and no delay
+alerts fire.
 
 ## Shipment tracking
 

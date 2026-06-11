@@ -1,27 +1,27 @@
 import 'server-only';
 import { type Filter } from 'mongodb';
 import { getDb, NOT_DELETED } from '@/lib/db/mongo';
-import { flightApiKey, flightAwareKey } from '@/lib/integrations/integrations';
-import { fetchFlight, getFlightQuota, type FlightLeg } from '@/lib/integrations/flight';
+import { flightAwareKey } from '@/lib/integrations/integrations';
+import { fetchFlight, type FlightLeg } from '@/lib/integrations/flight';
 import { createFlightAlert } from '@/lib/views/notifications';
 import type { EventDoc, EventPayload, TravelLeg } from '@/lib/types/types';
 
 // lib/integrations/flight-refresh.ts — the background flight auto-refresh sweep.
 //
 // Runs as the SYSTEM (no user session) on a timer (instrumentation.ts). Each sweep scans live events
-// for flight legs (mode=flight, with a number) in the day-before/day-of window, re-queries AeroDataBox
+// for flight legs (mode=flight, with a number) in the day-before/day-of window, re-queries FlightAware
 // on a per-leg cadence, updates the leg's live status/delay, and on a NEW delay/cancellation notifies
 // the event lead + the traveler.
 //
-// QUOTA GOVERNOR: AeroDataBox's free tier is api-units-capped (e.g. 600 units / ~month). fetchFlight
-// records the live `x-ratelimit-api-units-remaining/-limit/-reset` headers; this sweep reads that state
-// and PACES calls to a sustainable rate (remaining ÷ time-to-reset), keeping a reserve and stopping
-// entirely when the budget is spent — and PRIORITIZES the most imminent departures when the budget is
-// tight. Ample quota → calls flow at the full cadence; low quota → only the soonest flights, spaced out.
+// SPEND CONTROL: FlightAware AeroAPI bills per query against a monthly credit (the personal tier's
+// free allowance is ~$5 ≈ 1000 /flights calls a month). The per-leg cadences below are the real
+// limiter (a fully-tracked leg costs ~a dozen calls); a DAILY call cap is the backstop so a bug or a
+// roster explosion can never run the credit dry in a day. (The old AeroDataBox unit-budget governor
+// is gone with AeroDataBox itself.)
 //
 // Correctness guards (from the red-team): the leg is written by ARRAY INDEX with an email-at-index
 // filter (no $[s] fan-out that would clobber a duplicate-email sibling, and TOCTOU-safe); the
-// AeroDataBox query date is the IMMUTABLE flightDate (a delay across local midnight can't shift it); the
+// provider query date is the IMMUTABLE flightDate (a delay across local midnight can't shift it); the
 // window is anchored on the offset-clean departUtc (a far-timezone leg isn't dropped early); departAt/
 // arriveAt are overwritten only on a real (delay-driven) change so a hand-edited time isn't clobbered;
 // lastCheckedAt is advanced even when the data write fails so a stuck write can't re-burn the call.
@@ -32,14 +32,11 @@ const WINDOW_BEHIND_UNKNOWN_H = 18; // wider behind-window until the first looku
 const DAYOF_H = 12; // within this many hours of departure = "day of" cadence
 const FINAL_WINDOW_H = 3; // within this many hours of departure = "final approach" — delays surface here
 const RECHECK_DAYBEFORE_H = 12; // day-before: re-poll at most every 12h (≈ twice)
-const RECHECK_DAYOF_H = 3; // day-of: re-poll every ~3h (when quota allows)
+const RECHECK_DAYOF_H = 3; // day-of: re-poll every ~3h
 const RECHECK_FINAL_H = 0.4; // final window: re-poll ~every 24min so a late delay is caught before wheels-up
-const MAX_IMMINENT_PER_SWEEP = 4; // cap the per-sweep burst on imminent flights (reserve + hard stop still apply)
 const NOTIFY_MIN = 15; // alert when delayed ≥ this, or the delay GROWS by ≥ this
-const MAX_CALLS = 60; // hard per-sweep backstop (the governor is the real limiter)
-const RESERVE_UNITS = 30; // never auto-spend the budget below this (leaves room for manual lookups)
-const DEFAULT_MIN_INTERVAL_MS = 30 * 60_000; // pacing before the quota header is known (bootstrap)
-const MIN_INTERVAL_FLOOR_MS = 60_000; // never call faster than 1/min even with ample quota
+const MAX_CALLS = 20; // per-sweep backstop
+const DAILY_CALL_CAP = 40; // per-UTC-day backstop (~½ the monthly credit even if hit every single day)
 
 const TERMINAL_EVENT_STATES = new Set(['closed', 'complete', 'cancelled', 'canceled']);
 const LEG_KEYS = ['outbound', 'return'] as const;
@@ -47,8 +44,20 @@ type LegKey = (typeof LEG_KEYS)[number];
 
 const lc = (v: unknown): string => String(v ?? '').trim().toLowerCase();
 
-// Module-level pacing clock — persists across sweeps in the server process (the governor's rate limiter).
-let _lastCallAt = 0;
+// Module-level daily spend counter (persists across sweeps in the server process; a restart resets it,
+// which only ever errs on the side of a few extra calls that day).
+let _callDayKey = '';
+let _callsToday = 0;
+function spendDailyCall(now: number): boolean {
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (day !== _callDayKey) {
+    _callDayKey = day;
+    _callsToday = 0;
+  }
+  if (_callsToday >= DAILY_CALL_CAP) return false;
+  _callsToday++;
+  return true;
+}
 
 /** Resolve the event LEAD's email (lead may be stored as an email or a staffer display name). */
 function leadEmail(payload: EventPayload): string {
@@ -59,18 +68,6 @@ function leadEmail(payload: EventPayload): string {
     if ((s?.name ?? '').trim() === lead || (s?.email ?? '').trim() === lead) return lc(s?.email);
   }
   return '';
-}
-
-// The minimum interval between NEW AeroDataBox calls so the remaining unit budget lasts until reset.
-// Infinity → budget exhausted (stop). Returns a conservative default until the first header is seen.
-function minCallIntervalMs(now: number): number {
-  const q = getFlightQuota();
-  if (!q) return DEFAULT_MIN_INTERVAL_MS;
-  const budget = q.remaining - RESERVE_UNITS;
-  if (budget <= 0) return Infinity;
-  const msToReset = Math.max(q.resetAt - now, 60 * 60_000);
-  const affordableCalls = budget / Math.max(1, q.unitsPerCall);
-  return Math.max(MIN_INTERVAL_FLOOR_MS, msToReset / affordableCalls);
 }
 
 interface DueLeg {
@@ -84,7 +81,6 @@ interface DueLeg {
   number: string;
   date: string; // YYYY-MM-DD — the IMMUTABLE flightDate (else the leg's current departAt date)
   depMs: number; // best available departure instant (departUtc when known) — for window + urgency sort
-  imminent: boolean; // within FINAL_WINDOW_H of departure — checked aggressively (bypasses the budget pace)
 }
 
 export interface FlightRefreshResult {
@@ -96,9 +92,8 @@ export interface FlightRefreshResult {
 }
 
 export async function runFlightRefresh(opts: { now?: number; maxCalls?: number } = {}): Promise<FlightRefreshResult> {
-  // Run when EITHER provider is keyed (FlightAware is primary; AeroDataBox the legacy fallback).
-  const [faKey, adbKey] = await Promise.all([flightAwareKey(), flightApiKey()]);
-  if (!faKey && !adbKey) return { checked: 0, updated: 0, alerts: 0, calls: 0, reason: 'no-key' };
+  const faKey = await flightAwareKey();
+  if (!faKey) return { checked: 0, updated: 0, alerts: 0, calls: 0, reason: 'no-key' };
 
   const now = opts.now ?? Date.now();
   const maxCalls = opts.maxCalls ?? MAX_CALLS;
@@ -133,9 +128,9 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
         if (hToDep > WINDOW_AHEAD_H || hToDep < -behindH) continue;
         const last = Number(leg.lastCheckedAt ?? 0);
         // Three cadences: sparse day-before, moderate day-of, tight in the final approach (where a
-        // delay actually surfaces). "imminent" legs are exempt from the slow monthly budget pace below.
-        const imminent = hToDep <= FINAL_WINDOW_H;
-        const recheckH = imminent ? RECHECK_FINAL_H : hToDep <= DAYOF_H ? RECHECK_DAYOF_H : RECHECK_DAYBEFORE_H;
+        // delay actually surfaces).
+        const recheckH =
+          hToDep <= FINAL_WINDOW_H ? RECHECK_FINAL_H : hToDep <= DAYOF_H ? RECHECK_DAYOF_H : RECHECK_DAYBEFORE_H;
         if (last && now - last < recheckH * 3_600_000) continue;
         due.push({
           eventId: ev._id,
@@ -148,7 +143,6 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
           number,
           date: String(leg.flightDate || departAt.slice(0, 10)),
           depMs,
-          imminent,
         });
       }
     });
@@ -164,26 +158,14 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
   let updated = 0;
   let alerts = 0;
   let calls = 0;
-  let imminentCalls = 0; // per-sweep burst counter for near-departure flights
 
   for (const d of due) {
     const ck = `${d.number}|${d.date}`;
     const cached = cache.has(ck);
     if (!cached) {
-      if (calls >= maxCalls) break; // hard backstop
-      // The reserve floor + monthly exhaustion are HARD stops for everyone (leaves room for manual
-      // lookups; never overspends the budget). Imminent flights bypass the SLOW monthly pace below so a
-      // last-hour delay is actually caught — capped per sweep, and still inside the reserve floor.
-      const q = getFlightQuota();
-      if (q && q.remaining - RESERVE_UNITS <= 0) break; // reserve reached → stop spending
-      if (d.imminent) {
-        if (imminentCalls >= MAX_IMMINENT_PER_SWEEP) continue; // burst cap — skip extra imminent legs this sweep
-        imminentCalls++;
-      } else {
-        const interval = minCallIntervalMs(now);
-        if (!Number.isFinite(interval)) break; // budget exhausted → stop until reset
-        if (_lastCallAt && now - _lastCallAt < interval) break; // paced; due is urgency-sorted so the rest wait
-      }
+      if (calls >= maxCalls) break; // per-sweep backstop
+      // Daily cap — due is urgency-sorted, so when the cap bites, the soonest flights got the calls.
+      if (!spendDailyCall(now)) break;
     }
     checked++;
 
@@ -198,7 +180,6 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
         r = { available: true as const, leg: null };
       }
       calls++;
-      _lastCallAt = now;
       if (!r.available) break; // key vanished mid-sweep
       looked = r.leg ?? null;
       cache.set(ck, looked);
@@ -215,6 +196,10 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
       // Capture the immutable query anchors once / keep departUtc fresh.
       if (!d.leg?.flightDate && looked.scheduledDate) set[`${path}.flightDate`] = looked.scheduledDate;
       if (looked.departUtc != null) set[`${path}.departUtc`] = looked.departUtc;
+      // Live-progress anchors (the OpenSky callsign + the best actual/estimated instants).
+      if (looked.identIcao) set[`${path}.identIcao`] = looked.identIcao;
+      if (looked.departActualUtc != null) set[`${path}.departActualUtc`] = looked.departActualUtc;
+      if (looked.arriveEstUtc != null) set[`${path}.arriveEstUtc`] = looked.arriveEstUtc;
       // Fill blanks only — never clobber a present carrier/location.
       if (looked.carrier && !d.leg?.carrier) set[`${path}.carrier`] = looked.carrier;
       if (looked.departLocation && !d.leg?.departLocation) set[`${path}.departLocation`] = looked.departLocation;

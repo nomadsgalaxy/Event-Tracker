@@ -50,16 +50,21 @@ export interface TravelLeg {
   arriveAt?: string;
   confirmation?: string;
   // Live flight tracking (stamped by the background auto-refresh, lib/integrations/flight-refresh):
-  // the normalized status + departure delay derived from AeroDataBox. Additive + optional — manual
-  // legs and non-flight modes never set them.
+  // the normalized status + departure delay from FlightAware. Additive + optional — manual legs and
+  // non-flight modes never set them.
   status?: 'on_time' | 'delayed' | 'cancelled' | 'departed' | 'arrived' | 'diverted' | string;
   delayMin?: number; // minutes the revised departure runs past the scheduled time (0 when on time)
-  lastCheckedAt?: number; // ms epoch of the last AeroDataBox refresh for this leg
+  lastCheckedAt?: number; // ms epoch of the last provider refresh for this leg
   // The SCHEDULED departure date (YYYY-MM-DD) + UTC instant, captured once from the lookup and then
   // IMMUTABLE — the auto-refresh queries by flightDate (so a delay across local midnight can't shift
   // the query date) and windows by departUtc (offset-clean, so a far-timezone leg isn't dropped early).
   flightDate?: string;
   departUtc?: number;
+  // Live-progress anchors (FlightAware): the ATC/ICAO ident (the OpenSky callsign) + the best
+  // actual/estimated departure + arrival instants, for the in-air progress display.
+  identIcao?: string;
+  departActualUtc?: number;
+  arriveEstUtc?: number;
   [k: string]: unknown;
 }
 

@@ -12,7 +12,7 @@ import { DEMO_MODE, demoDenied } from '@/lib/db/demo';
 // write it; only this module touches it, server-side). It holds the operator-set, set-once-for-
 // everyone configuration the Python app kept in __appconfig__/__policy__/branding:
 //
-//   • INTEGRATION KEYS — Google API key, Weather key, the AeroDataBox flight key, and the three
+//   • INTEGRATION KEYS — Google API key, Weather key, the FlightAware/OpenSky flight keys, and the three
 //     shipment-tracking keys (EasyPost / 17TRACK / AfterShip). Each is a BEARER SECRET: stored
 //     AES-256-GCM-ENCRYPTED at rest in `secrets.<name>` (an `{iv,ct,tag}` blob), NEVER echoed back
 //     to any client (the UI learns only a set/unset boolean + a masked hint). Plaintext is resolved
@@ -41,8 +41,9 @@ export const SETTINGS_ID = '__settings__';
 export type IntegrationKeyName =
   | 'googleApiKey' // Maps / Places / Geocoding (shared Google key)
   | 'weatherKey' // Google Weather API (often the same Google key)
-  | 'flightKey' // AeroDataBox / RapidAPI flight lookup
-  | 'flightAwareKey' // FlightAware AeroAPI (live delays — the primary flight-status source)
+  | 'flightAwareKey' // FlightAware AeroAPI (live delays — the flight-status source)
+  | 'openskyClientId' // OpenSky Network OAuth2 client id (live aircraft positions)
+  | 'openskyClientSecret' // OpenSky Network OAuth2 client secret
   | 'easypostKey' // EasyPost shipment tracking (parcel + LTL)
   | 'track17Key' // 17TRACK free-tier fallback
   | 'aftershipKey'; // AfterShip aggregator (UniShippers/LTL)
@@ -54,8 +55,9 @@ export type IntegrationKeyName =
 const ENV_FALLBACK: Record<IntegrationKeyName, string[]> = {
   googleApiKey: ['GOOGLE_PLACES_API_KEY', 'GOOGLE_API_KEY'],
   weatherKey: ['GOOGLE_WEATHER_API_KEY', 'GOOGLE_API_KEY'],
-  flightKey: ['AERODATABOX_API_KEY', 'FLIGHT_API_KEY', 'FLIGHT_RAPIDAPI_KEY', 'RAPIDAPI_KEY'],
   flightAwareKey: ['FLIGHTAWARE_API_KEY', 'AEROAPI_KEY'],
+  openskyClientId: ['OPENSKY_CLIENT_ID'],
+  openskyClientSecret: ['OPENSKY_CLIENT_SECRET'],
   easypostKey: ['EASYPOST_API_KEY'],
   track17Key: ['SEVENTEENTRACK_API_KEY', 'TRACK17_API_KEY'],
   aftershipKey: ['AFTERSHIP_API_KEY'],
@@ -209,7 +211,6 @@ export const APPCONFIG_ID = '__appconfig__';
 interface AppConfigDoc {
   _id: string;
   googleApiKey?: string; // plaintext (Maps / Places / Weather)
-  flightKeyEnc?: string; // enc_secret blob (AeroDataBox)
   flightAwareKeyEnc?: string; // enc_secret blob (FlightAware AeroAPI)
   shipKeyEnc?: string; // enc_secret blob (EasyPost)
   aftershipKeyEnc?: string; // enc_secret blob (AfterShip)
@@ -281,8 +282,6 @@ function appConfigKey(name: IntegrationKeyName, doc: AppConfigDoc | null): strin
     case 'googleApiKey':
     case 'weatherKey':
       return String(doc.googleApiKey || '').trim();
-    case 'flightKey':
-      return decAppConfigSecret(doc.flightKeyEnc) || '';
     case 'flightAwareKey':
       return decAppConfigSecret(doc.flightAwareKeyEnc) || '';
     case 'easypostKey':
