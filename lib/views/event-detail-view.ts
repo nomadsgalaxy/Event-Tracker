@@ -5,7 +5,7 @@ import { canSeeAccommodations } from '@/lib/views/event-view';
 import { itemRollupState, itemQtyLooseAtEvent, type InventoryPayload } from '@/lib/views/inventory-shape';
 import { itemQtyInCase, itemStateInCase } from '@/lib/views/case-view';
 import { formatWeight } from '@/lib/util/weight';
-import { receptacleById, inferEventRegion, regionPower, REGION_LABEL } from '@/lib/power/connectors';
+import { receptacleById, inferEventRegion, regionPower, REGION_LABEL, isFixedCordInlet } from '@/lib/power/connectors';
 import type {
   AccommodationsProfile,
   CasePayload,
@@ -133,7 +133,9 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     const qty = Number(r.qty) || 0;
     powerUnits += qty;
     powerWattsTotal += qty * Math.max(0, Number(it.powerWatts) || 0);
-    const plug = String(it.plugType ?? '').trim();
+    const plug = isFixedCordInlet(it.plugType)
+      ? `${String(it.fixedPlug ?? '').trim() || 'NEMA 5-15P'} (fixed)`
+      : String(it.plugType ?? '').trim();
     if (plug && !plugTypes.some((p) => p.toLowerCase() === plug.toLowerCase())) plugTypes.push(plug);
     const volts = it.powerVolts === '120' || it.powerVolts === '240' ? it.powerVolts : 'auto';
     const names = deviceVolts.get(volts) ?? [];

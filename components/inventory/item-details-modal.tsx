@@ -33,7 +33,7 @@ import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
 import { formatMoney } from '@/lib/util/money';
-import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, cableEndById, cableEndRating } from '@/lib/power/connectors';
+import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, cableEndById, cableEndRating, isFixedCordInlet, type Region } from '@/lib/power/connectors';
 import {
   itemTotalQty,
   itemInStorage,
@@ -101,6 +101,8 @@ interface UnitFormRow {
   status?: 'out_of_service' | null;
   nextServiceDate?: string | null;
   serviceIntervalDays?: number | null;
+  /** Per-unit fixed-cord plug override (a EU-spec serial vs a US-spec one). */
+  fixedPlug?: string;
 }
 
 function uid(): string {
@@ -110,6 +112,9 @@ function uid(): string {
 export interface ItemDetailsCase {
   id: string;
   label: string;
+  /** The case's home-warehouse power region ('NA'|'EU'|'UK'|'AU') — the fixed-plug default source.
+   *  Optional: only the catalog host threads it; other hosts fall back to NA. */
+  region?: string;
 }
 
 // A lean candidate-item shape for the kit-BOM part picker (id + name + sku + the SKU-list inputs).
@@ -269,13 +274,29 @@ export function ItemDetailsModal({
   // Cable spec (kind === 'cable'): power strip / extension / adapter / custom, with the two ends
   // picked from the connector catalog. femaleCount = outlets (a strip has many).
   const [cable, setCable] = useState({
-    category: item.cable?.category || 'extension',
+    category: item.cable?.category || 'cable',
     maleEnd: item.cable?.maleEnd || '',
     femaleEnd: item.cable?.femaleEnd || '',
     femaleCount: item.cable?.femaleCount == null ? '1' : String(item.cable.femaleCount),
     lengthFt: item.cable?.lengthFt == null ? '' : String(item.cable.lengthFt),
     notes: item.cable?.notes || '',
+    // CUSTOM only: explicit per-end genders (male-male / female-female live here and nowhere else).
+    ends: (Array.isArray(item.cable?.ends) && item.cable!.ends!.length === 2
+      ? item.cable!.ends!.map((e) => ({ id: e.id || '', gender: e.gender === 'female' ? ('female' as const) : ('male' as const) }))
+      : [
+          { id: '', gender: 'male' as const },
+          { id: '', gender: 'female' as const },
+        ]) as { id: string; gender: 'male' | 'female' }[],
   });
+  // Fixed-cord equipment: the wall plug the attached cord ends in ('' = the regional default).
+  const [fixedPlug, setFixedPlug] = useState(item.fixedPlug || '');
+  // The regional default for an unset fixed plug — from the FIRST case this item routes into (its
+  // home warehouse's region, threaded by the catalog host); NA otherwise. Per-serial overrides below.
+  const defaultFixedPlug = useMemo(() => {
+    const firstCase = itemCaseIds(item)[0];
+    const region = (cases.find((c) => c.id === firstCase)?.region as Region | undefined) ?? 'NA';
+    return `${REGION_DEFAULT_PLUG[region] ?? 'NEMA 5-15P'} (${region})`;
+  }, [item, cases]);
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
   );
@@ -303,6 +324,7 @@ export function ItemDetailsModal({
       status: u.status ?? null,
       nextServiceDate: u.nextServiceDate ?? '',
       serviceIntervalDays: u.serviceIntervalDays ?? null,
+      fixedPlug: u.fixedPlug || '',
     }))
   );
   // #27 kit BOM — per-model requirements[] rows. Edited only when allInventory is supplied (the
@@ -442,8 +464,10 @@ export function ItemDetailsModal({
               femaleCount: cable.femaleCount === '' ? 1 : Math.max(1, Number(cable.femaleCount)),
               lengthFt: cable.lengthFt === '' ? null : Math.max(0, Number(cable.lengthFt)),
               notes: cable.notes.trim(),
+              ...(cable.category === 'custom' ? { ends: cable.ends } : {}),
             }
           : null,
+      fixedPlug: requiresPower && isFixedCordInlet(plugType) ? fixedPlug : '',
       // tagIds are passed through unchanged (the picker is a later wave; we never drop them).
       tagIds: Array.isArray(item.tagIds) ? item.tagIds : [],
       // #27 kit BOM — drop rows with no target; the server re-sanitizes too. Only sent when the
@@ -477,6 +501,7 @@ export function ItemDetailsModal({
           status: u.status ?? null,
           ...(u.nextServiceDate ? { nextServiceDate: u.nextServiceDate } : {}),
           ...(u.serviceIntervalDays != null ? { serviceIntervalDays: u.serviceIntervalDays } : {}),
+          ...(u.fixedPlug ? { fixedPlug: u.fixedPlug } : {}),
           ...(u.tagUid ? { tagUid: u.tagUid } : {}),
           ...(typeof u.remainingWeight === 'number' ? { remainingWeight: u.remainingWeight } : {}),
         })),
@@ -1232,6 +1257,7 @@ export function ItemDetailsModal({
               <div className="flex flex-wrap gap-1.5">
                 {(
                   [
+                    ['cable', 'Cable (PWR)'],
                     ['power-strip', 'Power Strip'],
                     ['extension', 'Extension Cord (PWR)'],
                     ['adapter', 'Adapter Cord (PWR)'],
@@ -1261,6 +1287,8 @@ export function ItemDetailsModal({
                 ))}
               </div>
 
+              {cable.category !== 'custom' ? (
+              <>
               <div className="flex flex-col gap-1.5">
                 <Label>Male end (source side)</Label>
                 <div className="flex flex-wrap gap-1.5">
@@ -1314,6 +1342,73 @@ export function ItemDetailsModal({
                   })}
                 </div>
               </div>
+              </>
+              ) : (
+              /* CUSTOM: per-end gender pickers — the ONLY place male→male / female→female exists. */
+              <div className="flex flex-col gap-3">
+                {cable.ends.map((end, ei) => {
+                  const list = end.gender === 'male' ? CABLE_MALE_ENDS : CABLE_FEMALE_ENDS;
+                  return (
+                    <div key={ei} className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <Label>End {ei === 0 ? 'A' : 'B'}</Label>
+                        <div className="flex overflow-hidden rounded-md border border-input" role="radiogroup" aria-label={`End ${ei === 0 ? 'A' : 'B'} gender`}>
+                          {(['male', 'female'] as const).map((g) => (
+                            <button
+                              key={g}
+                              type="button"
+                              role="radio"
+                              aria-checked={end.gender === g}
+                              disabled={!canEdit}
+                              onClick={() =>
+                                setCable((c) => ({
+                                  ...c,
+                                  ends: c.ends.map((e2, j) => (j === ei ? { id: '', gender: g } : e2)),
+                                }))
+                              }
+                              className={cn(
+                                'h-7 px-2.5 text-xs capitalize transition-colors',
+                                end.gender === g ? 'bg-primary/15 font-semibold text-primary' : 'text-muted-foreground hover:bg-accent/50'
+                              )}
+                            >
+                              {g}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {list.map((e) => {
+                          const on = end.id === e.id;
+                          return (
+                            <button
+                              key={e.id}
+                              type="button"
+                              aria-pressed={on}
+                              disabled={!canEdit}
+                              onClick={() =>
+                                setCable((c) => ({
+                                  ...c,
+                                  ends: c.ends.map((e2, j) => (j === ei ? { ...e2, id: on ? '' : e.id } : e2)),
+                                }))
+                              }
+                              title={`${e.label} · ${cableEndRating(e)}`}
+                              className={cn(
+                                'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                                on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                              )}
+                            >
+                              <span className="size-9 text-foreground">{e.svg}</span>
+                              <span className="text-[10px] font-medium leading-tight">{e.label}</span>
+                              <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              )}
 
               <div className="flex flex-wrap items-end gap-3">
                 <div className="flex w-24 flex-col gap-1.5">
@@ -1330,16 +1425,31 @@ export function ItemDetailsModal({
                 </div>
               </div>
 
-              {cable.maleEnd && cable.femaleEnd ? (
-                <p className="text-xs text-muted-foreground">
-                  {(() => {
-                    const m = cableEndById(cable.maleEnd, 'male');
-                    const f = cableEndById(cable.femaleEnd, 'female');
-                    const n = Number(cable.femaleCount) || 1;
-                    return `${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${n > 1 ? `${n}× ` : ''}${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${m && f && m.volts !== f.volts ? ' — ⚠ cross-voltage adapter' : ''}`;
-                  })()}
-                </p>
-              ) : null}
+              {(() => {
+                if (cable.category === 'custom') {
+                  const [a, b] = cable.ends;
+                  if (!a?.id || !b?.id) return null;
+                  const A = cableEndById(a.id, a.gender);
+                  const B = cableEndById(b.id, b.gender);
+                  const cross = A && B && A.volts !== B.volts;
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      {A ? `${A.label} ${cableEndRating(A)}` : a.id} {a.gender} → {B ? `${B.label} ${cableEndRating(B)}` : b.id} {b.gender}
+                      {a.gender === b.gender ? ' — same-gender (custom)' : ''}
+                      {cross ? ' — ⚠ cross-voltage' : ''}
+                    </p>
+                  );
+                }
+                if (!cable.maleEnd || !cable.femaleEnd) return null;
+                const m = cableEndById(cable.maleEnd, 'male');
+                const f = cableEndById(cable.femaleEnd, 'female');
+                const n = Number(cable.femaleCount) || 1;
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${n > 1 ? `${n}× ` : ''}${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${m && f && m.volts !== f.volts ? ' — ⚠ cross-voltage adapter' : ''}`}
+                  </p>
+                );
+              })()}
             </div>
           ) : null}
 
@@ -1417,7 +1527,7 @@ export function ItemDetailsModal({
                   <Label>Power inlet (what the equipment receives)</Label>
                   <div className="flex flex-wrap gap-1.5">
                     {INLETS.map((inlet) => {
-                      const on = plugType === inlet.id;
+                      const on = inlet.id === 'FIXED' ? isFixedCordInlet(plugType) : plugType === inlet.id;
                       return (
                         <button
                           key={inlet.id}
@@ -1438,8 +1548,32 @@ export function ItemDetailsModal({
                       );
                     })}
                   </div>
-                  {plugType && !INLETS.some((i) => i.id === plugType) ? (
+                  {plugType && !INLETS.some((i) => i.id === plugType) && !isFixedCordInlet(plugType) ? (
                     <span className="text-[10px] text-muted-foreground">Stored value: “{plugType}” (legacy text — pick a cell to replace it)</span>
+                  ) : null}
+                  {isFixedCordInlet(plugType) ? (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex w-64 flex-col gap-1.5">
+                        <Label htmlFor="item-fixedplug">Fixed plug (international)</Label>
+                        <select
+                          id="item-fixedplug"
+                          value={fixedPlug}
+                          disabled={!canEdit}
+                          onChange={(e) => setFixedPlug(e.target.value)}
+                          className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none dark:bg-input/30"
+                        >
+                          <option value="">Default for region — {defaultFixedPlug}</option>
+                          {WALL_PLUGS.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.label} · {cableEndRating(w)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {tracking === 'serial' ? (
+                        <span className="pb-2 text-[10px] text-muted-foreground">Per-serial overrides: see the units below.</span>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -1452,7 +1586,7 @@ export function ItemDetailsModal({
             <ServiceStatusPanel item={item} actorName={effActorName} onServiceChange={effServiceChange} onDone={() => onOpenChange(false)} />
           ) : null}
           {tracking === 'serial' ? (
-            <UnitServicePanel units={units} setUnits={setUnits} actorName={effActorName} canEdit={canEdit} />
+            <UnitServicePanel units={units} setUnits={setUnits} actorName={effActorName} canEdit={canEdit} fixedCord={requiresPower && isFixedCordInlet(plugType)} />
           ) : null}
 
           {/* Flag / repair history (rich — shows the resolution text). Universal, like the service panel. */}
@@ -1511,11 +1645,14 @@ function UnitServicePanel({
   setUnits,
   actorName,
   canEdit,
+  fixedCord = false,
 }: {
   units: UnitFormRow[];
   setUnits: Dispatch<SetStateAction<UnitFormRow[]>>;
   actorName?: string;
   canEdit: boolean;
+  /** The item is fixed-cord equipment — show the per-unit plug override select. */
+  fixedCord?: boolean;
 }) {
   const by = actorName || 'user';
   const setField = (id: string, patch: Partial<UnitFormRow>) => setUnits((s) => s.map((u) => (u.id === id ? { ...u, ...patch } : u)));
@@ -1547,6 +1684,22 @@ function UnitServicePanel({
                   Next
                   <Input type="date" value={u.nextServiceDate || ''} disabled={!canEdit} onChange={(e) => setField(u.id, { nextServiceDate: e.target.value })} className="h-7 w-[140px] text-xs" />
                 </label>
+                {fixedCord ? (
+                  <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    Plug
+                    <select
+                      value={u.fixedPlug || ''}
+                      disabled={!canEdit}
+                      onChange={(e) => setField(u.id, { fixedPlug: e.target.value })}
+                      className="h-7 rounded-md border border-input bg-transparent px-1.5 text-xs outline-none dark:bg-input/30"
+                    >
+                      <option value="">item default</option>
+                      {WALL_PLUGS.map((w) => (
+                        <option key={w.id} value={w.id}>{w.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 {canEdit ? (
                   oos ? (
                     <Button type="button" size="sm" variant="outline" onClick={() => ret(u.id)} style={{ color: 'var(--success)', borderColor: 'var(--success)' }}>

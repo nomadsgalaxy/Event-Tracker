@@ -175,9 +175,17 @@ export const INLETS: InletDef[] = [
   { id: 'C16', label: 'IEC C16', takes: 'C15 cord (hot)', svg: svgC16 },
   { id: 'C6', label: 'IEC C6', takes: 'C5 cloverleaf', svg: svgC6 },
   { id: 'C8', label: 'IEC C8', takes: 'C7 figure-8', svg: svgC8 },
-  { id: 'NEMA 5-15P', label: 'NEMA 5-15P', takes: 'fixed US cord', svg: svgNema515P },
+  // A fixed attached cord — the PLUG it ends in is picked separately (item.fixedPlug, any
+  // international male AC plug; defaults from the home warehouse's region; per-serial overrides).
+  { id: 'FIXED', label: 'Fixed cord', takes: 'attached plug', svg: svgNema515P },
   { id: 'Hardwired', label: 'Hardwired', takes: 'direct / other', svg: svgHardwire },
 ];
+
+/** Legacy stored inlet values that MEAN "fixed cord" (the pre-FIXED catalog had 'NEMA 5-15P'). */
+export function isFixedCordInlet(plugType: string | undefined): boolean {
+  const v = String(plugType ?? '').trim();
+  return v === 'FIXED' || v === 'NEMA 5-15P';
+}
 
 export const RECEPTACLES: ReceptacleDef[] = [
   { id: 'NEMA 5-15R', label: 'NEMA 5-15R', region: 'NA', volts: '120', amps: 15, svg: svgNema515R },
@@ -238,6 +246,17 @@ export const CABLE_FEMALE_ENDS: CableEndDef[] = [
 export function cableEndById(id: string, side: 'male' | 'female'): CableEndDef | undefined {
   return (side === 'male' ? CABLE_MALE_ENDS : CABLE_FEMALE_ENDS).find((e) => e.id === id);
 }
+
+/** The international WALL plugs (a fixed cord ends in one of these — the inline IEC males don't). */
+export const WALL_PLUGS: CableEndDef[] = CABLE_MALE_ENDS.filter((e) => e.id !== 'C14' && e.id !== 'C20');
+
+/** The region's everyday wall plug — the fixed-cord dropdown's default. */
+export const REGION_DEFAULT_PLUG: Record<Region, string> = {
+  NA: 'NEMA 5-15P',
+  EU: 'CEE 7/7',
+  UK: 'BS 1363P',
+  AU: 'AS/NZS 3112P',
+};
 
 /** A cable end's short rating text — '120V 15A' (the cursed-adapter display). */
 export function cableEndRating(end: CableEndDef): string {

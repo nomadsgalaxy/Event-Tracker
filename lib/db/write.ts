@@ -1282,6 +1282,7 @@ const ITEM_EDITABLE_FIELDS = [
   'powerWatts',
   'plugType',
   'powerVolts',
+  'fixedPlug',
   'cable',
 ] as const;
 
@@ -1333,6 +1334,7 @@ function cleanUnit(u: ItemUnit): ItemUnit {
     ...(u.serviceIntervalDays != null && Number.isFinite(Number(u.serviceIntervalDays))
       ? { serviceIntervalDays: Math.max(0, Number(u.serviceIntervalDays)) }
       : {}),
+    ...(u.fixedPlug ? { fixedPlug: String(u.fixedPlug).trim().slice(0, 40) } : {}),
     // Preserve the NFC spool link + remaining weight through the full editor save (auto-set by the tag
     // read flow; the editor never authors them, but it must not strip them either).
     ...(u.tagUid ? { tagUid: String(u.tagUid) } : {}),
@@ -1441,7 +1443,8 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
         set[`payload.${key}`] = raw === true;
         break;
       }
-      case 'plugType': {
+      case 'plugType':
+      case 'fixedPlug': {
         set[`payload.${key}`] = String(raw ?? '').trim().slice(0, 60);
         break;
       }
@@ -1457,15 +1460,26 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
         }
         const c = raw as Record<string, unknown>;
         const cat = String(c.category ?? '').trim();
+        const category = ['cable', 'power-strip', 'extension', 'adapter', 'custom'].includes(cat) ? cat : 'custom';
         const count = Number(c.femaleCount);
         const len = Number(c.lengthFt);
+        // Per-end genders are a CUSTOM-only concept (only custom may be male→male / female→female);
+        // the standard categories stay structurally male→female via maleEnd/femaleEnd.
+        const ends =
+          category === 'custom' && Array.isArray(c.ends)
+            ? (c.ends as Record<string, unknown>[]).slice(0, 2).map((e) => ({
+                id: String(e?.id ?? '').trim().slice(0, 40),
+                gender: e?.gender === 'female' ? ('female' as const) : ('male' as const),
+              }))
+            : undefined;
         set[`payload.${key}`] = {
-          category: ['power-strip', 'extension', 'adapter', 'custom'].includes(cat) ? cat : 'custom',
+          category,
           maleEnd: String(c.maleEnd ?? '').trim().slice(0, 40),
           femaleEnd: String(c.femaleEnd ?? '').trim().slice(0, 40),
           femaleCount: Number.isFinite(count) ? Math.min(24, Math.max(1, Math.round(count))) : 1,
           lengthFt: Number.isFinite(len) && len > 0 ? Math.min(500, len) : null,
           notes: String(c.notes ?? '').trim().slice(0, 200),
+          ...(ends ? { ends } : {}),
         };
         break;
       }

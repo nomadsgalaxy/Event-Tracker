@@ -70,6 +70,8 @@ export interface ItemUnit {
   status?: 'out_of_service' | null;
   nextServiceDate?: string | null; // ISO 'YYYY-MM-DD'
   serviceIntervalDays?: number | null;
+  /** Per-unit fixed-cord plug override (a EU-spec serial vs a US-spec serial of one model). */
+  fixedPlug?: string;
   // NFC spool tracking: a consumable's physical spool is a serial unit linked to its tag by UID, with
   // the grams remaining read from the tag (OpenPrintTag actual − consumed). See [[nfc-consumable-tags]].
   tagUid?: string;
@@ -184,18 +186,26 @@ export interface InventoryPayload {
   /** Input voltage class: '120' (NA-only PSU), '240' (230/240-only), 'auto' (universal). Drives the
    *  event receptacle grid's greying + the compatibility warning. */
   powerVolts?: '120' | '240' | 'auto';
-  /** Cable spec (kind === 'cable'): the power subtypes — a power strip (one male, many female
-   *  outlets), an extension cord, an adapter (e.g. a 20 A male to a 10 A female), or a Custom
-   *  cursed combo (any male × any female — electricians do crazy things). Ends are canonical ids
-   *  from lib/power/connectors CABLE_MALE_ENDS / CABLE_FEMALE_ENDS. Category is extensible (data /
-   *  audio variants later). */
+  /** Fixed-cord equipment (plugType 'FIXED'): the wall plug the attached cord ends in — any
+   *  international male AC plug id (lib/power/connectors WALL_PLUGS). Defaults from the home
+   *  warehouse's region; serial units may override per unit (ItemUnit.fixedPlug). */
+  fixedPlug?: string;
+  /** Cable spec (kind === 'cable'): the power subtypes — a plain Cable (the standard male→female
+   *  cord), a power strip (one male, many female outlets), an extension cord, an adapter (e.g. a
+   *  20 A male to a 10 A female), or a Custom cursed combo. Ends are canonical ids from
+   *  lib/power/connectors CABLE_MALE_ENDS / CABLE_FEMALE_ENDS. The standard categories are
+   *  STRUCTURALLY male→female; ONLY 'custom' carries explicit per-end genders (ends[], exactly 2),
+   *  so male→male / female→female is expressible there and nowhere else. Category is extensible
+   *  (data / audio variants later). */
   cable?: {
-    category: 'power-strip' | 'extension' | 'adapter' | 'custom' | string;
+    category: 'cable' | 'power-strip' | 'extension' | 'adapter' | 'custom' | string;
     maleEnd?: string;
     femaleEnd?: string;
     femaleCount?: number;
     lengthFt?: number | null;
     notes?: string;
+    /** CUSTOM only: the two ends with explicit genders (overrides maleEnd/femaleEnd). */
+    ends?: { id: string; gender: 'male' | 'female' }[];
   } | null;
   distribution?: DistributionRow[]; // BULK
   units?: ItemUnit[]; // SERIAL (#22)

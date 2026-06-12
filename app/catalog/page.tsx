@@ -31,6 +31,7 @@ import { caseCode } from '@/lib/integrations/eitm';
 import { activeTenantHash36 } from '@/lib/auth/settings-store';
 import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
 import { itemCaseIds } from '@/lib/views/inventory-shape';
+import { inferEventRegion } from '@/lib/power/connectors';
 import type { WarehouseLite } from '@/app/cases/case-editor';
 import {
   CatalogScreen,
@@ -239,9 +240,23 @@ export default async function CatalogPage({
     itemMatrix[d._id] = { code, matrixSvg: safeMatrix(code) };
   }
   // Live, non-retired cases for the item editor + bulk-reassign picker (id + label).
+  // Per-warehouse power region (street/city/region/country text → NA/EU/UK/AU) — the fixed-plug
+  // default source: an item's first case → its warehouse → that region's everyday wall plug.
+  const warehouseRegion: Record<string, string> = {};
+  for (const w of warehouseDocs) {
+    warehouseRegion[w._id] = inferEventRegion({
+      state: w.payload.region,
+      city: w.payload.city,
+      address: [w.payload.street, w.payload.country].filter(Boolean).join(' '),
+    });
+  }
   const caseOptions: ItemDetailsCase[] = caseDocs
     .filter((d) => !isCaseRetired(d.payload))
-    .map((d) => ({ id: d._id, label: d.payload.label || d.payload.slug || d._id }));
+    .map((d) => ({
+      id: d._id,
+      label: d.payload.label || d.payload.slug || d._id,
+      region: warehouseRegion[caseWarehouseById[d._id] ?? ''] || undefined,
+    }));
   // Draft / upcoming / packing events accept fresh loose inventory (the bulk attach-to-event picker).
   const eventOptions: InventoryEventOption[] = eventDocs
     .filter((e) => ['draft', 'upcoming', 'packing'].includes(String(e.payload.state)))
