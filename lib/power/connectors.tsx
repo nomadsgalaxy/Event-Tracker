@@ -191,6 +191,60 @@ export const RECEPTACLES: ReceptacleDef[] = [
   { id: 'AS/NZS 3112', label: 'AS/NZS 3112', region: 'AU', volts: '230', amps: 10, svg: svgAS3112 },
 ];
 
+// ── Cable ends (the 'cable' item kind: power strips / extensions / adapters) ────────────────────
+// MALE = the source side (goes into the wall/drop or an upstream device); FEMALE = the outlet side.
+// volts/amps describe the END's rating so an adapter self-describes ("NEMA L6-30P 230V 30A →
+// NEMA 5-15R 120V 15A" is representable — electricians do crazy things). SVG faces are reused at
+// this stylization level (a C13 cord end renders the C14 face, etc. — the label is authoritative).
+export interface CableEndDef {
+  id: string;
+  label: string;
+  volts: VoltFamily | '250';
+  amps: number;
+  svg: ReactNode;
+}
+
+export const CABLE_MALE_ENDS: CableEndDef[] = [
+  { id: 'NEMA 5-15P', label: 'NEMA 5-15P', volts: '120', amps: 15, svg: svgNema515P },
+  { id: 'NEMA 5-20P', label: 'NEMA 5-20P', volts: '120', amps: 20, svg: svgNema515P },
+  { id: 'NEMA L5-30P', label: 'NEMA L5-30P', volts: '120', amps: 30, svg: svgL530R },
+  { id: 'NEMA 6-15P', label: 'NEMA 6-15P', volts: '230', amps: 15, svg: svgNema615R },
+  { id: 'NEMA 6-20P', label: 'NEMA 6-20P', volts: '230', amps: 20, svg: svgNema620R },
+  { id: 'NEMA L6-30P', label: 'NEMA L6-30P', volts: '230', amps: 30, svg: svgL530R },
+  { id: 'CEE 7/7', label: 'CEE 7/7 (Schuko)', volts: '230', amps: 16, svg: svgSchuko },
+  { id: 'BS 1363P', label: 'BS 1363 (UK)', volts: '230', amps: 13, svg: svgBS1363 },
+  { id: 'AS/NZS 3112P', label: 'AS/NZS 3112', volts: '230', amps: 10, svg: svgAS3112 },
+  { id: 'C14', label: 'IEC C14 (inline)', volts: '250', amps: 10, svg: svgC14 },
+  { id: 'C20', label: 'IEC C20 (inline)', volts: '250', amps: 16, svg: svgC20 },
+];
+
+export const CABLE_FEMALE_ENDS: CableEndDef[] = [
+  { id: 'NEMA 5-15R', label: 'NEMA 5-15R', volts: '120', amps: 15, svg: svgNema515R },
+  { id: 'NEMA 5-20R', label: 'NEMA 5-20R', volts: '120', amps: 20, svg: svgNema520R },
+  { id: 'NEMA L5-30R', label: 'NEMA L5-30R', volts: '120', amps: 30, svg: svgL530R },
+  { id: 'NEMA 6-15R', label: 'NEMA 6-15R', volts: '230', amps: 15, svg: svgNema615R },
+  { id: 'NEMA 6-20R', label: 'NEMA 6-20R', volts: '230', amps: 20, svg: svgNema620R },
+  { id: 'NEMA L6-30R', label: 'NEMA L6-30R', volts: '230', amps: 30, svg: svgL630R },
+  { id: 'Schuko CEE 7/3', label: 'Schuko CEE 7/3', volts: '230', amps: 16, svg: svgSchuko },
+  { id: 'BS 1363R', label: 'BS 1363 (UK)', volts: '230', amps: 13, svg: svgBS1363 },
+  { id: 'AS/NZS 3112R', label: 'AS/NZS 3112', volts: '230', amps: 10, svg: svgAS3112 },
+  { id: 'C13', label: 'IEC C13', volts: '250', amps: 10, svg: svgC14 },
+  { id: 'C15', label: 'IEC C15', volts: '250', amps: 10, svg: svgC16 },
+  { id: 'C19', label: 'IEC C19', volts: '250', amps: 16, svg: svgC20 },
+  { id: 'C5', label: 'IEC C5', volts: '250', amps: 2.5, svg: svgC6 },
+  { id: 'C7', label: 'IEC C7', volts: '250', amps: 2.5, svg: svgC8 },
+];
+
+export function cableEndById(id: string, side: 'male' | 'female'): CableEndDef | undefined {
+  return (side === 'male' ? CABLE_MALE_ENDS : CABLE_FEMALE_ENDS).find((e) => e.id === id);
+}
+
+/** A cable end's short rating text — '120V 15A' (the cursed-adapter display). */
+export function cableEndRating(end: CableEndDef): string {
+  const v = end.volts === '120' ? '120V' : end.volts === '230' ? '230/240V' : '≤250V';
+  return `${v} ${end.amps}A`;
+}
+
 export const REGION_LABEL: Record<Region, string> = {
   NA: 'North America',
   EU: 'Europe (Schuko)',

@@ -146,6 +146,7 @@ export const ITEM_KINDS = [
   'banner',
   'fixture',
   'system',
+  'cable',
 ] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
@@ -183,6 +184,19 @@ export interface InventoryPayload {
   /** Input voltage class: '120' (NA-only PSU), '240' (230/240-only), 'auto' (universal). Drives the
    *  event receptacle grid's greying + the compatibility warning. */
   powerVolts?: '120' | '240' | 'auto';
+  /** Cable spec (kind === 'cable'): the power subtypes — a power strip (one male, many female
+   *  outlets), an extension cord, an adapter (e.g. a 20 A male to a 10 A female), or a Custom
+   *  cursed combo (any male × any female — electricians do crazy things). Ends are canonical ids
+   *  from lib/power/connectors CABLE_MALE_ENDS / CABLE_FEMALE_ENDS. Category is extensible (data /
+   *  audio variants later). */
+  cable?: {
+    category: 'power-strip' | 'extension' | 'adapter' | 'custom' | string;
+    maleEnd?: string;
+    femaleEnd?: string;
+    femaleCount?: number;
+    lengthFt?: number | null;
+    notes?: string;
+  } | null;
   distribution?: DistributionRow[]; // BULK
   units?: ItemUnit[]; // SERIAL (#22)
   flags?: ItemFlag[];

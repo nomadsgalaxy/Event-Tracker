@@ -31,6 +31,7 @@ export const KIND_ORDER = [
   'peripheral',
   'consumable',
   'tool',
+  'cable',
   'banner',
   'fixture',
 ] as const;
@@ -44,6 +45,7 @@ export const KIND_LABEL: Record<string, string> = {
   banner: 'Banners',
   fixture: 'Fixtures',
   system: 'Systems',
+  cable: 'Cables',
 };
 
 /** The per-case packed disposition of one item, threaded onto a manifest row. */

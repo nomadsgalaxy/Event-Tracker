@@ -33,7 +33,7 @@ import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
 import { formatMoney } from '@/lib/util/money';
-import { INLETS } from '@/lib/power/connectors';
+import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, cableEndById, cableEndRating } from '@/lib/power/connectors';
 import {
   itemTotalQty,
   itemInStorage,
@@ -266,6 +266,16 @@ export function ItemDetailsModal({
   const [powerVolts, setPowerVolts] = useState<'120' | '240' | 'auto'>(
     item.powerVolts === '120' || item.powerVolts === '240' ? item.powerVolts : 'auto'
   );
+  // Cable spec (kind === 'cable'): power strip / extension / adapter / custom, with the two ends
+  // picked from the connector catalog. femaleCount = outlets (a strip has many).
+  const [cable, setCable] = useState({
+    category: item.cable?.category || 'extension',
+    maleEnd: item.cable?.maleEnd || '',
+    femaleEnd: item.cable?.femaleEnd || '',
+    femaleCount: item.cable?.femaleCount == null ? '1' : String(item.cable.femaleCount),
+    lengthFt: item.cable?.lengthFt == null ? '' : String(item.cable.lengthFt),
+    notes: item.cable?.notes || '',
+  });
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
   );
@@ -422,6 +432,18 @@ export function ItemDetailsModal({
       powerWatts: requiresPower && powerWatts !== '' ? Math.max(0, Number(powerWatts)) : null,
       plugType: requiresPower ? plugType.trim() : '',
       powerVolts: requiresPower ? powerVolts : 'auto',
+      // Cable spec only travels for cable items (null clears it on a kind change away from cable).
+      cable:
+        kind === 'cable'
+          ? {
+              category: cable.category,
+              maleEnd: cable.maleEnd,
+              femaleEnd: cable.femaleEnd,
+              femaleCount: cable.femaleCount === '' ? 1 : Math.max(1, Number(cable.femaleCount)),
+              lengthFt: cable.lengthFt === '' ? null : Math.max(0, Number(cable.lengthFt)),
+              notes: cable.notes.trim(),
+            }
+          : null,
       // tagIds are passed through unchanged (the picker is a later wave; we never drop them).
       tagIds: Array.isArray(item.tagIds) ? item.tagIds : [],
       // #27 kit BOM — drop rows with no target; the server re-sanitizes too. Only sent when the
@@ -1198,6 +1220,126 @@ export function ItemDetailsModal({
                   ) : null}
                 </>
               )}
+            </div>
+          ) : null}
+
+          {/* Cable spec — kind 'cable' only: a power strip (one male, many female), an extension, an
+              adapter, or a Custom cursed combo. Ends come from the connector catalog with ratings, so
+              "NEMA L6-30P 230V 30A male → NEMA 5-15R 120V 15A female" is representable. */}
+          {kind === 'cable' ? (
+            <div className="flex flex-col gap-3 border-t border-border pt-4">
+              <Eyebrow>Cable</Eyebrow>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ['power-strip', 'Power Strip'],
+                    ['extension', 'Extension Cord (PWR)'],
+                    ['adapter', 'Adapter Cord (PWR)'],
+                    ['custom', 'Custom'],
+                  ] as const
+                ).map(([id, lbl]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={cable.category === id}
+                    disabled={!canEdit}
+                    onClick={() =>
+                      setCable((c) => ({
+                        ...c,
+                        category: id,
+                        // sensible outlet defaults on a category switch (still editable)
+                        femaleCount: id === 'power-strip' ? (Number(c.femaleCount) > 1 ? c.femaleCount : '6') : c.femaleCount,
+                      }))
+                    }
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-xs transition-colors',
+                      cable.category === id ? 'border-primary bg-primary/15 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                    )}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Male end (source side)</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CABLE_MALE_ENDS.map((e) => {
+                    const on = cable.maleEnd === e.id;
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={!canEdit}
+                        onClick={() => setCable((c) => ({ ...c, maleEnd: on ? '' : e.id }))}
+                        title={`${e.label} · ${cableEndRating(e)}`}
+                        className={cn(
+                          'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                          on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                        )}
+                      >
+                        <span className="size-9 text-foreground">{e.svg}</span>
+                        <span className="text-[10px] font-medium leading-tight">{e.label}</span>
+                        <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Female end (outlet side)</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CABLE_FEMALE_ENDS.map((e) => {
+                    const on = cable.femaleEnd === e.id;
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={!canEdit}
+                        onClick={() => setCable((c) => ({ ...c, femaleEnd: on ? '' : e.id }))}
+                        title={`${e.label} · ${cableEndRating(e)}`}
+                        className={cn(
+                          'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                          on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                        )}
+                      >
+                        <span className="size-9 text-foreground">{e.svg}</span>
+                        <span className="text-[10px] font-medium leading-tight">{e.label}</span>
+                        <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex w-24 flex-col gap-1.5">
+                  <Label htmlFor="cable-outlets">Outlets</Label>
+                  <Input id="cable-outlets" type="number" min={1} max={24} inputMode="numeric" value={cable.femaleCount} onChange={(e) => setCable((c) => ({ ...c, femaleCount: e.target.value }))} disabled={!canEdit} />
+                </div>
+                <div className="flex w-28 flex-col gap-1.5">
+                  <Label htmlFor="cable-length">Length (ft)</Label>
+                  <Input id="cable-length" type="number" min={0} inputMode="decimal" value={cable.lengthFt} placeholder="optional" onChange={(e) => setCable((c) => ({ ...c, lengthFt: e.target.value }))} disabled={!canEdit} />
+                </div>
+                <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                  <Label htmlFor="cable-notes">Notes</Label>
+                  <Input id="cable-notes" value={cable.notes} placeholder="e.g. ganged neutral, derate to 8A" onChange={(e) => setCable((c) => ({ ...c, notes: e.target.value }))} disabled={!canEdit} />
+                </div>
+              </div>
+
+              {cable.maleEnd && cable.femaleEnd ? (
+                <p className="text-xs text-muted-foreground">
+                  {(() => {
+                    const m = cableEndById(cable.maleEnd, 'male');
+                    const f = cableEndById(cable.femaleEnd, 'female');
+                    const n = Number(cable.femaleCount) || 1;
+                    return `${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${n > 1 ? `${n}× ` : ''}${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${m && f && m.volts !== f.volts ? ' — ⚠ cross-voltage adapter' : ''}`;
+                  })()}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

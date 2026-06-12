@@ -1282,6 +1282,7 @@ const ITEM_EDITABLE_FIELDS = [
   'powerWatts',
   'plugType',
   'powerVolts',
+  'cable',
 ] as const;
 
 export type ItemPatch = Partial<Pick<InventoryPayload, (typeof ITEM_EDITABLE_FIELDS)[number]>>;
@@ -1446,6 +1447,26 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
       }
       case 'powerVolts': {
         set[`payload.${key}`] = raw === '120' || raw === '240' ? raw : 'auto';
+        break;
+      }
+      case 'cable': {
+        // Sanitize the cable spec to the known lean shape (kind === 'cable'); null clears it.
+        if (raw == null) {
+          set[`payload.${key}`] = null;
+          break;
+        }
+        const c = raw as Record<string, unknown>;
+        const cat = String(c.category ?? '').trim();
+        const count = Number(c.femaleCount);
+        const len = Number(c.lengthFt);
+        set[`payload.${key}`] = {
+          category: ['power-strip', 'extension', 'adapter', 'custom'].includes(cat) ? cat : 'custom',
+          maleEnd: String(c.maleEnd ?? '').trim().slice(0, 40),
+          femaleEnd: String(c.femaleEnd ?? '').trim().slice(0, 40),
+          femaleCount: Number.isFinite(count) ? Math.min(24, Math.max(1, Math.round(count))) : 1,
+          lengthFt: Number.isFinite(len) && len > 0 ? Math.min(500, len) : null,
+          notes: String(c.notes ?? '').trim().slice(0, 200),
+        };
         break;
       }
       case 'purchaseDate':

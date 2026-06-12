@@ -5,6 +5,7 @@ import {
   Wrench,
   Flag,
   Package,
+  Cable,
   type LucideIcon,
 } from 'lucide-react';
 import type { ItemKind } from '@/lib/views/inventory-shape';
@@ -20,6 +21,7 @@ const KIND_ICONS: Record<ItemKind, LucideIcon> = {
   banner: Flag,
   fixture: Package,
   system: Box,
+  cable: Cable,
 };
 
 export function kindLucide(kind: string | undefined | null): LucideIcon {
