@@ -5,7 +5,7 @@ import { canSeeAccommodations } from '@/lib/views/event-view';
 import { itemRollupState, itemQtyLooseAtEvent, type InventoryPayload } from '@/lib/views/inventory-shape';
 import { itemQtyInCase, itemStateInCase } from '@/lib/views/case-view';
 import { formatWeight } from '@/lib/util/weight';
-import { receptacleById } from '@/lib/power/connectors';
+import { receptacleById, inferEventRegion, regionPower, REGION_LABEL } from '@/lib/power/connectors';
 import type {
   AccommodationsProfile,
   CasePayload,
@@ -161,6 +161,20 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     }
   }
 
+  // The destination's power standard — inferred from the venue coordinates (Places stamps lat/lng)
+  // with a text fallback. A 120 V-only device headed to a 230 V region is flagged proactively (the
+  // classic forgot-the-transformer problem); NA destinations carry both families, so no flag there.
+  const destRegion = inferEventRegion(safePayload.venue, safePayload.city);
+  const destPower = regionPower(destRegion);
+  if (destRegion !== 'NA') {
+    const fixed120 = deviceVolts.get('120');
+    if (fixed120?.length) {
+      voltWarnings.push(
+        `${fixed120.slice(0, 3).join(', ')}${fixed120.length > 3 ? ` +${fixed120.length - 3} more` : ''} ${fixed120.length === 1 ? 'is' : 'are'} 120 V-only — the destination's mains is 230 V (plan transformers or check the PSUs)`
+      );
+    }
+  }
+
   const power: EventDetailView['power'] = {
     requiredUnits: powerUnits,
     totalWatts: Math.round(powerWattsTotal),
@@ -170,6 +184,12 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     notes: String(safePayload.powerNotes ?? '').trim(),
     receptacles,
     voltWarnings,
+    destination: {
+      region: destRegion,
+      label: REGION_LABEL[destRegion],
+      mains: destPower.mains,
+      receptacles: destPower.receptacles.map((r) => r.label),
+    },
   };
 
   // ── Team cards (directory picture + display name + gated accommodations) ───────────────────

@@ -211,14 +211,46 @@ const EU_HINTS = /germany|deutschland|frankfurt|berlin|münchen|munich|france|pa
 const UK_HINTS = /united kingdom|\buk\b|england|london|birmingham|scotland|wales|manchester/i;
 const AU_HINTS = /australia|sydney|melbourne|new zealand|auckland/i;
 
-export function inferEventRegion(venue: { state?: string; city?: string; address?: string } | null | undefined, city?: string): Region {
+/** Region from venue COORDINATES (the Google Places autocomplete stores venue.lat/lng — the
+ *  authoritative destination signal). Coarse continental boxes; null = outside all (fall back to
+ *  the text heuristic). UK is carved out before the EU box. */
+export function regionFromLatLng(lat: number, lng: number): Region | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat >= 49.8 && lat <= 61 && lng >= -11 && lng <= 1.7) return 'UK'; // Britain + Ireland (G plugs)
+  if (lat >= 34 && lat <= 72 && lng <= -50 && lng >= -170) return 'NA'; // US/Canada
+  if (lat >= 14 && lat < 34 && lng <= -86 && lng >= -120) return 'NA'; // Mexico (NEMA/120V family)
+  if (lat >= -47 && lat <= -10 && lng >= 112 && lng <= 179) return 'AU'; // Australia + NZ
+  if (lat >= 35 && lat <= 71 && lng >= -10 && lng <= 40) return 'EU'; // continental Europe (Schuko)
+  return null;
+}
+
+export function inferEventRegion(
+  venue: { state?: string; city?: string; address?: string; lat?: number; lng?: number } | null | undefined,
+  city?: string
+): Region {
+  // 1) Coordinates win — set by the Places autocomplete (or an ICS import's GEO), no text guessing.
+  const byGeo = regionFromLatLng(Number(venue?.lat), Number(venue?.lng));
+  if (byGeo) return byGeo;
+  // 2) Text heuristics, then the home-turf default.
   const state = String(venue?.state ?? '').trim().toUpperCase();
   if (US_STATES.has(state)) return 'NA';
   const hay = [venue?.address, venue?.city, city].filter(Boolean).join(' ');
   if (UK_HINTS.test(hay)) return 'UK';
   if (AU_HINTS.test(hay)) return 'AU';
   if (EU_HINTS.test(hay)) return 'EU';
-  return 'NA'; // home turf default
+  return 'NA';
+}
+
+/** The destination's mains family + its standard receptacle(s) — the "what plug will I need there"
+ *  answer the UI surfaces proactively from the event's location. */
+export function regionPower(region: Region): { volts: VoltFamily; mains: string; receptacles: ReceptacleDef[] } {
+  const recs = RECEPTACLES.filter((r) => r.region === region);
+  const volts: VoltFamily = region === 'NA' ? '120' : '230';
+  return {
+    volts,
+    mains: region === 'NA' ? '120 V (240 V available on NEMA 6-x drops)' : '230 V',
+    receptacles: recs.filter((r) => r.volts === volts || region !== 'NA'),
+  };
 }
 
 // ── Voltage compatibility (the greying rule) ─────────────────────────────────────────────────────

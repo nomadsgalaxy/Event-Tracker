@@ -370,6 +370,12 @@ function OverviewPanel({
             }
           />
         ) : null}
+        {power && (power.requiredUnits > 0 || power.provided) ? (
+          <DataRow
+            label="Destination power"
+            value={`${power.destination.label} — mains ${power.destination.mains} · local receptacle: ${power.destination.receptacles.join(', ')}`}
+          />
+        ) : null}
         {power?.voltWarnings.map((w) => (
           <DataRow key={w} label="Voltage" value={<span className="font-medium text-warning">⚠ {w}</span>} />
         ))}

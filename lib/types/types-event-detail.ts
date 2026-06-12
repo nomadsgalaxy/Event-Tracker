@@ -112,5 +112,8 @@ export interface EventDetailView {
     receptacles: string[];
     /** Voltage-compatibility problems (e.g. a 120 V-only device with only 240 V receptacles). */
     voltWarnings: string[];
+    /** The DESTINATION's power standard, inferred from the venue coordinates/location — the
+     *  proactive "what plug will you need there" answer. */
+    destination: { region: string; label: string; mains: string; receptacles: string[] };
   };
 }

@@ -44,6 +44,7 @@ import {
   RECEPTACLES,
   REGION_LABEL,
   inferEventRegion,
+  regionPower,
   deviceFitsVolts,
   type Region,
   type VoltFamily,
@@ -335,8 +336,15 @@ function PowerDropFields() {
   // Inferred region first, then the rest in catalog order.
   const regions: Region[] = [region, ...(['NA', 'EU', 'UK', 'AU'] as Region[]).filter((r) => r !== region)];
 
+  const destPower = regionPower(region);
   return (
     <div className="flex flex-col gap-3">
+      {/* The proactive "what plug will you need there" line — driven by the venue's coordinates
+          (Places autocomplete stamps lat/lng; text fallback otherwise). */}
+      <p className="text-xs text-muted-foreground">
+        Destination: <span className="text-foreground">{REGION_LABEL[region]}</span> — mains {destPower.mains}; local
+        receptacle: {destPower.receptacles.map((r) => r.label).join(', ')}.
+      </p>
       <div className="flex flex-wrap items-end gap-4">
         <FormField
           control={control}
