@@ -311,10 +311,13 @@ export interface EventPayload {
   // EVENT_HEADERS). The detail's Venue card renders it as an external link; venue.website is also
   // honored as a fallback for older records.
   website?: string;
-  // Booth power: whether the event/booth provides a power drop, plus the drop's detail (e.g.
-  // "2× 20A 120V"). The detail view warns when assigned equipment requires power and this is off.
+  // Booth power: whether the event/booth provides a power drop, the drop's detail (e.g.
+  // "2× 20A 120V"), and the SELECTED receptacle types at the drop (canonical ids from
+  // lib/power/connectors RECEPTACLES). The detail view warns when assigned equipment requires
+  // power and this is off, or when a device's voltage has no compatible selected receptacle.
   powerDrop?: boolean;
   powerNotes?: string;
+  powerReceptacles?: string[];
   // After-parties / community events tied to this event (the "Side events" tab).
   sideEvents?: SideEvent[];
   // The shipping-pallet overlay grouping the event's cases (read-only Pallets view on the Packing

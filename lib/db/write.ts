@@ -70,6 +70,7 @@ const EDITABLE_FIELDS = [
   'roadKitIds',
   'powerDrop',
   'powerNotes',
+  'powerReceptacles',
 ] as const;
 
 export type EventPatch = Partial<Pick<EventPayload, (typeof EDITABLE_FIELDS)[number]>>;
@@ -1280,6 +1281,7 @@ const ITEM_EDITABLE_FIELDS = [
   'requiresPower',
   'powerWatts',
   'plugType',
+  'powerVolts',
 ] as const;
 
 export type ItemPatch = Partial<Pick<InventoryPayload, (typeof ITEM_EDITABLE_FIELDS)[number]>>;
@@ -1440,6 +1442,10 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
       }
       case 'plugType': {
         set[`payload.${key}`] = String(raw ?? '').trim().slice(0, 60);
+        break;
+      }
+      case 'powerVolts': {
+        set[`payload.${key}`] = raw === '120' || raw === '240' ? raw : 'auto';
         break;
       }
       case 'purchaseDate':

@@ -34,6 +34,8 @@ export interface EditorContextValue {
   cases: EditorCase[];
   /** Case id → display label, for pallet chips + the loose list. */
   caseLabelById: Record<string, string>;
+  /** caseId → powered items' voltage classes inside it — the receptacle grid's greying source. */
+  casePowerVolts: Record<string, string[]>;
   /** The visible tag library (for the tags field picker + applied chips). */
   tags: DashTag[];
   /** Google Places autocomplete wired? When false the address fields degrade + flag the key. */

@@ -348,7 +348,13 @@ function OverviewPanel({
         {/* Booth power — what the equipment needs vs what the venue provides (warn on mismatch). */}
         <DataRow
           label="Power drop"
-          value={power?.provided ? power.notes || 'Provided' : p.powerDrop === undefined && !power?.requiredUnits ? '' : 'None arranged'}
+          value={
+            power?.provided
+              ? [power.notes, power.receptacles.join(', ')].filter(Boolean).join(' · ') || 'Provided'
+              : p.powerDrop === undefined && !power?.requiredUnits
+                ? ''
+                : 'None arranged'
+          }
         />
         {power && power.requiredUnits > 0 ? (
           <DataRow
@@ -358,12 +364,15 @@ function OverviewPanel({
                 {!power.provided ? '⚠ ' : ''}
                 {power.requiredUnits} powered {power.requiredUnits === 1 ? 'unit' : 'units'}
                 {power.totalWatts > 0 ? ` · ~${power.totalWatts.toLocaleString()} W · ~${power.amps120} A @120V` : ''}
-                {power.plugTypes.length ? ` · plugs: ${power.plugTypes.join(', ')}` : ''}
+                {power.plugTypes.length ? ` · inlets: ${power.plugTypes.join(', ')}` : ''}
                 {!power.provided ? ' — no power drop arranged' : ''}
               </span>
             }
           />
         ) : null}
+        {power?.voltWarnings.map((w) => (
+          <DataRow key={w} label="Voltage" value={<span className="font-medium text-warning">⚠ {w}</span>} />
+        ))}
 
         <ForecastStrip rows={forecastRows} tempUnit={tempUnit} />
 

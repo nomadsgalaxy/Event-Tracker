@@ -119,6 +119,7 @@ const patchSchema = z
     roadKitIds: z.array(z.string()).optional(),
     powerDrop: z.boolean().optional(),
     powerNotes: z.string().optional(),
+    powerReceptacles: z.array(z.string()).optional(),
   })
   .strict();
 

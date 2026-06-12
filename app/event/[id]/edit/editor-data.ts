@@ -1,5 +1,6 @@
 import 'server-only';
-import { getCases, getEvents, getTags, getUsers, type TagDoc } from '@/lib/db/data';
+import { getCases, getEvents, getTags, getUsers, getInventory, type TagDoc } from '@/lib/db/data';
+import { itemQtyInCase } from '@/lib/views/inventory-shape';
 import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/views/case-view';
 import { can } from '@/lib/auth/rbac';
 import { integrationStatus } from '@/lib/integrations/integrations';
@@ -30,6 +31,9 @@ export interface EditorServerData {
   directory: DirectoryUser[];
   cases: EditorCase[];
   caseLabelById: Record<string, string>;
+  /** caseId -> the voltage classes of POWERED items routed into it ('120'|'240'|'auto'). Drives the
+   *  receptacle grid's voltage greying against the draft's live case selection. */
+  casePowerVolts: Record<string, string[]>;
   tags: DashTag[];
   placesAvailable: boolean;
   flightLookupAvailable: boolean;
@@ -41,11 +45,12 @@ export interface EditorServerData {
  * never lock it out of its own assignment grid); pass null for a brand-new event.
  */
 export async function assembleEditorData(role: string, selfEventId: string | null): Promise<EditorServerData> {
-  const [caseDocs, eventDocs, tagDocs, userDocs] = await Promise.all([
+  const [caseDocs, eventDocs, tagDocs, userDocs, invDocs] = await Promise.all([
     getCases(),
     getEvents(),
     getTags(),
     getUsers(),
+    getInventory(),
   ]);
 
   // Directory — sorted by display name, with the picture for the staffer avatar.
@@ -80,10 +85,25 @@ export async function assembleEditorData(role: string, selfEventId: string | nul
 
   const { placesAvailable, flightLookupAvailable } = await integrationStatus();
 
+  // Per-case powered-voltage classes — what the receptacle grid greys against. Only powered items
+  // with units actually IN the case count; powerVolts defaults to 'auto' (universal PSU).
+  const casePowerVolts: Record<string, string[]> = {};
+  const inventory = invDocs.map((d) => d.payload);
+  for (const c of caseDocs) {
+    const volts = new Set<string>();
+    for (const it of inventory) {
+      if (!it.requiresPower) continue;
+      if (itemQtyInCase(it, c._id) <= 0) continue;
+      volts.add(it.powerVolts === '120' || it.powerVolts === '240' ? it.powerVolts : 'auto');
+    }
+    if (volts.size) casePowerVolts[c._id] = [...volts];
+  }
+
   return {
     directory,
     cases,
     caseLabelById,
+    casePowerVolts,
     tags,
     placesAvailable,
     flightLookupAvailable,

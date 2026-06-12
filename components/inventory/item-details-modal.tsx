@@ -33,6 +33,7 @@ import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
 import { formatMoney } from '@/lib/util/money';
+import { INLETS } from '@/lib/power/connectors';
 import {
   itemTotalQty,
   itemInStorage,
@@ -257,10 +258,14 @@ export function ItemDetailsModal({
   const [serviceIntervalDays, setServiceIntervalDays] = useState(
     item.serviceIntervalDays == null ? '' : String(item.serviceIntervalDays)
   );
-  // Booth power: needs a feed + the per-unit draw (nameplate watts) + the plug it presents.
+  // Booth power: needs a feed + the per-unit draw (nameplate watts) + the inlet it presents + the
+  // voltage class its PSU accepts (drives the event receptacle grid's greying).
   const [requiresPower, setRequiresPower] = useState(item.requiresPower === true);
   const [powerWatts, setPowerWatts] = useState(item.powerWatts == null ? '' : String(item.powerWatts));
   const [plugType, setPlugType] = useState(item.plugType || '');
+  const [powerVolts, setPowerVolts] = useState<'120' | '240' | 'auto'>(
+    item.powerVolts === '120' || item.powerVolts === '240' ? item.powerVolts : 'auto'
+  );
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
   );
@@ -412,10 +417,11 @@ export function ItemDetailsModal({
       purchaseDate: purchaseDate || null,
       nextServiceDate: nextServiceDate || null,
       serviceIntervalDays: serviceIntervalDays === '' ? null : Math.max(0, Number(serviceIntervalDays)),
-      // Booth power (server re-sanitizes: bool pinned, watts clamped >=0, plug capped).
+      // Booth power (server re-sanitizes: bool pinned, watts clamped >=0, plug capped, volts pinned).
       requiresPower,
       powerWatts: requiresPower && powerWatts !== '' ? Math.max(0, Number(powerWatts)) : null,
       plugType: requiresPower ? plugType.trim() : '',
+      powerVolts: requiresPower ? powerVolts : 'auto',
       // tagIds are passed through unchanged (the picker is a later wave; we never drop them).
       tagIds: Array.isArray(item.tagIds) ? item.tagIds : [],
       // #27 kit BOM — drop rows with no target; the server re-sanitizes too. Only sent when the
@@ -1226,24 +1232,74 @@ export function ItemDetailsModal({
               </div>
             ) : null}
 
-            {/* Booth power — drives the event detail's power budget (Σ watts → amps) + the
-                no-power-drop warning. Watts/plug only apply when the item needs a feed. */}
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={requiresPower} disabled={!canEdit} onCheckedChange={(v) => setRequiresPower(v === true)} />
-                Requires power
-              </label>
+            {/* Booth power — drives the event detail's power budget (Σ watts → amps), the receptacle
+                grid's voltage greying, and the no-power-drop warning. */}
+            <div className="flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={requiresPower} disabled={!canEdit} onCheckedChange={(v) => setRequiresPower(v === true)} />
+                  Requires power
+                </label>
+                {requiresPower ? (
+                  <>
+                    <div className="flex w-32 flex-col gap-1.5">
+                      <Label htmlFor="item-watts">Watts (ea.)</Label>
+                      <Input id="item-watts" type="number" min={0} inputMode="numeric" value={powerWatts} placeholder="e.g. 350" onChange={(e) => setPowerWatts(e.target.value)} disabled={!canEdit} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Input voltage</Label>
+                      <div className="flex overflow-hidden rounded-md border border-input" role="radiogroup" aria-label="Input voltage">
+                        {([['120', '120V'], ['240', '240V'], ['auto', 'Universal']] as const).map(([v, lbl]) => (
+                          <button
+                            key={v}
+                            type="button"
+                            role="radio"
+                            aria-checked={powerVolts === v}
+                            disabled={!canEdit}
+                            onClick={() => setPowerVolts(v)}
+                            className={cn(
+                              'h-9 px-2.5 text-xs transition-colors',
+                              powerVolts === v ? 'bg-primary/15 font-semibold text-primary' : 'text-muted-foreground hover:bg-accent/50'
+                            )}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
               {requiresPower ? (
-                <>
-                  <div className="flex w-32 flex-col gap-1.5">
-                    <Label htmlFor="item-watts">Watts (ea.)</Label>
-                    <Input id="item-watts" type="number" min={0} inputMode="numeric" value={powerWatts} placeholder="e.g. 350" onChange={(e) => setPowerWatts(e.target.value)} disabled={!canEdit} />
+                <div className="flex flex-col gap-1.5">
+                  <Label>Power inlet (what the equipment receives)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INLETS.map((inlet) => {
+                      const on = plugType === inlet.id;
+                      return (
+                        <button
+                          key={inlet.id}
+                          type="button"
+                          aria-pressed={on}
+                          disabled={!canEdit}
+                          onClick={() => setPlugType(on ? '' : inlet.id)}
+                          title={`${inlet.label} — ${inlet.takes}`}
+                          className={cn(
+                            'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                            on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                          )}
+                        >
+                          <span className="size-9 text-foreground">{inlet.svg}</span>
+                          <span className="text-[10px] font-medium leading-tight">{inlet.label}</span>
+                          <span className="text-[9px] leading-tight">{inlet.takes}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="flex w-40 flex-col gap-1.5">
-                    <Label htmlFor="item-plug">Plug type</Label>
-                    <Input id="item-plug" value={plugType} placeholder="e.g. NEMA 5-15" onChange={(e) => setPlugType(e.target.value)} disabled={!canEdit} />
-                  </div>
-                </>
+                  {plugType && !INLETS.some((i) => i.id === plugType) ? (
+                    <span className="text-[10px] text-muted-foreground">Stored value: “{plugType}” (legacy text — pick a cell to replace it)</span>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>

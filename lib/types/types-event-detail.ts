@@ -108,5 +108,9 @@ export interface EventDetailView {
     provided: boolean;
     /** event.powerNotes — the drop's detail (e.g. "2× 20A 120V"). */
     notes: string;
+    /** The receptacle types selected at the drop (canonical ids). */
+    receptacles: string[];
+    /** Voltage-compatibility problems (e.g. a 120 V-only device with only 240 V receptacles). */
+    voltWarnings: string[];
   };
 }

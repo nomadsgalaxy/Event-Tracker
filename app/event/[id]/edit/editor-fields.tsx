@@ -40,6 +40,15 @@ import type { DashTag } from '@/lib/types/types-dashboard';
 import { lookupFlightAction, type FlightLeg } from '@/app/event/flight-actions';
 import { EVENT_STATES, type EventFormValues } from './schema';
 import { useEditorContext } from './editor-context';
+import {
+  RECEPTACLES,
+  REGION_LABEL,
+  inferEventRegion,
+  deviceFitsVolts,
+  type Region,
+  type VoltFamily,
+  type DeviceVolts,
+} from '@/lib/power/connectors';
 
 // app/event/[id]/edit/editor-fields.tsx — the editor's field components (full 1:1 parity pass).
 //
@@ -299,33 +308,114 @@ function PlacesField({
 }
 
 // ── Amenities list editor (add/remove rows) ────────────────────────────────────
-// ── Booth power (powerDrop + powerNotes) ───────────────────────────────────────
-// Whether the event/booth provides a power drop, with the drop detail when it does. The event
-// detail's power budget warns when assigned equipment requires power and this is off. Module-scope
-// (never define a component inside a render body — the #59/#90 remount lesson).
+// ── Booth power (powerDrop + powerNotes + the receptacle grid) ─────────────────
+// Whether the event/booth provides a power drop, with the drop detail + WHICH receptacle types the
+// drop offers — picked from a visual grid (SVG faces + official names, lib/power/connectors),
+// grouped by region (the venue's inferred region first) and GREYED when no assigned powered
+// equipment can use that voltage (a 120 V-only device can't use a 240 V receptacle; amp variants
+// stay live). Module-scope (never define a component inside a render body — the #59/#90 lesson).
 function PowerDropFields() {
   const { control } = useFormContext<EventFormValues>();
+  const { casePowerVolts } = useEditorContext();
   const powerDrop = useWatch({ control, name: 'powerDrop' });
+  const venue = useWatch({ control, name: 'venue' });
+  const city = useWatch({ control, name: 'city' });
+  const caseIds = useWatch({ control, name: 'cases' });
+
+  const region = inferEventRegion(venue, city);
+  // The voltage classes the SELECTED cases' powered equipment needs (empty = nothing known → no greying).
+  const needed = new Set<string>();
+  for (const cid of Array.isArray(caseIds) ? caseIds : []) {
+    for (const v of casePowerVolts[cid] ?? []) needed.add(v);
+  }
+  const usable = (fam: VoltFamily): boolean => {
+    if (needed.size === 0) return true;
+    return [...needed].some((d) => deviceFitsVolts(d as DeviceVolts, fam));
+  };
+  // Inferred region first, then the rest in catalog order.
+  const regions: Region[] = [region, ...(['NA', 'EU', 'UK', 'AU'] as Region[]).filter((r) => r !== region)];
+
   return (
-    <div className="flex flex-wrap items-end gap-4">
-      <FormField
-        control={control}
-        name="powerDrop"
-        render={({ field }) => (
-          <FormItem className="flex h-9 flex-row items-center gap-2 space-y-0">
-            <FormControl>
-              <Checkbox checked={field.value === true} onCheckedChange={(v) => field.onChange(v === true)} />
-            </FormControl>
-            <FormLabel className="cursor-pointer font-normal">Venue provides a power drop</FormLabel>
-          </FormItem>
-        )}
-      />
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end gap-4">
+        <FormField
+          control={control}
+          name="powerDrop"
+          render={({ field }) => (
+            <FormItem className="flex h-9 flex-row items-center gap-2 space-y-0">
+              <FormControl>
+                <Checkbox checked={field.value === true} onCheckedChange={(v) => field.onChange(v === true)} />
+              </FormControl>
+              <FormLabel className="cursor-pointer font-normal">Venue provides a power drop</FormLabel>
+            </FormItem>
+          )}
+        />
+        {powerDrop ? (
+          <TextField
+            name="powerNotes"
+            label="Power drop details"
+            placeholder="e.g. 2× 20A 120V to the booth"
+            className="min-w-64 flex-1"
+          />
+        ) : null}
+      </div>
+
       {powerDrop ? (
-        <TextField
-          name="powerNotes"
-          label="Power drop details"
-          placeholder="e.g. 2× 20A 120V to the booth"
-          className="min-w-64 flex-1"
+        <Controller
+          control={control}
+          name="powerReceptacles"
+          render={({ field }) => {
+            const selected = new Set(Array.isArray(field.value) ? field.value : []);
+            const toggle = (id: string) => {
+              const next = new Set(selected);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              field.onChange([...next]);
+            };
+            return (
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Receptacles at the drop — {REGION_LABEL[region]} shown first (inferred from the venue).
+                  Greyed types aren&apos;t usable by the assigned equipment&apos;s voltage.
+                </span>
+                {regions.map((reg) => {
+                  const recs = RECEPTACLES.filter((r) => r.region === reg);
+                  if (!recs.length) return null;
+                  return (
+                    <div key={reg} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {REGION_LABEL[reg]}
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {recs.map((r) => {
+                          const on = selected.has(r.id);
+                          const ok = usable(r.volts);
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => toggle(r.id)}
+                              aria-pressed={on}
+                              title={ok ? `${r.label} · ${r.volts === '120' ? '120 V' : '230/240 V'} ${r.amps} A` : `${r.label} — no assigned equipment uses ${r.volts === '120' ? '120 V' : '230/240 V'}`}
+                              className={cn(
+                                'flex w-[88px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                                on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50',
+                                !ok && 'opacity-40'
+                              )}
+                            >
+                              <span className="size-9 text-foreground">{r.svg}</span>
+                              <span className="text-[10px] font-medium leading-tight">{r.label}</span>
+                              <span className="text-[9px] tabular-nums">{r.volts === '120' ? '120V' : '230/240V'} · {r.amps}A</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }}
         />
       ) : null}
     </div>

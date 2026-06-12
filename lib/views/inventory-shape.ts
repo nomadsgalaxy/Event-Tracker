@@ -177,7 +177,12 @@ export interface InventoryPayload {
   // event without a power drop.
   requiresPower?: boolean;
   powerWatts?: number | null;
+  /** The power INLET this equipment presents — a canonical id from lib/power/connectors INLETS
+   *  (e.g. 'C14', 'NEMA 5-15P'). Legacy free-text survives (renders as a plain label). */
   plugType?: string;
+  /** Input voltage class: '120' (NA-only PSU), '240' (230/240-only), 'auto' (universal). Drives the
+   *  event receptacle grid's greying + the compatibility warning. */
+  powerVolts?: '120' | '240' | 'auto';
   distribution?: DistributionRow[]; // BULK
   units?: ItemUnit[]; // SERIAL (#22)
   flags?: ItemFlag[];

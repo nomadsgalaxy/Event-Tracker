@@ -5,6 +5,7 @@ import { canSeeAccommodations } from '@/lib/views/event-view';
 import { itemRollupState, itemQtyLooseAtEvent, type InventoryPayload } from '@/lib/views/inventory-shape';
 import { itemQtyInCase, itemStateInCase } from '@/lib/views/case-view';
 import { formatWeight } from '@/lib/util/weight';
+import { receptacleById } from '@/lib/power/connectors';
 import type {
   AccommodationsProfile,
   CasePayload,
@@ -121,6 +122,7 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
   let powerUnits = 0;
   let powerWattsTotal = 0;
   const plugTypes: string[] = [];
+  const deviceVolts = new Map<string, string[]>(); // volt class -> item names needing it
   const powerRows = [
     ...manifest.caseGroups.flatMap((g) => g.rows),
     ...(manifest.looseGroup?.rows ?? []),
@@ -133,7 +135,32 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     powerWattsTotal += qty * Math.max(0, Number(it.powerWatts) || 0);
     const plug = String(it.plugType ?? '').trim();
     if (plug && !plugTypes.some((p) => p.toLowerCase() === plug.toLowerCase())) plugTypes.push(plug);
+    const volts = it.powerVolts === '120' || it.powerVolts === '240' ? it.powerVolts : 'auto';
+    const names = deviceVolts.get(volts) ?? [];
+    if (it.name && !names.includes(it.name)) names.push(it.name);
+    deviceVolts.set(volts, names);
   }
+
+  // Voltage compatibility vs the SELECTED receptacles (only checkable when some were picked):
+  // a fixed-voltage device with no matching-voltage receptacle is a warning.
+  const receptacles = (Array.isArray(safePayload.powerReceptacles) ? safePayload.powerReceptacles : [])
+    .map((id) => String(id))
+    .filter(Boolean);
+  const voltWarnings: string[] = [];
+  if (safePayload.powerDrop === true && receptacles.length > 0) {
+    const families = new Set(receptacles.map((id) => receptacleById(id)?.volts).filter(Boolean));
+    for (const fixed of ['120', '240'] as const) {
+      const names = deviceVolts.get(fixed);
+      if (!names?.length) continue;
+      const fam = fixed === '120' ? '120' : '230';
+      if (!families.has(fam)) {
+        voltWarnings.push(
+          `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3} more` : ''} need${names.length === 1 ? 's' : ''} ${fixed} V — no ${fixed === '120' ? '120 V' : '230/240 V'} receptacle selected at the drop`
+        );
+      }
+    }
+  }
+
   const power: EventDetailView['power'] = {
     requiredUnits: powerUnits,
     totalWatts: Math.round(powerWattsTotal),
@@ -141,6 +168,8 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     plugTypes,
     provided: safePayload.powerDrop === true,
     notes: String(safePayload.powerNotes ?? '').trim(),
+    receptacles,
+    voltWarnings,
   };
 
   // ── Team cards (directory picture + display name + gated accommodations) ───────────────────

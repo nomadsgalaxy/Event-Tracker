@@ -257,6 +257,7 @@ export async function createItemAction(name: string): Promise<CatalogActionState
       requiresPower: false,
       powerWatts: null,
       plugType: '',
+      powerVolts: 'auto',
       tagIds: [],
       requirements: [],
     };
