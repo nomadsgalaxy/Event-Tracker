@@ -308,6 +308,15 @@ export function cableEndRating(end: CableEndDef): string {
   return `${v} ${end.amps}A`;
 }
 
+/** A TRUE mains-voltage mismatch between two cable ends — only a fixed 120 V end against a fixed
+ *  230 V end. The IEC '250' couplers (C13/C19/…) are rated UP TO 250 V but carry whatever the source
+ *  supplies, so they're voltage-agnostic and never trigger the cross-voltage warning (a US PDU with
+ *  C13 outlets is normal, not a transformer). */
+export function cableEndsCrossVoltage(a: CableEndDef | undefined, b: CableEndDef | undefined): boolean {
+  if (!a || !b) return false;
+  return (a.volts === '120' && b.volts === '230') || (a.volts === '230' && b.volts === '120');
+}
+
 export const REGION_LABEL: Record<Region, string> = {
   NA: 'North America',
   EU: 'Europe (Schuko)',

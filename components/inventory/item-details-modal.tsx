@@ -33,7 +33,7 @@ import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
 import { formatMoney } from '@/lib/util/money';
-import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, cableEndById, cableEndRating, isFixedCordInlet, type Region } from '@/lib/power/connectors';
+import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, cableEndById, cableEndRating, cableEndsCrossVoltage, isFixedCordInlet, type Region } from '@/lib/power/connectors';
 import {
   itemTotalQty,
   itemInStorage,
@@ -1515,7 +1515,7 @@ export function ItemDetailsModal({
                   if (!a?.id || !b?.id) return null;
                   const A = cableEndById(a.id, a.gender);
                   const B = cableEndById(b.id, b.gender);
-                  const cross = A && B && A.volts !== B.volts;
+                  const cross = cableEndsCrossVoltage(A, B);
                   return (
                     <p className="text-xs text-muted-foreground">
                       {A ? `${A.label} ${cableEndRating(A)}` : a.id} {a.gender} → {B ? `${B.label} ${cableEndRating(B)}` : b.id} {b.gender}
@@ -1531,10 +1531,7 @@ export function ItemDetailsModal({
                     const f = cableEndById(r.end, 'female');
                     return `${r.count}× ${f ? f.label : r.end}`;
                   });
-                  const cross = cable.femaleEnds.some((r) => {
-                    const f = cableEndById(r.end, 'female');
-                    return m && f && m.volts !== f.volts;
-                  });
+                  const cross = cable.femaleEnds.some((r) => cableEndsCrossVoltage(m, cableEndById(r.end, 'female')));
                   return (
                     <p className="text-xs text-muted-foreground">
                       {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${parts.join(' + ')}${cross ? ' — ⚠ cross-voltage' : ''}`}
@@ -1545,7 +1542,7 @@ export function ItemDetailsModal({
                 const f = cableEndById(cable.femaleEnd, 'female');
                 return (
                   <p className="text-xs text-muted-foreground">
-                    {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${m && f && m.volts !== f.volts ? ' — ⚠ cross-voltage adapter' : ''}`}
+                    {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${cableEndsCrossVoltage(m, f) ? ' — ⚠ cross-voltage adapter' : ''}`}
                   </p>
                 );
               })()}
