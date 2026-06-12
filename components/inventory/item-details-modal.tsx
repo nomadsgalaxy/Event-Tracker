@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { TagChip } from '@/components/ui/tag-chip';
 import { ItemMatrixModal } from './item-matrix-modal';
@@ -256,6 +257,10 @@ export function ItemDetailsModal({
   const [serviceIntervalDays, setServiceIntervalDays] = useState(
     item.serviceIntervalDays == null ? '' : String(item.serviceIntervalDays)
   );
+  // Booth power: needs a feed + the per-unit draw (nameplate watts) + the plug it presents.
+  const [requiresPower, setRequiresPower] = useState(item.requiresPower === true);
+  const [powerWatts, setPowerWatts] = useState(item.powerWatts == null ? '' : String(item.powerWatts));
+  const [plugType, setPlugType] = useState(item.plugType || '');
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
   );
@@ -407,6 +412,10 @@ export function ItemDetailsModal({
       purchaseDate: purchaseDate || null,
       nextServiceDate: nextServiceDate || null,
       serviceIntervalDays: serviceIntervalDays === '' ? null : Math.max(0, Number(serviceIntervalDays)),
+      // Booth power (server re-sanitizes: bool pinned, watts clamped >=0, plug capped).
+      requiresPower,
+      powerWatts: requiresPower && powerWatts !== '' ? Math.max(0, Number(powerWatts)) : null,
+      plugType: requiresPower ? plugType.trim() : '',
       // tagIds are passed through unchanged (the picker is a later wave; we never drop them).
       tagIds: Array.isArray(item.tagIds) ? item.tagIds : [],
       // #27 kit BOM — drop rows with no target; the server re-sanitizes too. Only sent when the
@@ -1216,6 +1225,27 @@ export function ItemDetailsModal({
                 </div>
               </div>
             ) : null}
+
+            {/* Booth power — drives the event detail's power budget (Σ watts → amps) + the
+                no-power-drop warning. Watts/plug only apply when the item needs a feed. */}
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
+                <Checkbox checked={requiresPower} disabled={!canEdit} onCheckedChange={(v) => setRequiresPower(v === true)} />
+                Requires power
+              </label>
+              {requiresPower ? (
+                <>
+                  <div className="flex w-32 flex-col gap-1.5">
+                    <Label htmlFor="item-watts">Watts (ea.)</Label>
+                    <Input id="item-watts" type="number" min={0} inputMode="numeric" value={powerWatts} placeholder="e.g. 350" onChange={(e) => setPowerWatts(e.target.value)} disabled={!canEdit} />
+                  </div>
+                  <div className="flex w-40 flex-col gap-1.5">
+                    <Label htmlFor="item-plug">Plug type</Label>
+                    <Input id="item-plug" value={plugType} placeholder="e.g. NEMA 5-15" onChange={(e) => setPlugType(e.target.value)} disabled={!canEdit} />
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
 
           {/* Service: BULK items mark the whole type out of service; SERIAL items track each unit

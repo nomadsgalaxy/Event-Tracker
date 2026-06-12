@@ -94,4 +94,19 @@ export interface EventDetailView {
   tags: ResolvedTag[];
   /** Server-built Manifest CSV rows (the "Manifest CSV" header export). */
   csvRows: CsvRow[];
+  /** Booth power budget: the assigned items that need a feed vs what the event provides. */
+  power: {
+    /** Total powered UNITS on the manifest (case-routed + loose), qty-weighted. */
+    requiredUnits: number;
+    /** Σ qty × powerWatts across powered items (watts without a spec count 0). */
+    totalWatts: number;
+    /** ceil(totalWatts / 120V) — the conservative amps ask for the ops form. */
+    amps120: number;
+    /** Distinct plug types among powered items (deduped, in first-seen order). */
+    plugTypes: string[];
+    /** event.powerDrop — the venue/booth provides a drop. */
+    provided: boolean;
+    /** event.powerNotes — the drop's detail (e.g. "2× 20A 120V"). */
+    notes: string;
+  };
 }

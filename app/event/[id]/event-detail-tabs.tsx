@@ -291,7 +291,17 @@ function ForecastStrip({ rows, tempUnit = 'F' }: { rows: EventForecastRow[]; tem
   );
 }
 
-function OverviewPanel({ p, forecastRows, tempUnit = 'F' }: { p: EventPayload; forecastRows: EventForecastRow[]; tempUnit?: 'C' | 'F' }) {
+function OverviewPanel({
+  p,
+  forecastRows,
+  tempUnit = 'F',
+  power,
+}: {
+  p: EventPayload;
+  forecastRows: EventForecastRow[];
+  tempUnit?: 'C' | 'F';
+  power?: EventDetailView['power'];
+}) {
   const v = p.venue;
   const cityLine = [venueStr(v, 'city'), venueStr(v, 'state'), venueStr(v, 'zip')].filter(Boolean).join(' · ');
   const website = p.website || venueStr(v, 'website');
@@ -335,6 +345,25 @@ function OverviewPanel({ p, forecastRows, tempUnit = 'F' }: { p: EventPayload; f
           label="Amenities"
           value={amenities.length ? amenities.join(' · ') : ''}
         />
+        {/* Booth power — what the equipment needs vs what the venue provides (warn on mismatch). */}
+        <DataRow
+          label="Power drop"
+          value={power?.provided ? power.notes || 'Provided' : p.powerDrop === undefined && !power?.requiredUnits ? '' : 'None arranged'}
+        />
+        {power && power.requiredUnits > 0 ? (
+          <DataRow
+            label="Power needed"
+            value={
+              <span className={cn(!power.provided && 'font-medium text-warning')}>
+                {!power.provided ? '⚠ ' : ''}
+                {power.requiredUnits} powered {power.requiredUnits === 1 ? 'unit' : 'units'}
+                {power.totalWatts > 0 ? ` · ~${power.totalWatts.toLocaleString()} W · ~${power.amps120} A @120V` : ''}
+                {power.plugTypes.length ? ` · plugs: ${power.plugTypes.join(', ')}` : ''}
+                {!power.provided ? ' — no power drop arranged' : ''}
+              </span>
+            }
+          />
+        ) : null}
 
         <ForecastStrip rows={forecastRows} tempUnit={tempUnit} />
 
@@ -1247,7 +1276,7 @@ export function EventDetailClient({
       <div>
         <TabStrip active={active} onSelect={setActive} />
         <div role="tabpanel" hidden={active !== 'overview'}>
-          <OverviewPanel p={payload} forecastRows={forecastRows} tempUnit={tempUnit} />
+          <OverviewPanel p={payload} forecastRows={forecastRows} tempUnit={tempUnit} power={view.power} />
         </div>
         <div role="tabpanel" hidden={active !== 'team'}>
           <TeamPanel

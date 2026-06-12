@@ -299,6 +299,39 @@ function PlacesField({
 }
 
 // ── Amenities list editor (add/remove rows) ────────────────────────────────────
+// ── Booth power (powerDrop + powerNotes) ───────────────────────────────────────
+// Whether the event/booth provides a power drop, with the drop detail when it does. The event
+// detail's power budget warns when assigned equipment requires power and this is off. Module-scope
+// (never define a component inside a render body — the #59/#90 remount lesson).
+function PowerDropFields() {
+  const { control } = useFormContext<EventFormValues>();
+  const powerDrop = useWatch({ control, name: 'powerDrop' });
+  return (
+    <div className="flex flex-wrap items-end gap-4">
+      <FormField
+        control={control}
+        name="powerDrop"
+        render={({ field }) => (
+          <FormItem className="flex h-9 flex-row items-center gap-2 space-y-0">
+            <FormControl>
+              <Checkbox checked={field.value === true} onCheckedChange={(v) => field.onChange(v === true)} />
+            </FormControl>
+            <FormLabel className="cursor-pointer font-normal">Venue provides a power drop</FormLabel>
+          </FormItem>
+        )}
+      />
+      {powerDrop ? (
+        <TextField
+          name="powerNotes"
+          label="Power drop details"
+          placeholder="e.g. 2× 20A 120V to the booth"
+          className="min-w-64 flex-1"
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function AmenitiesEditor() {
   const { control } = useFormContext<EventFormValues>();
   const { fields, append, remove } = useFieldArray({ control, name: 'venue.amenities' as never });
@@ -437,6 +470,7 @@ export function OverviewPanel() {
           <TextField name="venue.booth" label="Booth #" mono />
           <TextField name="venue.boothSize" label="Booth size" placeholder="e.g. 20×20 ft" />
         </div>
+        <PowerDropFields />
         <AmenitiesEditor />
       </FieldGroup>
 

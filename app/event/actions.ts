@@ -117,6 +117,8 @@ const patchSchema = z
     tagIds: z.array(z.string()).optional(),
     primaryTagId: z.string().nullable().optional(),
     roadKitIds: z.array(z.string()).optional(),
+    powerDrop: z.boolean().optional(),
+    powerNotes: z.string().optional(),
   })
   .strict();
 

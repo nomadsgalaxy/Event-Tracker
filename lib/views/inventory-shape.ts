@@ -171,6 +171,13 @@ export interface InventoryPayload {
   purchasePrice?: number | null;
   purchaseDate?: string | null; // ISO date 'YYYY-MM-DD' ('' / null when unset)
   replacementCost?: number | null;
+  // Booth power: this equipment needs a power feed at the booth — its draw in watts (per unit, the
+  // nameplate spec) + the plug it presents (e.g. 'NEMA 5-15', 'L5-30', 'IEC C14'). The event view
+  // sums watts → amps @120V and lists distinct plug types, and warns when a powered item lands at an
+  // event without a power drop.
+  requiresPower?: boolean;
+  powerWatts?: number | null;
+  plugType?: string;
   distribution?: DistributionRow[]; // BULK
   units?: ItemUnit[]; // SERIAL (#22)
   flags?: ItemFlag[];

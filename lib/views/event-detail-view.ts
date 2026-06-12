@@ -114,6 +114,35 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
   const totals = manifest.totals;
   const readiness = computeEventReadiness(safePayload, totals);
 
+  // ── Booth power budget — Σ over the manifest's rows (case-routed + loose), qty-weighted ─────
+  // requiresPower/powerWatts/plugType live on the ITEM; powerDrop/powerNotes on the EVENT. The
+  // Overview strip warns when requiredUnits > 0 and the event provides no drop.
+  const itemById = new Map(inventory.map((it) => [it.id ?? '', it]));
+  let powerUnits = 0;
+  let powerWattsTotal = 0;
+  const plugTypes: string[] = [];
+  const powerRows = [
+    ...manifest.caseGroups.flatMap((g) => g.rows),
+    ...(manifest.looseGroup?.rows ?? []),
+  ];
+  for (const r of powerRows) {
+    const it = r.id ? itemById.get(r.id) : undefined;
+    if (!it?.requiresPower) continue;
+    const qty = Number(r.qty) || 0;
+    powerUnits += qty;
+    powerWattsTotal += qty * Math.max(0, Number(it.powerWatts) || 0);
+    const plug = String(it.plugType ?? '').trim();
+    if (plug && !plugTypes.some((p) => p.toLowerCase() === plug.toLowerCase())) plugTypes.push(plug);
+  }
+  const power: EventDetailView['power'] = {
+    requiredUnits: powerUnits,
+    totalWatts: Math.round(powerWattsTotal),
+    amps120: powerWattsTotal > 0 ? Math.ceil(powerWattsTotal / 120) : 0,
+    plugTypes,
+    provided: safePayload.powerDrop === true,
+    notes: String(safePayload.powerNotes ?? '').trim(),
+  };
+
   // ── Team cards (directory picture + display name + gated accommodations) ───────────────────
   const staff: StaffCardView[] = (safePayload.staff ?? []).map((s) => {
     const email = s.email ?? '';
@@ -258,5 +287,6 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     loose,
     tags,
     csvRows,
+    power,
   };
 }

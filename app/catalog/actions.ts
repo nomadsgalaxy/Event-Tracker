@@ -254,6 +254,9 @@ export async function createItemAction(name: string): Promise<CatalogActionState
       replacementCost: null,
       nextServiceDate: null,
       serviceIntervalDays: null,
+      requiresPower: false,
+      powerWatts: null,
+      plugType: '',
       tagIds: [],
       requirements: [],
     };
