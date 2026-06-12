@@ -287,6 +287,10 @@ export function ItemDetailsModal({
           { id: '', gender: 'male' as const },
           { id: '', gender: 'female' as const },
         ]) as { id: string; gender: 'male' | 'female' }[],
+    // POWER STRIP only: the female-outlet mix (distinct types, each with a count).
+    femaleEnds: (Array.isArray(item.cable?.femaleEnds)
+      ? item.cable!.femaleEnds!.map((r) => ({ end: r.end || '', count: Number(r.count) || 1 }))
+      : []) as { end: string; count: number }[],
   });
   // Fixed-cord equipment: the wall plug the attached cord ends in ('' = the regional default).
   const [fixedPlug, setFixedPlug] = useState(item.fixedPlug || '');
@@ -460,11 +464,22 @@ export function ItemDetailsModal({
           ? {
               category: cable.category,
               maleEnd: cable.maleEnd,
-              femaleEnd: cable.femaleEnd,
-              femaleCount: cable.femaleCount === '' ? 1 : Math.max(1, Number(cable.femaleCount)),
+              // A power strip's "single female" is its first outlet type; extension is always 1.
+              femaleEnd: cable.category === 'power-strip' ? cable.femaleEnds[0]?.end ?? '' : cable.femaleEnd,
+              femaleCount:
+                cable.category === 'extension'
+                  ? 1
+                  : cable.category === 'power-strip'
+                    ? cable.femaleEnds.reduce((n, r) => n + (Number(r.count) || 0), 0) || 1
+                    : cable.femaleCount === ''
+                      ? 1
+                      : Math.max(1, Number(cable.femaleCount)),
               lengthFt: cable.lengthFt === '' ? null : Math.max(0, Number(cable.lengthFt)),
               notes: cable.notes.trim(),
               ...(cable.category === 'custom' ? { ends: cable.ends } : {}),
+              ...(cable.category === 'power-strip'
+                ? { femaleEnds: cable.femaleEnds.filter((r) => r.end).map((r) => ({ end: r.end, count: Math.max(1, Number(r.count) || 1) })) }
+                : {}),
             }
           : null,
       fixedPlug: requiresPower && isFixedCordInlet(plugType) ? fixedPlug : '',
@@ -1248,9 +1263,10 @@ export function ItemDetailsModal({
             </div>
           ) : null}
 
-          {/* Cable spec — kind 'cable' only: a power strip (one male, many female), an extension, an
-              adapter, or a Custom cursed combo. Ends come from the connector catalog with ratings, so
-              "NEMA L6-30P 230V 30A male → NEMA 5-15R 120V 15A female" is representable. */}
+          {/* Cable spec — kind 'cable' only. Extension = one male + one female; Power Strip = one male
+              + a MIX of female outlet types each with a count (8× C13 + 2× C19); plain Cable + Adapter
+              = one male + one female; Custom = explicit per-end genders. Ends come from the connector
+              catalog with ratings, so "NEMA L6-30P 230V 30A male → NEMA 5-15R 120V 15A female" reads. */}
           {kind === 'cable' ? (
             <div className="flex flex-col gap-3 border-t border-border pt-4">
               <Eyebrow>Cable</Eyebrow>
@@ -1273,8 +1289,11 @@ export function ItemDetailsModal({
                       setCable((c) => ({
                         ...c,
                         category: id,
-                        // sensible outlet defaults on a category switch (still editable)
-                        femaleCount: id === 'power-strip' ? (Number(c.femaleCount) > 1 ? c.femaleCount : '6') : c.femaleCount,
+                        // Switching INTO power strip: seed the outlet mix from the single female (if any).
+                        femaleEnds:
+                          id === 'power-strip' && c.femaleEnds.length === 0 && c.femaleEnd
+                            ? [{ end: c.femaleEnd, count: 6 }]
+                            : c.femaleEnds,
                       }))
                     }
                     className={cn(
@@ -1316,6 +1335,74 @@ export function ItemDetailsModal({
                 </div>
               </div>
 
+              {cable.category === 'power-strip' ? (
+                /* POWER STRIP: a MIX of female outlet types, each with a count (8× C13 + 2× C19). */
+                <div className="flex flex-col gap-1.5">
+                  <Label>Outlet types (the female mix)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CABLE_FEMALE_ENDS.map((e) => {
+                      const on = cable.femaleEnds.some((r) => r.end === e.id);
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          aria-pressed={on}
+                          disabled={!canEdit}
+                          onClick={() =>
+                            setCable((c) => ({
+                              ...c,
+                              femaleEnds: on
+                                ? c.femaleEnds.filter((r) => r.end !== e.id)
+                                : [...c.femaleEnds, { end: e.id, count: 1 }],
+                            }))
+                          }
+                          title={`${e.label} · ${cableEndRating(e)}`}
+                          className={cn(
+                            'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                            on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                          )}
+                        >
+                          <span className="size-9 text-foreground">{e.svg}</span>
+                          <span className="text-[10px] font-medium leading-tight">{e.label}</span>
+                          <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {cable.femaleEnds.length > 0 ? (
+                    <div className="mt-1 flex flex-col gap-1.5">
+                      {cable.femaleEnds.map((r, ri) => {
+                        const f = cableEndById(r.end, 'female');
+                        return (
+                          <div key={r.end} className="flex items-center gap-2 text-sm">
+                            <span className="size-6 text-foreground">{f?.svg}</span>
+                            <span className="min-w-32 flex-1">{f?.label ?? r.end}</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={48}
+                              inputMode="numeric"
+                              aria-label={`${f?.label ?? r.end} outlet count`}
+                              value={String(r.count)}
+                              disabled={!canEdit}
+                              onChange={(ev) =>
+                                setCable((c) => ({
+                                  ...c,
+                                  femaleEnds: c.femaleEnds.map((x, j) => (j === ri ? { ...x, count: Math.max(1, Number(ev.target.value) || 1) } : x)),
+                                }))
+                              }
+                              className="h-7 w-16 text-xs"
+                            />
+                            <span className="text-xs text-muted-foreground">outlets</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Pick one or more outlet types above, then set how many of each.</p>
+                  )}
+                </div>
+              ) : (
               <div className="flex flex-col gap-1.5">
                 <Label>Female end (outlet side)</Label>
                 <div className="flex flex-wrap gap-1.5">
@@ -1342,6 +1429,7 @@ export function ItemDetailsModal({
                   })}
                 </div>
               </div>
+              )}
               </>
               ) : (
               /* CUSTOM: per-end gender pickers — the ONLY place male→male / female→female exists. */
@@ -1411,10 +1499,6 @@ export function ItemDetailsModal({
               )}
 
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex w-24 flex-col gap-1.5">
-                  <Label htmlFor="cable-outlets">Outlets</Label>
-                  <Input id="cable-outlets" type="number" min={1} max={24} inputMode="numeric" value={cable.femaleCount} onChange={(e) => setCable((c) => ({ ...c, femaleCount: e.target.value }))} disabled={!canEdit} />
-                </div>
                 <div className="flex w-28 flex-col gap-1.5">
                   <Label htmlFor="cable-length">Length (ft)</Label>
                   <Input id="cable-length" type="number" min={0} inputMode="decimal" value={cable.lengthFt} placeholder="optional" onChange={(e) => setCable((c) => ({ ...c, lengthFt: e.target.value }))} disabled={!canEdit} />
@@ -1440,13 +1524,28 @@ export function ItemDetailsModal({
                     </p>
                   );
                 }
-                if (!cable.maleEnd || !cable.femaleEnd) return null;
                 const m = cableEndById(cable.maleEnd, 'male');
+                if (cable.category === 'power-strip') {
+                  if (!cable.maleEnd || cable.femaleEnds.length === 0) return null;
+                  const parts = cable.femaleEnds.map((r) => {
+                    const f = cableEndById(r.end, 'female');
+                    return `${r.count}× ${f ? f.label : r.end}`;
+                  });
+                  const cross = cable.femaleEnds.some((r) => {
+                    const f = cableEndById(r.end, 'female');
+                    return m && f && m.volts !== f.volts;
+                  });
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${parts.join(' + ')}${cross ? ' — ⚠ cross-voltage' : ''}`}
+                    </p>
+                  );
+                }
+                if (!cable.maleEnd || !cable.femaleEnd) return null;
                 const f = cableEndById(cable.femaleEnd, 'female');
-                const n = Number(cable.femaleCount) || 1;
                 return (
                   <p className="text-xs text-muted-foreground">
-                    {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${n > 1 ? `${n}× ` : ''}${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${m && f && m.volts !== f.volts ? ' — ⚠ cross-voltage adapter' : ''}`}
+                    {`${m ? `${m.label} ${cableEndRating(m)}` : cable.maleEnd} male → ${f ? `${f.label} ${cableEndRating(f)}` : cable.femaleEnd} female${m && f && m.volts !== f.volts ? ' — ⚠ cross-voltage adapter' : ''}`}
                   </p>
                 );
               })()}

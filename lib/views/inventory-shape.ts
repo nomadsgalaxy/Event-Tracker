@@ -191,8 +191,9 @@ export interface InventoryPayload {
    *  warehouse's region; serial units may override per unit (ItemUnit.fixedPlug). */
   fixedPlug?: string;
   /** Cable spec (kind === 'cable'): the power subtypes — a plain Cable (the standard male→female
-   *  cord), a power strip (one male, many female outlets), an extension cord, an adapter (e.g. a
-   *  20 A male to a 10 A female), or a Custom cursed combo. Ends are canonical ids from
+   *  cord), an Extension Cord (exactly ONE male + ONE female type), a Power Strip (one male + a
+   *  MIX of female outlet types, each with a count — a rack PDU is 8× C13 + 2× C19), an Adapter
+   *  (e.g. a 20 A male to a 10 A female), or a Custom cursed combo. Ends are canonical ids from
    *  lib/power/connectors CABLE_MALE_ENDS / CABLE_FEMALE_ENDS. The standard categories are
    *  STRUCTURALLY male→female; ONLY 'custom' carries explicit per-end genders (ends[], exactly 2),
    *  so male→male / female→female is expressible there and nowhere else. Category is extensible
@@ -200,8 +201,12 @@ export interface InventoryPayload {
   cable?: {
     category: 'cable' | 'power-strip' | 'extension' | 'adapter' | 'custom' | string;
     maleEnd?: string;
+    /** Single female end (cable / extension / adapter). */
     femaleEnd?: string;
+    /** Outlet count for the single-female categories (extension is always 1). */
     femaleCount?: number;
+    /** POWER STRIP only: the mix of female outlet types, each with a count (8× C13 + 2× C19). */
+    femaleEnds?: { end: string; count: number }[];
     lengthFt?: number | null;
     notes?: string;
     /** CUSTOM only: the two ends with explicit genders (overrides maleEnd/femaleEnd). */

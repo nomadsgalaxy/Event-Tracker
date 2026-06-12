@@ -1461,6 +1461,8 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
         const c = raw as Record<string, unknown>;
         const cat = String(c.category ?? '').trim();
         const category = ['cable', 'power-strip', 'extension', 'adapter', 'custom'].includes(cat) ? cat : 'custom';
+        // Extension cords are ALWAYS one female (count pinned to 1); other single-female categories
+        // honor the count.
         const count = Number(c.femaleCount);
         const len = Number(c.lengthFt);
         // Per-end genders are a CUSTOM-only concept (only custom may be male→male / female→female);
@@ -1472,14 +1474,26 @@ export async function upsertItem({ id, patch, actorRole }: UpsertItemArgs): Prom
                 gender: e?.gender === 'female' ? ('female' as const) : ('male' as const),
               }))
             : undefined;
+        // POWER STRIP only: the female-outlet MIX — distinct types each with a count (8× C13 + 2× C19).
+        const femaleEnds =
+          category === 'power-strip' && Array.isArray(c.femaleEnds)
+            ? (c.femaleEnds as Record<string, unknown>[])
+                .slice(0, 12)
+                .map((r) => ({
+                  end: String(r?.end ?? '').trim().slice(0, 40),
+                  count: Math.min(48, Math.max(1, Math.round(Number(r?.count)) || 1)),
+                }))
+                .filter((r) => r.end)
+            : undefined;
         set[`payload.${key}`] = {
           category,
           maleEnd: String(c.maleEnd ?? '').trim().slice(0, 40),
           femaleEnd: String(c.femaleEnd ?? '').trim().slice(0, 40),
-          femaleCount: Number.isFinite(count) ? Math.min(24, Math.max(1, Math.round(count))) : 1,
+          femaleCount: category === 'extension' ? 1 : Number.isFinite(count) ? Math.min(24, Math.max(1, Math.round(count))) : 1,
           lengthFt: Number.isFinite(len) && len > 0 ? Math.min(500, len) : null,
           notes: String(c.notes ?? '').trim().slice(0, 200),
           ...(ends ? { ends } : {}),
+          ...(femaleEnds ? { femaleEnds } : {}),
         };
         break;
       }
