@@ -184,9 +184,13 @@ export function CaseContents({
               <TableHead className="pl-4">Item</TableHead>
               <TableHead className="hidden md:table-cell">Kind</TableHead>
               <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
-              <TableHead className="w-12 text-right md:w-px">Qty</TableHead>
-              <TableHead className="w-[68px] text-right md:w-px">State</TableHead>
-              {canEdit ? <TableHead className="w-12 pr-4 text-right md:w-px">Actions</TableHead> : null}
+              <TableHead className="w-10 text-right md:w-px">Qty</TableHead>
+              <TableHead className="w-16 text-right md:w-px">State</TableHead>
+              {canEdit ? (
+                <TableHead className="w-10 pr-2 text-right md:w-px md:pr-4">
+                  <span className="sr-only md:not-sr-only">Actions</span>
+                </TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -262,7 +266,7 @@ export function CaseContents({
                     )}
                   </TableCell>
                   {canEdit ? (
-                    <TableCell className="pr-4 text-right">
+                    <TableCell className="pr-2 text-right md:pr-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="size-8" aria-label={`Actions for ${it.name || 'item'}`}>
