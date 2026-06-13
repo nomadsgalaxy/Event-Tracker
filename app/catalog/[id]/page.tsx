@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation';
 import {
   ArrowLeft,
   Box,
-  Zap,
-  Layers,
-  Briefcase,
+  Boxes,
+  Plug,
+  Wrench,
+  Lamp,
+  Cable,
   Disc3,
   AlertTriangle,
   Flag,
@@ -68,10 +70,13 @@ export const dynamic = 'force-dynamic';
 
 const KIND_ICONS: Record<KindIconName, typeof Box> = {
   box: Box,
-  bolt: Zap,
+  plug: Plug,
   spool: Disc3,
-  layers: Layers,
-  case: Briefcase,
+  wrench: Wrench,
+  flag: Flag,
+  fixture: Lamp,
+  system: Boxes,
+  cable: Cable,
 };
 
 function Stat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {

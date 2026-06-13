@@ -1,10 +1,11 @@
 import {
   Box,
+  Boxes,
   Plug,
   Disc3,
   Wrench,
   Flag,
-  Package,
+  Lamp,
   Cable,
   type LucideIcon,
 } from 'lucide-react';
@@ -19,8 +20,8 @@ const KIND_ICONS: Record<ItemKind, LucideIcon> = {
   consumable: Disc3,
   tool: Wrench,
   banner: Flag,
-  fixture: Package,
-  system: Box,
+  fixture: Lamp,
+  system: Boxes,
   cable: Cable,
 };
 

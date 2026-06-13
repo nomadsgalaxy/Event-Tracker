@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Box,
-  Zap,
-  Layers,
-  Briefcase,
+  Boxes,
+  Plug,
+  Wrench,
+  Flag,
+  Lamp,
+  Cable,
   Disc3,
   AlertTriangle,
   Pencil,
@@ -110,10 +113,13 @@ export interface InventoryEventOption {
 
 const KIND_ICONS: Record<KindIconName, typeof Box> = {
   box: Box,
-  bolt: Zap,
+  plug: Plug,
   spool: Disc3,
-  layers: Layers,
-  case: Briefcase,
+  wrench: Wrench,
+  flag: Flag,
+  fixture: Lamp,
+  system: Boxes,
+  cable: Cable,
 };
 
 function KindGlyph({ kind, className }: { kind: string | undefined; className?: string }) {

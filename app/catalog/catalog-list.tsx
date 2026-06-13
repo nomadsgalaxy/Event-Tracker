@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation';
 import {
   Search,
   Box,
-  Zap,
-  Layers,
-  Briefcase,
+  Boxes,
+  Plug,
+  Wrench,
+  Flag,
+  Lamp,
+  Cable,
   Disc3,
   AlertTriangle,
 } from 'lucide-react';
@@ -72,10 +75,13 @@ const STATIC_FILTERS: FilterChip[] = [
 // so a bulk and serial item of the same kind share one glyph everywhere.
 const KIND_ICONS: Record<KindIconName, typeof Box> = {
   box: Box,
-  bolt: Zap,
+  plug: Plug,
   spool: Disc3,
-  layers: Layers,
-  case: Briefcase,
+  wrench: Wrench,
+  flag: Flag,
+  fixture: Lamp,
+  system: Boxes,
+  cable: Cable,
 };
 
 function KindGlyph({ kind, className }: { kind: string | undefined; className?: string }) {

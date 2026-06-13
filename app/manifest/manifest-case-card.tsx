@@ -1,8 +1,13 @@
 import Link from 'next/link';
 import {
   Box,
-  Zap,
-  CircleDashed,
+  Boxes,
+  Plug,
+  Wrench,
+  Disc3,
+  Flag,
+  Lamp,
+  Cable,
   Layers,
   Briefcase,
   TriangleAlert,
@@ -30,12 +35,13 @@ import type { ManifestCaseGroup, ManifestItemRow, ManifestLooseGroup } from '@/l
 // Per-kind row glyph (mirrors KIND_ICON, index.html ~L15771, mapped to lucide).
 const KIND_GLYPH: Record<string, LucideIcon> = {
   equipment: Box,
-  system: Box,
-  peripheral: Zap,
-  tool: Zap,
-  consumable: CircleDashed,
-  banner: Layers,
-  fixture: Briefcase,
+  system: Boxes,
+  peripheral: Plug,
+  tool: Wrench,
+  consumable: Disc3,
+  banner: Flag,
+  fixture: Lamp,
+  cable: Cable,
 };
 
 // Readiness accent: a warning amber when anything's flagged, success green at 100%, else the brand
@@ -88,7 +94,7 @@ function ItemRow({
   last: boolean;
   actions?: ManifestRowActions;
 }) {
-  const Glyph = KIND_GLYPH[row.kind] ?? Briefcase;
+  const Glyph = KIND_GLYPH[row.kind] ?? Box;
   const sub =
     row.serials.length > 0
       ? `${row.sku || row.id}${

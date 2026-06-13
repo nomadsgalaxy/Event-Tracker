@@ -567,26 +567,29 @@ export function itemIsLowStock(item: InventoryPayload): boolean {
   return item.reorderPoint != null && itemInStorage(item) < item.reorderPoint;
 }
 
-// ── Kind glyph (mirrors KIND_ICON) — returns an Icon name from the shared set ───────────
-export type KindIconName = 'box' | 'bolt' | 'spool' | 'layers' | 'case';
+// ── Kind glyph — returns an Icon name from the shared set, one per kind. Consumers map the name to
+// a lucide component (see app/catalog KIND_ICONS). Kept in lockstep with app/cases/kind-icon.ts.
+export type KindIconName = 'box' | 'plug' | 'spool' | 'wrench' | 'flag' | 'fixture' | 'system' | 'cable';
 export function kindIcon(kind: string | undefined): KindIconName {
   switch (kind) {
     case 'equipment':
       return 'box';
     case 'peripheral':
-      return 'bolt';
+      return 'plug';
     case 'consumable':
       return 'spool';
     case 'tool':
-      return 'bolt';
+      return 'wrench';
     case 'banner':
-      return 'layers';
+      return 'flag';
     case 'fixture':
-      return 'case';
+      return 'fixture';
     case 'system':
-      return 'box';
+      return 'system';
+    case 'cable':
+      return 'cable';
     default:
-      return 'case';
+      return 'box';
   }
 }
 
