@@ -51,65 +51,73 @@ const dGround = <path {...F} d="M19 27.5 h6 v3.6 a3 3 0 0 1 -6 0 Z" />;
 // IEC 60320 couplers ───────────────────────────────────────────────────────
 // The chamfered trapezoid shell (the classic "coffin" outline; chamfer on the earth side).
 const iecShell = <path {...S} d="M9 15 L13 9 H31 L35 15 V35 H9 Z" />;
-// C13/C14 — the universal IT cord: two outer contacts low, earth centered high.
+// C13/C14 — the universal IT cord. Earth top-center, line/neutral lower (the triangle); contacts are
+// LANDSCAPE slots (wider than tall, per the audit). Shell is the symmetric chamfered hex.
 const svgC14 = (
   <svg viewBox="0 0 44 44" aria-hidden>{iecShell}
-    <rect {...F} x="13" y="20" width="3.6" height="9.5" rx="1" />
-    <rect {...F} x="20.2" y="14.5" width="3.6" height="9.5" rx="1" />
-    <rect {...F} x="27.4" y="20" width="3.6" height="9.5" rx="1" />
+    <rect {...F} x="16" y="13.8" width="12" height="3.4" rx="1" />
+    <rect {...F} x="11.5" y="21.5" width="9" height="3.4" rx="1" />
+    <rect {...F} x="23.5" y="21.5" width="9" height="3.4" rx="1" />
   </svg>
 );
-// C15/C16 — the "hot" kettle coupler: C13/C14 plus the keying ridge under the earth (the 120 °C key).
+// C15/C16 — the "hot" coupler: C13/C14 contacts + the 120 °C keying NOTCH cut into the bottom shell
+// edge (a silhouette void, not a solid bar — that's what makes it read as a key, not a contact).
+const iecShellHot = <path {...S} d="M9 15 L13 9 H31 L35 15 V35 H25.5 V31.5 H18.5 V35 H9 Z" />;
 const svgC16 = (
-  <svg viewBox="0 0 44 44" aria-hidden>{iecShell}
-    <rect {...F} x="13" y="20" width="3.6" height="9.5" rx="1" />
-    <rect {...F} x="20.2" y="14.5" width="3.6" height="9.5" rx="1" />
-    <rect {...F} x="27.4" y="20" width="3.6" height="9.5" rx="1" />
-    <rect {...F} x="18.5" y="31.5" width="7" height="2.6" rx="1" />
+  <svg viewBox="0 0 44 44" aria-hidden>{iecShellHot}
+    <rect {...F} x="16" y="13.8" width="12" height="3.4" rx="1" />
+    <rect {...F} x="11.5" y="21.5" width="9" height="3.4" rx="1" />
+    <rect {...F} x="23.5" y="21.5" width="9" height="3.4" rx="1" />
   </svg>
 );
-// C19/C20 — the 16 A coupler: wide rectangular shell, three HORIZONTAL contacts (two high, earth low).
+// C19/C20 — the 16 A coupler: wide rectangular shell, earth top-center, line/neutral on the bottom
+// row (same earth-up family as C13; the landscape shell is what tells it apart).
 const svgC20 = (
   <svg viewBox="0 0 44 44" aria-hidden>
     <rect {...S} x="6" y="12" width="32" height="22" rx="3" />
-    <rect {...F} x="10" y="17.5" width="9.5" height="3.6" rx="1" />
-    <rect {...F} x="24.5" y="17.5" width="9.5" height="3.6" rx="1" />
-    <rect {...F} x="17.25" y="25" width="9.5" height="3.6" rx="1" />
+    <rect {...F} x="17" y="15.5" width="10" height="3.6" rx="1" />
+    <rect {...F} x="10" y="24" width="9.5" height="3.6" rx="1" />
+    <rect {...F} x="24.5" y="24" width="9.5" height="3.6" rx="1" />
   </svg>
 );
-// C5/C6 — the cloverleaf ("Mickey Mouse"): three round lobes, earth at the apex.
+// C5/C6 — the cloverleaf ("Mickey Mouse"): three round lobes that TOUCH into a trefoil (the merged
+// outline IS the identity), earth at the bottom apex. Larger contact dots for legibility.
 const svgC6 = (
   <svg viewBox="0 0 44 44" aria-hidden>
-    <circle {...S} cx="14" cy="16.5" r="6.5" />
-    <circle {...S} cx="30" cy="16.5" r="6.5" />
-    <circle {...S} cx="22" cy="28.5" r="6.5" />
-    <circle {...F} cx="14" cy="16.5" r="2.1" />
-    <circle {...F} cx="30" cy="16.5" r="2.1" />
-    <circle {...F} cx="22" cy="28.5" r="2.1" />
+    <circle {...S} cx="15.5" cy="18" r="6.6" />
+    <circle {...S} cx="28.5" cy="18" r="6.6" />
+    <circle {...S} cx="22" cy="29" r="6.6" />
+    <circle {...F} cx="15.5" cy="18" r="3" />
+    <circle {...F} cx="28.5" cy="18" r="3" />
+    <circle {...F} cx="22" cy="29" r="3" />
   </svg>
 );
-// C7/C8 — the figure-8 (non-polarized): two equal round lobes.
+// C7/C8 — the figure-8 (non-polarized): two equal circles that TOUCH at the waist (a true figure-8,
+// not a stadium — the pinch is the give-away).
 const svgC8 = (
   <svg viewBox="0 0 44 44" aria-hidden>
-    <path {...S} d="M15 15 a8 8 0 0 0 0 16 h14 a8 8 0 0 0 0 -16 Z" />
-    <circle {...F} cx="15" cy="23" r="2.1" />
-    <circle {...F} cx="29" cy="23" r="2.1" />
+    <circle {...S} cx="15" cy="22" r="7" />
+    <circle {...S} cx="29" cy="22" r="7" />
+    <circle {...F} cx="15" cy="22" r="2.2" />
+    <circle {...F} cx="29" cy="22" r="2.2" />
   </svg>
 );
 
-// NEMA 5-series (125 V): two vertical blades — the NEUTRAL (left) is the wider one — plus D-ground.
+// NEMA 5-series (125 V): two vertical blades of EQUAL length, aligned tops — the NEUTRAL (left) is
+// just WIDER — plus the D-shaped ground pin (plug-face convention: filled blades + filled D-ground).
 const svgNema515 = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
-    <rect {...F} x="12.5" y="11.5" width="4.2" height="11.5" rx="1" />
-    <rect {...F} x="27.6" y="13.5" width="3.4" height="9.5" rx="1" />
+    <rect {...F} x="12.5" y="11.5" width="4.2" height="11" rx="1" />
+    <rect {...F} x="27.3" y="11.5" width="3.4" height="11" rx="1" />
     {dGround}
   </svg>
 );
-// NEMA 5-20 (125 V 20 A): the neutral is a T-slot.
+// NEMA 5-20 (125 V 20 A): the neutral is a T whose crossbar extends ONE way, toward the hot — that
+// one-sided T is the whole 5-20-vs-5-15 tell.
 const svgNema520 = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
-    <path {...F} d="M12.5 11.5 h4.2 v11.5 h-4.2 Z M10.4 11.5 h8.4 v4 h-8.4 Z" />
-    <rect {...F} x="27.6" y="13.5" width="3.4" height="9.5" rx="1" />
+    <path {...F} d="M12.5 11.5 h4.2 v11 h-4.2 Z M12.5 11.5 h7.6 v3.5 h-7.6 Z" />
+    <rect {...F} x="27.3" y="11.5" width="3.4" height="11" rx="1" />
     {dGround}
   </svg>
 );
@@ -121,32 +129,35 @@ const svgNema615 = (
     {dGround}
   </svg>
 );
-// NEMA 6-20 (250 V 20 A): one blade horizontal, the other a horizontal-T.
+// NEMA 6-20 (250 V 20 A): the two hots are PERPENDICULAR — one vertical, one horizontal (vs 6-15's
+// two-horizontal). That right-angle pair is the 6-20 signature.
 const svgNema620 = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
-    <path {...F} d="M8.5 16.2 h10.5 v4 h-10.5 Z M11.8 12.7 h4 v11 h-4 Z" />
-    <rect {...F} x="25" y="16.2" width="10.5" height="4" rx="1" />
+    <rect {...F} x="11.8" y="11.5" width="3.6" height="11" rx="1" />
+    <rect {...F} x="23" y="14.7" width="11" height="3.6" rx="1" />
     {dGround}
   </svg>
 );
-// NEMA locking (L-series): three curved blades around a center post — the twist-lock ring.
+// NEMA locking (L-series): three CURVED blades spaced ~120° around the ring (the twist-lock arc), one
+// at top, two lower — they hug a concentric inner ring.
 const svgLock = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
-    <circle {...S} cx="22" cy="22" r="10.5" />
-    <path {...F} d="M20 9 h4 v6.2 a2 2 0 0 1 -4 0 Z" />
-    <path {...F} d="M11.4 25.5 a13 13 0 0 0 4.6 6 l2.1 -3.4 a9 9 0 0 1 -3.2 -4.2 Z" />
-    <path {...F} d="M32.6 25.5 a13 13 0 0 1 -4.6 6 l-2.1 -3.4 a9 9 0 0 0 3.2 -4.2 Z" />
+    <circle {...S} cx="22" cy="22" r="10" />
+    <path fill="none" stroke="currentColor" strokeWidth={3.4} strokeLinecap="round" d="M16.7 9.57 A 13.5 13.5 0 0 1 27.3 9.57" />
+    <path fill="none" stroke="currentColor" strokeWidth={3.4} strokeLinecap="round" d="M13.9 32.8 A 13.5 13.5 0 0 1 8.6 23.6" />
+    <path fill="none" stroke="currentColor" strokeWidth={3.4} strokeLinecap="round" d="M35.4 23.6 A 13.5 13.5 0 0 1 30.1 32.8" />
   </svg>
 );
 
-// Schuko CEE 7/3 (Type F) + the CEE 7/7 plug: round recess, two pins, earth CLIPS top & bottom.
+// Schuko CEE 7/3 (Type F) + the CEE 7/7 plug: round recess, two WIDELY-spaced pins (the 19 mm pitch
+// that tells it from a narrow Europlug), earth CLIPS straddling the rim top & bottom.
 const svgSchuko = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
     <circle {...S} cx="22" cy="22" r="11.5" />
-    <circle {...F} cx="15.5" cy="22" r="2.8" />
-    <circle {...F} cx="28.5" cy="22" r="2.8" />
-    <rect {...F} x="19.5" y="9.2" width="5" height="3.4" rx="1" />
-    <rect {...F} x="19.5" y="31.4" width="5" height="3.4" rx="1" />
+    <circle {...F} cx="13" cy="22" r="2.8" />
+    <circle {...F} cx="31" cy="22" r="2.8" />
+    <rect {...F} x="19.5" y="9" width="5" height="3.2" rx="1" />
+    <rect {...F} x="19.5" y="31.8" width="5" height="3.2" rx="1" />
   </svg>
 );
 // BS 1363 (Type G, UK): square face, vertical earth slot top-center, two horizontal slots below.
@@ -158,38 +169,41 @@ const svgBS1363 = (
     <rect {...F} x="24" y="25.5" width="9.5" height="4" rx="1" />
   </svg>
 );
-// AS/NZS 3112 (Type I, AU/NZ): two angled slats (inverted V) + a vertical earth below.
+// AS/NZS 3112 (Type I, AU/NZ): two angled slats (inverted V) + a vertical earth below that is LONGER
+// than the active/neutral pair (real earth 20 mm vs 17.35 mm).
 const svgAS3112 = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
-    <rect {...F} x="10.5" y="13" width="3.6" height="10.5" rx="1" transform="rotate(-32 12.3 18)" />
-    <rect {...F} x="29.9" y="13" width="3.6" height="10.5" rx="1" transform="rotate(32 31.7 18)" />
-    <rect {...F} x="20.2" y="24.5" width="3.6" height="9" rx="1" />
+    <rect {...F} x="11" y="12.5" width="4" height="10.5" rx="1" transform="rotate(-32 13 17.75)" />
+    <rect {...F} x="29" y="12.5" width="4" height="10.5" rx="1" transform="rotate(32 31 17.75)" />
+    <rect {...F} x="20" y="23.5" width="4" height="11.5" rx="1" />
   </svg>
 );
 
 // IEC 60309 "commando" — the European venue booth drop. COLOR IS THE STANDARD.
-// Blue 16/32 A 230 V single-phase: shrouded round face, 6 o'clock keyway, the fat earth pin.
+// Blue 16/32 A 230 V single-phase, 6h: the FAT earth pin sits at 6 o'clock (bottom) with the keyway,
+// line & neutral up at ~10 and ~2 o'clock (equal 120° spacing). Earth-at-bottom is the keying.
 const svg60309Blue = (
   <svg viewBox="0 0 44 44" aria-hidden>
     <circle fill="none" stroke="#3b82f6" strokeWidth={2.6} cx="22" cy="22" r="17" />
     <circle {...S} cx="22" cy="22" r="10.5" />
-    <rect {...F} x="20" y="30.2" width="4" height="3.8" rx="1" />
-    <circle {...F} cx="22" cy="15.5" r="3" />
-    <circle {...F} cx="15.6" cy="24.5" r="2.2" />
-    <circle {...F} cx="28.4" cy="24.5" r="2.2" />
+    <rect {...F} x="20.5" y="31" width="3" height="2.6" rx="1" />
+    <circle {...F} cx="22" cy="28.75" r="3" />
+    <circle {...F} cx="14.4" cy="17.6" r="2.2" />
+    <circle {...F} cx="29.6" cy="17.6" r="2.2" />
   </svg>
 );
-// Red 32 A 400 V three-phase (4–5 pins in a star).
+// Red 32 A 400 V three-phase 3P+N+E (6h): five pins as a regular pentagon, the fat earth at 6 o'clock
+// (bottom) with the keyway, the four smaller phase/neutral pins 72° apart clockwise from it.
 const svg60309Red = (
   <svg viewBox="0 0 44 44" aria-hidden>
     <circle fill="none" stroke="#ef4444" strokeWidth={2.6} cx="22" cy="22" r="17" />
     <circle {...S} cx="22" cy="22" r="10.5" />
-    <rect {...F} x="20" y="30.2" width="4" height="3.8" rx="1" />
-    <circle {...F} cx="22" cy="14.6" r="2.7" />
-    <circle {...F} cx="15" cy="20" r="2.1" />
-    <circle {...F} cx="29" cy="20" r="2.1" />
-    <circle {...F} cx="17.6" cy="27.2" r="2.1" />
-    <circle {...F} cx="26.4" cy="27.2" r="2.1" />
+    <rect {...F} x="20.5" y="31" width="3" height="2.6" rx="1" />
+    <circle {...F} cx="22" cy="29.4" r="2.7" />
+    <circle {...F} cx="15" cy="24.3" r="2.1" />
+    <circle {...F} cx="17.7" cy="16" r="2.1" />
+    <circle {...F} cx="26.3" cy="16" r="2.1" />
+    <circle {...F} cx="29" cy="24.3" r="2.1" />
   </svg>
 );
 
