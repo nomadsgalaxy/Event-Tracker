@@ -176,9 +176,8 @@ export function CaseContents({
           <p className="text-sm text-muted-foreground">Nothing packed in this case yet.</p>
         </div>
       ) : (
-        {/* table-fixed on mobile makes the table hold the container width so the Item column wraps
-            its name instead of the table growing + scrolling (which crushed the name). Desktop keeps
-            content-driven auto layout. */}
+        // table-fixed on mobile makes the table hold the container width so the Item column wraps its
+        // name instead of the table growing + scrolling (which crushed the name); md keeps auto.
         <Table className="table-fixed md:table-auto">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
