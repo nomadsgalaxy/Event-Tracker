@@ -278,10 +278,10 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-4">Item</TableHead>
+                  <TableHead className="w-full pl-4">Item</TableHead>
                   <TableHead className="hidden md:table-cell">Kind</TableHead>
                   <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
-                  <TableHead className="pr-4 text-right">Stock</TableHead>
+                  <TableHead className="w-px pr-4 text-right">Stock</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -301,13 +301,13 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
                     : Number(p.stockTotal ?? p.qty ?? 0) || 0;
                   return (
                     <TableRow key={idoc._id} className="hover:bg-muted/50">
-                      <TableCell className="max-w-0 pl-4">
+                      <TableCell className="pl-4 md:max-w-0">
                         <Link
                           href={`/catalog/${encodeURIComponent(idoc._id)}`}
                           className="group/link flex items-center gap-2 outline-none"
                         >
                           <Boxes className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                          <span className="truncate font-medium text-foreground group-focus-visible/link:underline group-hover/link:underline">
+                          <span className="font-medium text-foreground [overflow-wrap:anywhere] group-focus-visible/link:underline group-hover/link:underline md:truncate">
                             {p.name || '(unnamed item)'}
                           </span>
                         </Link>

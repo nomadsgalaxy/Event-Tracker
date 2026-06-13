@@ -179,12 +179,12 @@ export function CaseContents({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="pl-4">Item</TableHead>
+              <TableHead className="w-full pl-4">Item</TableHead>
               <TableHead className="hidden md:table-cell">Kind</TableHead>
               <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">State</TableHead>
-              {canEdit ? <TableHead className="pr-4 text-right">Actions</TableHead> : null}
+              <TableHead className="w-px text-right">Qty</TableHead>
+              <TableHead className="w-px text-right">State</TableHead>
+              {canEdit ? <TableHead className="w-px pr-4 text-right">Actions</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -205,11 +205,11 @@ export function CaseContents({
               const busy = busyId === it.id;
               return (
                 <TableRow key={row.id} className="hover:bg-muted/50">
-                  <TableCell className="max-w-0 pl-4">
+                  <TableCell className="pl-4 md:max-w-0">
                     <span className="flex items-center gap-2">
                       <KindIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-foreground">{it.name || '(unnamed)'}</span>
+                        <span className="block font-medium text-foreground [overflow-wrap:anywhere] md:truncate">{it.name || '(unnamed)'}</span>
                         {(serials.length > 0 || tags.length > 0) && (
                           <span className="mt-0.5 flex flex-wrap items-center gap-1">
                             {serials.slice(0, 4).map((s) => (
