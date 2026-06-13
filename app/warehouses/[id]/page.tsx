@@ -279,8 +279,8 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-4">Item</TableHead>
-                  <TableHead>Kind</TableHead>
-                  <TableHead className="font-mono">SKU</TableHead>
+                  <TableHead className="hidden md:table-cell">Kind</TableHead>
+                  <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
                   <TableHead className="pr-4 text-right">Stock</TableHead>
                 </TableRow>
               </TableHeader>
@@ -312,10 +312,10 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
                           </span>
                         </Link>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground capitalize">
+                      <TableCell className="hidden text-xs text-muted-foreground capitalize md:table-cell">
                         {p.kind || p.type || '—'}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
+                      <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
                         {p.qr || p.sku || '—'}
                       </TableCell>
                       <TableCell className="pr-4 text-right font-mono text-sm tabular-nums">

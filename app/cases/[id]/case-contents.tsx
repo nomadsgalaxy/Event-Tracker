@@ -180,8 +180,8 @@ export function CaseContents({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="pl-4">Item</TableHead>
-              <TableHead>Kind</TableHead>
-              <TableHead className="font-mono">SKU</TableHead>
+              <TableHead className="hidden md:table-cell">Kind</TableHead>
+              <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">State</TableHead>
               {canEdit ? <TableHead className="pr-4 text-right">Actions</TableHead> : null}
@@ -235,8 +235,8 @@ export function CaseContents({
                       </span>
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground capitalize">{it.kind || it.type || '—'}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{it.qr || it.sku || '—'}</TableCell>
+                  <TableCell className="hidden text-xs text-muted-foreground capitalize md:table-cell">{it.kind || it.type || '—'}</TableCell>
+                  <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">{it.qr || it.sku || '—'}</TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">×{qty}</TableCell>
                   <TableCell className="text-right">
                     {/* The state pill cycles packed ↔ pending on click (flagged is driven by the flag). */}
