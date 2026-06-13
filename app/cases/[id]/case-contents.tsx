@@ -176,15 +176,18 @@ export function CaseContents({
           <p className="text-sm text-muted-foreground">Nothing packed in this case yet.</p>
         </div>
       ) : (
-        <Table>
+        {/* table-fixed on mobile makes the table hold the container width so the Item column wraps
+            its name instead of the table growing + scrolling (which crushed the name). Desktop keeps
+            content-driven auto layout. */}
+        <Table className="table-fixed md:table-auto">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="pl-4">Item</TableHead>
               <TableHead className="hidden md:table-cell">Kind</TableHead>
               <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
-              <TableHead className="w-px text-right">Qty</TableHead>
-              <TableHead className="w-px text-right">State</TableHead>
-              {canEdit ? <TableHead className="w-px pr-4 text-right">Actions</TableHead> : null}
+              <TableHead className="w-12 text-right md:w-px">Qty</TableHead>
+              <TableHead className="w-[68px] text-right md:w-px">State</TableHead>
+              {canEdit ? <TableHead className="w-12 pr-4 text-right md:w-px">Actions</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
