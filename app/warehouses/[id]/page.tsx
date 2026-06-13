@@ -278,7 +278,7 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-full pl-4">Item</TableHead>
+                  <TableHead className="pl-4">Item</TableHead>
                   <TableHead className="hidden md:table-cell">Kind</TableHead>
                   <TableHead className="hidden font-mono md:table-cell">SKU</TableHead>
                   <TableHead className="w-px pr-4 text-right">Stock</TableHead>
