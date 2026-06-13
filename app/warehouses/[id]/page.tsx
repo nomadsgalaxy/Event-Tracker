@@ -204,7 +204,7 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="pl-4">Case</TableHead>
-                  <TableHead>Size · Zone</TableHead>
+                  <TableHead className="hidden sm:table-cell">Size · Zone</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="pr-4" />
                 </TableRow>
@@ -230,7 +230,7 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
                           </span>
                         </Link>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{sizeZone}</TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">{sizeZone}</TableCell>
                       <TableCell className="text-sm">
                         {owning ? (
                           <span className="flex items-center gap-2">

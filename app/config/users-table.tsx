@@ -283,9 +283,9 @@ export function UsersTable({
             <TableHeader>
               <TableRow className="bg-card hover:bg-card">
                 <TableHead>User</TableHead>
-                <TableHead>Source / 2FA</TableHead>
-                <TableHead>Last sign-in</TableHead>
-                <TableHead className="w-px">Current</TableHead>
+                <TableHead className="hidden md:table-cell">Source / 2FA</TableHead>
+                <TableHead className="hidden md:table-cell">Last sign-in</TableHead>
+                <TableHead className="hidden w-px md:table-cell">Current</TableHead>
                 <TableHead className="w-px text-right">Role</TableHead>
                 <TableHead className="w-px text-right">Actions</TableHead>
               </TableRow>
@@ -449,7 +449,7 @@ function UserRowView({
         </div>
       </TableCell>
 
-      <TableCell className="text-sm">
+      <TableCell className="hidden text-sm md:table-cell">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground">{r.sourceLabel || '—'}</span>
           {r.twofaEnrolled && (
@@ -471,9 +471,9 @@ function UserRowView({
         </div>
       </TableCell>
 
-      <TableCell className="text-sm text-muted-foreground tabular-nums">{fmtLastLogin(r.lastLoginAt)}</TableCell>
+      <TableCell className="hidden text-sm text-muted-foreground tabular-nums md:table-cell">{fmtLastLogin(r.lastLoginAt)}</TableCell>
 
-      <TableCell>
+      <TableCell className="hidden md:table-cell">
         <RoleBadge role={r.role} />
       </TableCell>
 

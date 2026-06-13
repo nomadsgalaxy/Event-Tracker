@@ -175,7 +175,7 @@ export function WarehousesList({
               <TableRow className="bg-card hover:bg-card">
                 <TableHead>Warehouse</TableHead>
                 <TableHead>Location</TableHead>
-                <TableHead>Contact</TableHead>
+                <TableHead className="hidden md:table-cell">Contact</TableHead>
                 <TableHead className="text-right">Cases</TableHead>
                 {canManage ? <TableHead className="w-20 text-right" /> : null}
               </TableRow>
@@ -281,7 +281,7 @@ function WarehouseRowView({
         )}
       </TableCell>
 
-      <TableCell className="text-sm">
+      <TableCell className="hidden text-sm md:table-cell">
         {r.contactName || r.phone ? (
           <span className="min-w-0">
             {r.contactName && (
