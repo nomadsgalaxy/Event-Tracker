@@ -67,7 +67,7 @@ export function UserMenu({ email, role, roleLabel, roleColor, displayName, pictu
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          'inline-flex h-9 items-center gap-2 rounded-md pl-1 pr-2 text-sm transition-colors',
+          'inline-flex h-11 items-center gap-2 rounded-md pl-1 pr-2 text-sm transition-colors md:h-9',
           'hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
         )}
         aria-label={`Account menu for ${name}`}

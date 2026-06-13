@@ -115,7 +115,7 @@ export function NotificationBell({
           variant="ghost"
           size="icon"
           aria-label={badge > 0 ? `Notifications, ${badge} awaiting you` : 'Notifications'}
-          className="relative"
+          className="relative size-11 md:size-8"
         >
           <Bell size={18} aria-hidden />
           {badge > 0 && (

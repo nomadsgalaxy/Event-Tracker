@@ -66,10 +66,13 @@ export function TabStrip({
       data-slot="tab-strip"
       className={cn('flex flex-col gap-4', className)}
     >
+      {/* The List scrolls horizontally when the tabs overflow (narrow screens). A right-edge fade
+          signals there are more tabs to swipe to — without it, off-screen tabs are invisible. */}
+      <div className="relative">
       <TabsPrimitive.List
         aria-label={ariaLabel}
         className={cn(
-          'flex gap-1 overflow-x-auto border-b border-border',
+          'flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           listClassName
         )}
       >
@@ -100,6 +103,11 @@ export function TabStrip({
           );
         })}
       </TabsPrimitive.List>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent md:hidden"
+        />
+      </div>
 
       {items.map((t) => (
         <TabsPrimitive.Content

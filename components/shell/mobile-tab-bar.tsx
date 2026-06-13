@@ -40,7 +40,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-[52px] flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium',
+                  'flex min-h-[52px] flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-medium',
                   'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                   active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
                 )}

@@ -590,7 +590,7 @@ export function InventoryView({
 function SummaryStat({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
   return (
     <div className="min-w-[88px] flex-1 bg-card px-3 py-2.5">
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="font-mono text-lg font-bold tabular-nums" style={{ color: accent || 'var(--foreground)' }}>
         {value}
       </div>
@@ -806,11 +806,11 @@ function MobileCard({
         <button type="button" onClick={onEdit} className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">
           {it.name || '(unnamed)'}
         </button>
-        <Badge variant={stateBadge.variant} className={cn('shrink-0 text-[10px]', stateBadge.className)}>
+        <Badge variant={stateBadge.variant} className={cn('shrink-0 text-[11px]', stateBadge.className)}>
           {ITEM_STATE_LABEL[rollup]}
         </Badge>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 overflow-hidden pl-6 text-[10px]">
+      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 overflow-hidden pl-6 text-xs">
         <span className="capitalize text-muted-foreground">{it.kind || it.type || '—'}</span>
         <span className="text-muted-foreground/50">·</span>
         {cids.length > 0 ? (

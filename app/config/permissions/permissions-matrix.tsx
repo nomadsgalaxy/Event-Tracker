@@ -277,11 +277,13 @@ export function PermissionsMatrix({
       {groups.map((group) => (
         <section key={group.name} className="space-y-2">
           <h3 className="text-sm font-semibold text-foreground">{group.name}</h3>
+          {/* The matrix is wider than a phone; it scrolls horizontally. The Capability column is
+              sticky-left so the row label stays in view while you scroll across the roles. */}
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-card">
-                  <th className="min-w-[16rem] px-3 py-2 text-left font-medium">Capability</th>
+                  <th className="sticky left-0 z-20 min-w-[11rem] bg-card px-3 py-2 text-left font-medium md:min-w-[16rem]">Capability</th>
                   {roles.map((r) => (
                     <th key={r.id} className="px-3 py-2 text-center font-medium" style={{ color: r.color }}>
                       {r.label}
@@ -293,7 +295,7 @@ export function PermissionsMatrix({
               <tbody>
                 {group.caps.map((cap) => (
                   <tr key={cap.id} className="border-b border-border last:border-0">
-                    <td className="max-w-0 px-3 py-2 align-top">
+                    <td className="sticky left-0 z-10 max-w-0 bg-background px-3 py-2 align-top">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-foreground">{cap.label}</span>
                         {!cap.editable && (

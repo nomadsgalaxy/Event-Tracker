@@ -375,6 +375,7 @@ export default function CalendarClient({
         size="icon-sm"
         onClick={stepBack}
         aria-label={view === 'year' ? 'Previous year' : view === 'month' ? 'Previous month' : 'Previous day'}
+        className="size-11 md:size-7"
       >
         <ChevronLeft aria-hidden />
       </Button>
@@ -383,6 +384,7 @@ export default function CalendarClient({
         size="icon-sm"
         onClick={stepFwd}
         aria-label={view === 'year' ? 'Next year' : view === 'month' ? 'Next month' : 'Next day'}
+        className="size-11 md:size-7"
       >
         <ChevronRight aria-hidden />
       </Button>
