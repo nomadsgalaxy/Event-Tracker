@@ -225,9 +225,11 @@ export function EventEditor({
           </header>
 
           <Tabs value={active} onValueChange={selectTab}>
-            <TabsList aria-label="Event editor sections">
+            {/* w-fit by default → the 5 tab labels overflow the viewport on mobile (page jiggle +
+                last tab clipped). Make the strip span the row and scroll horizontally instead. */}
+            <TabsList aria-label="Event editor sections" className="w-full max-w-full justify-start overflow-x-auto">
               {TABS.map((t) => (
-                <TabsTrigger key={t.id} value={t.id}>
+                <TabsTrigger key={t.id} value={t.id} className="shrink-0 flex-none">
                   {t.label}
                 </TabsTrigger>
               ))}

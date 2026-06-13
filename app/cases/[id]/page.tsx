@@ -230,14 +230,16 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-3">
+        {/* The QR + action buttons. On mobile the actions' max-content (~480px) made this shrink-0
+            column overflow the page; let it span the row and left-align below the title instead. */}
+        <div className="flex w-full shrink-0 flex-col items-start gap-3 sm:w-auto sm:items-end">
           <DataMatrix
             kind="c"
             id={id}
             size={104}
             label={`Data Matrix code for case ${c.label || slug || id}`}
           />
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
             {/* Pack this case */}
             <Button asChild variant="outline" size="sm">
               <Link href={`/scan/pack/${encodeURIComponent(id)}`}>
