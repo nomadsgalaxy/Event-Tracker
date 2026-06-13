@@ -12,6 +12,9 @@ export interface DashEvent {
   lead: string;
   venueName: string;
   tags: string[];
+  /** Active severe weather at the venue for an event happening soon / now (else null). The card badge
+   *  tints RED for an official NWS warning, amber for a softer forecast-derived heads-up. */
+  severeWeather?: { official: boolean; label: string } | null;
 }
 
 // A tag/flair primitive — the client-safe projection of a `tags` collection doc the shared

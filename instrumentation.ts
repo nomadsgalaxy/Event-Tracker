@@ -66,4 +66,22 @@ export async function register(): Promise<void> {
   // last-hour delay; a daily call cap in the sweep backstops total spend.
   setTimeout(() => void sweep(), 2 * 60_000);
   setInterval(() => void sweep(), 20 * 60_000);
+
+  // ── PROD: severe weather sweep ─────────────────────────────────────────────────────────────────
+  // Scans events happening soon/now for severe weather at the venue (NWS official for US, forecast-
+  // derived elsewhere) and pushes a bell alert to the lead + staff. NWS is free + keyless, so this
+  // needs no API key to work in the US. Kill switch: EIT_WEATHER_ALERTS=0.
+  if (process.env.EIT_WEATHER_ALERTS !== '0') {
+    const { runWeatherAlerts } = await import('@/lib/integrations/weather-refresh');
+    const wxSweep = async () => {
+      try {
+        const r = await runWeatherAlerts();
+        if (r.alerts > 0) console.log(`[weather-alerts] checked ${r.checked} · alerts ${r.alerts}`);
+      } catch (e) {
+        console.warn('[weather-alerts] sweep failed:', e instanceof Error ? e.message : e);
+      }
+    };
+    setTimeout(() => void wxSweep(), 3 * 60_000); // a minute after the first flight sweep
+    setInterval(() => void wxSweep(), 20 * 60_000);
+  }
 }

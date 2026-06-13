@@ -111,6 +111,17 @@ export function renderNotification(n: NotificationItem, viewerEmail: string): Re
     };
   }
 
+  if (n.type === 'severe_weather') {
+    const event = (d.event as string) || 'Severe weather';
+    const area = (d.areaDesc as string) || '';
+    return {
+      title: `${event} for ${eventName}${area ? ` — ${area}` : ''}.`,
+      actionable: false,
+      eventId: d.eventId as string | undefined,
+      canView: Boolean(d.eventId),
+    };
+  }
+
   return {
     title: 'You have a new notification.',
     actionable: false,

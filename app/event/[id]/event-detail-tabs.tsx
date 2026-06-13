@@ -17,9 +17,11 @@ import {
   Printer,
   ExternalLink,
   TriangleAlert,
+  CloudLightning,
   ChevronRight,
   MapPin,
 } from 'lucide-react';
+import type { SevereAlert } from '@/lib/integrations/weather-alerts';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TagChip } from '@/components/ui/tag-chip';
@@ -296,11 +298,13 @@ function OverviewPanel({
   forecastRows,
   tempUnit = 'F',
   power,
+  severeWeather = [],
 }: {
   p: EventPayload;
   forecastRows: EventForecastRow[];
   tempUnit?: 'C' | 'F';
   power?: EventDetailView['power'];
+  severeWeather?: SevereAlert[];
 }) {
   const v = p.venue;
   const cityLine = [venueStr(v, 'city'), venueStr(v, 'state'), venueStr(v, 'zip')].filter(Boolean).join(' · ');
@@ -308,8 +312,36 @@ function OverviewPanel({
   const amenities = Array.isArray(v?.amenities) ? v!.amenities.filter(Boolean) : [];
   const contact = v?.contact;
   const booth = [venueStr(v, 'booth') || '—', venueStr(v, 'boothSize') || '—'].join(' · ');
+  // Official NWS warnings (source 'nws') tint RED; the softer forecast-derived heads-up tints amber.
+  const wxOfficial = severeWeather.some((a) => a.source === 'nws');
   return (
     <>
+      {severeWeather.length > 0 ? (
+        <div
+          className={cn(
+            'rounded-lg border p-3',
+            wxOfficial ? 'border-destructive/50 bg-destructive/10' : 'border-warning/50 bg-warning/10'
+          )}
+          role="alert"
+        >
+          <div className={cn('flex items-center gap-2 text-sm font-semibold', wxOfficial ? 'text-destructive' : 'text-warning')}>
+            <CloudLightning className="size-4 shrink-0" aria-hidden />
+            {wxOfficial ? 'Severe weather warning' : 'Rough weather expected'}
+          </div>
+          <ul className="mt-1.5 space-y-1.5">
+            {severeWeather.map((a) => (
+              <li key={a.id} className="text-sm leading-snug text-foreground">
+                <span className="font-medium">{a.event}</span>
+                {a.areaDesc ? <span className="text-muted-foreground"> · {a.areaDesc}</span> : null}
+                {a.headline ? <div className="text-xs text-muted-foreground">{a.headline}</div> : null}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            {wxOfficial ? 'Source: US National Weather Service' : 'Forecast-derived heads-up — verify locally'}
+          </p>
+        </div>
+      ) : null}
       <FieldGroup title="Schedule">
         <DataRow label="Start" value={fmtDate(p.startDate)} />
         <DataRow label="End" value={fmtDate(p.endDate)} />
@@ -1087,6 +1119,7 @@ export function EventDetailClient({
   payload,
   view,
   forecastRows,
+  severeWeather = [],
   tempUnit = 'F',
   canEdit,
   canDelete,
@@ -1105,6 +1138,7 @@ export function EventDetailClient({
   payload: EventPayload;
   view: EventDetailView;
   forecastRows: EventForecastRow[];
+  severeWeather?: SevereAlert[];
   tempUnit?: 'C' | 'F';
   canEdit: boolean;
   canDelete: boolean;
@@ -1291,7 +1325,7 @@ export function EventDetailClient({
       <div>
         <TabStrip active={active} onSelect={setActive} />
         <div role="tabpanel" hidden={active !== 'overview'}>
-          <OverviewPanel p={payload} forecastRows={forecastRows} tempUnit={tempUnit} power={view.power} />
+          <OverviewPanel p={payload} forecastRows={forecastRows} tempUnit={tempUnit} power={view.power} severeWeather={severeWeather} />
         </div>
         <div role="tabpanel" hidden={active !== 'team'}>
           <TeamPanel

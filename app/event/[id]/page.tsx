@@ -9,6 +9,7 @@ import { eventCode } from '@/lib/integrations/eitm';
 import { activeTenantHash36 } from '@/lib/auth/settings-store';
 import { dataMatrixSvg } from '@/lib/integrations/data-matrix';
 import { fetchVenueForecast, buildEventForecastRows, type EventForecastRow } from '@/lib/integrations/weather';
+import { fetchSevereAlerts, type SevereAlert } from '@/lib/integrations/weather-alerts';
 import type { CasePayload, EventPayload } from '@/lib/types/types';
 import { EventDetailClient } from './event-detail-tabs';
 
@@ -157,6 +158,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   // The viewer's preferred temperature unit (C/F) for the venue forecast chips.
   const tempUnit = await getUserTempUnit(email);
 
+  // ── Severe weather warnings for the venue (NWS official in the US, forecast-derived elsewhere) ──
+  // Only for an event that isn't long past — no point calling NWS for last year's show. Never throws;
+  // an empty list simply renders no banner.
+  let severeWeather: SevereAlert[] = [];
+  {
+    const v = safePayload.venue;
+    const lat = typeof v?.lat === 'number' ? v.lat : NaN;
+    const lng = typeof v?.lng === 'number' ? v.lng : NaN;
+    const endIso = String(safePayload.endDate || safePayload.startDate || '').trim();
+    const notLongPast = !/^\d{4}-\d{2}-\d{2}$/.test(endIso) || Date.parse(`${endIso}T23:59:59`) >= Date.now() - 2 * 86_400_000;
+    if (Number.isFinite(lat) && Number.isFinite(lng) && notLongPast) {
+      try {
+        severeWeather = await fetchSevereAlerts(lat, lng, { startDate: safePayload.startDate, endDate: safePayload.endDate });
+      } catch {
+        /* best-effort — no banner on a fetch hiccup */
+      }
+    }
+  }
+
   return (
     <EventDetailClient
       eventId={id}
@@ -168,6 +188,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       payload={safePayload}
       view={view}
       forecastRows={forecastRows}
+      severeWeather={severeWeather}
       tempUnit={tempUnit}
       canEdit={canEdit}
       canDelete={canDelete}

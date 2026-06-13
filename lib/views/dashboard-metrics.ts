@@ -7,8 +7,10 @@ import {
 } from '@/lib/views/inventory-shape';
 import { itemQtyInCase, buildCaseManifest } from '@/lib/views/case-view';
 import { startDayForecast } from '@/lib/integrations/weather';
+import { fetchSevereAlerts } from '@/lib/integrations/weather-alerts';
 import type { EventDoc } from '@/lib/types/types';
 import type {
+  DashEvent,
   DashTimelineEvent,
   DashboardData,
   DashKpis,
@@ -234,6 +236,26 @@ export async function getDashboardData(): Promise<DashboardData> {
       // Per-event start-day forecast (null unless the Google Weather key is configured).
       const weather = await startDayForecast(startDate, venue.lat, venue.lng);
 
+      // Severe weather for the card badge — only for an event happening soon / now (caps the NWS
+      // calls to the few in-window events; fetchSevereAlerts caches per venue). null = none.
+      let severeWeather: DashEvent['severeWeather'] = null;
+      {
+        const wlat = Number(venue.lat);
+        const wlng = Number(venue.lng);
+        const sMs = startDate ? new Date(startDate + 'T00:00:00').getTime() : NaN;
+        const eMs = endDate ? new Date(endDate + 'T23:59:59').getTime() : sMs;
+        const terminal = ['closed', 'complete', 'cancelled', 'canceled'].includes(String(p.state));
+        const inWin = Number.isFinite(sMs) && eMs >= today - 86_400_000 && sMs <= today + 7 * 86_400_000;
+        if (!terminal && inWin && Number.isFinite(wlat) && Number.isFinite(wlng)) {
+          try {
+            const active = await fetchSevereAlerts(wlat, wlng, { startDate, endDate });
+            if (active.length) severeWeather = { official: active.some((a) => a.source === 'nws'), label: active[0].event };
+          } catch {
+            /* no badge on a fetch hiccup */
+          }
+        }
+      }
+
       return {
         id: e._id,
         name: p.name || '',
@@ -247,6 +269,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         tags: tagIds.map((id) => tagById.get(id)?.label).filter((l): l is string => !!l),
         primaryTag,
         weather,
+        severeWeather,
         scanned: prog.scanned,
         total: prog.total,
         flagged: prog.flagged > 0 || flaggedEventIds.has(e._id),

@@ -18,6 +18,7 @@ import { useStepUp } from '@/components/config/step-up';
 const EVENT_LABELS: Record<string, string> = {
   item_flagged: 'Item flagged',
   flight_delay: 'Flight delay / cancellation',
+  severe_weather: 'Severe weather warning',
   ship_kit_signoff: 'Kit shipped (sign-off)',
   low_stock: 'Low stock (coming soon)',
 };

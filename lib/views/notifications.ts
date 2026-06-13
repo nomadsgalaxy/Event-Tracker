@@ -417,6 +417,73 @@ export async function createFlightAlert(to: string, data: FlightAlertData): Prom
   return { ok: true, duplicate: false };
 }
 
+// ── Severe weather alert (lib/integrations/weather-refresh sweep → bell) ───────────────────────────
+// One-shot per (recipient, event, alertId): the same active warning sweeps repeatedly, so we dedup on
+// the alert's stable id within 24h. A NEW warning (different id) for the same event still notifies.
+export interface WeatherAlertData {
+  eventId: string;
+  eventName?: string;
+  source: 'nws' | 'forecast' | string;
+  event: string; // "Tornado Warning" / "Rough weather"
+  severity: string; // 'extreme' | 'severe' | 'rough' | …
+  headline: string;
+  areaDesc?: string;
+  alertId: string; // the source alert id — the dedup key
+  expires?: string | null;
+}
+
+export async function createWeatherAlert(to: string, data: WeatherAlertData): Promise<{ ok: boolean; duplicate?: boolean }> {
+  const recipient = lc(to);
+  if (!recipient || !data.eventId || !data.alertId) return { ok: false };
+  const db = await getDb();
+  const col = db.collection<NotificationDoc>(NOTIFS_COLLECTION);
+
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const existing = await col.findOne({
+    'payload.type': 'severe_weather',
+    'payload.to': recipient,
+    'payload.data.eventId': data.eventId,
+    'payload.data.alertId': data.alertId,
+    'payload.createdAt': { $gte: since },
+    'payload.deletedAt': { $in: [null, undefined] },
+  });
+  if (existing) return { ok: true, duplicate: true };
+
+  const now = Date.now();
+  const id = randomUUID();
+  const doc: NotificationDoc = {
+    _id: id,
+    payload: {
+      id,
+      to: recipient,
+      type: 'severe_weather',
+      data: { ...data },
+      createdAt: now,
+      readAt: null,
+      deletedAt: null,
+    },
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  await col.insertOne(doc);
+  // Weather warnings carry no staff PII, so the outbound webhook gets the full summary.
+  void dispatchOutbound({
+    type: 'severe_weather',
+    summary: `${data.event} — ${data.eventName || data.eventId}${data.areaDesc ? ` (${data.areaDesc})` : ''}`,
+    data: {
+      eventId: data.eventId,
+      eventName: data.eventName,
+      event: data.event,
+      severity: data.severity,
+      headline: data.headline,
+      areaDesc: data.areaDesc,
+      source: data.source,
+    },
+  });
+  return { ok: true, duplicate: false };
+}
+
 export interface DecideResult {
   ok: boolean;
   /** The resolved status when ok ('approved' | 'denied'), or the existing status if already decided. */

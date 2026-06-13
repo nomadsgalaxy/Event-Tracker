@@ -80,7 +80,7 @@ export interface BrandingSettings {
 // ── Outbound notifications (webhook + Slack) ──────────────────────────────────────────────────────
 // Admin-configured: a generic JSON webhook URL and/or a Slack incoming-webhook URL, plus which event
 // types fan out. URLs are the capability (a Slack incoming webhook IS a bearer URL), stored as-is.
-export const OUTBOUND_EVENT_TYPES = ['item_flagged', 'flight_delay', 'ship_kit_signoff', 'low_stock'] as const;
+export const OUTBOUND_EVENT_TYPES = ['item_flagged', 'flight_delay', 'severe_weather', 'ship_kit_signoff', 'low_stock'] as const;
 export type OutboundEventType = (typeof OUTBOUND_EVENT_TYPES)[number];
 export interface OutboundWebhookConfig {
   webhookUrl: string;

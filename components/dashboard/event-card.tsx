@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarDays, MapPin, UserRound } from 'lucide-react';
+import { CalendarDays, MapPin, UserRound, CloudLightning } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn } from '@/lib/util/utils';
@@ -54,6 +54,18 @@ export function EventCard({ event, className }: { event: DashEvent; className?: 
               <span className="inline-flex items-center gap-1">
                 <UserRound size={12} aria-hidden />
                 <span className="truncate">{event.lead}</span>
+              </span>
+            ) : null}
+            {event.severeWeather ? (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 font-medium',
+                  event.severeWeather.official ? 'text-destructive' : 'text-warning'
+                )}
+                title={event.severeWeather.official ? 'Severe weather warning' : 'Rough weather expected'}
+              >
+                <CloudLightning size={12} aria-hidden />
+                <span className="truncate">{event.severeWeather.label}</span>
               </span>
             ) : null}
           </div>
