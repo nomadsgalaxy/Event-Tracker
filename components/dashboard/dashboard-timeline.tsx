@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { MapPin, UserRound, Flag, ChevronRight, CalendarRange } from 'lucide-react';
+import { MapPin, UserRound, Flag, ChevronRight, CalendarRange, CloudLightning } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Eyebrow } from '@/components/ui/eyebrow';
@@ -319,6 +319,19 @@ function AxisCard({
           </div>
         ) : null}
 
+        {/* severe weather warning at the venue (next 7d / now) — red for an official NWS warning. */}
+        {event.severeWeather ? (
+          <div
+            className={cn(
+              'flex min-w-0 items-center gap-1 text-[11px] font-medium',
+              event.severeWeather.official ? 'text-destructive' : 'text-warning'
+            )}
+          >
+            <CloudLightning size={11} aria-hidden className="shrink-0" />
+            <span className="truncate">{event.severeWeather.label}</span>
+          </div>
+        ) : null}
+
         {/* (c) per-event START-day weather (null/no-op until the Google Weather key is wired). */}
         {event.weather ? <WeatherChip w={event.weather} unit={tempUnit} /> : null}
 
@@ -472,8 +485,16 @@ function ShowcaseRow({
     >
       {/* Event name + city + start-day weather. */}
       <div role="cell" className="min-w-0">
-        <div className="truncate font-medium text-foreground">
-          {event.name || 'Untitled event'}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium text-foreground">{event.name || 'Untitled event'}</span>
+          {event.severeWeather ? (
+            <span
+              className={cn('inline-flex shrink-0 items-center', event.severeWeather.official ? 'text-destructive' : 'text-warning')}
+              title={`${event.severeWeather.label} — ${event.severeWeather.official ? 'severe weather warning' : 'rough weather'}`}
+            >
+              <CloudLightning size={13} aria-hidden />
+            </span>
+          ) : null}
         </div>
         {event.city || event.weather ? (
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
