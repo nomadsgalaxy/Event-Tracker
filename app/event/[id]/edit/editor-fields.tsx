@@ -1767,7 +1767,7 @@ export function ShippingPanel() {
             <span className="font-medium text-warning">Don’t forget the return.</span>{' '}
             <span className="text-foreground">
               Verify return shipping has been requested — or confirm these items aren’t coming back (e.g. consumables or sold
-              stock). Just a reminder; you can save without it.
+              stock).
             </span>
           </div>
         </div>
