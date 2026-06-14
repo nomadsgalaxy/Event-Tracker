@@ -9,7 +9,7 @@ import {
   Controller,
   type FieldPath,
 } from 'react-hook-form';
-import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, Copy } from 'lucide-react';
+import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, Copy, Truck } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
@@ -1730,6 +1730,18 @@ function PalletsSection() {
 
 // ── Shipping panel ────────────────────────────────────────────────────────────
 export function ShippingPanel() {
+  // Soft return-shipping nudge: once outbound shipping is being entered, remind the user to verify a
+  // RETURN pickup is requested (or confirm the items aren't coming back). It's advisory only — it
+  // never blocks save, and it self-clears the moment any return field is filled.
+  const { control } = useFormContext<EventFormValues>();
+  const watched = useWatch({
+    control,
+    name: ['outbound.carrier', 'outbound.tracking', 'outbound.pickupDate', 'return.carrier', 'return.tracking', 'return.arrivalDate'],
+  }) as (string | undefined)[];
+  const filled = (...vals: (string | undefined)[]) => vals.some((v) => !!String(v ?? '').trim());
+  const outboundStarted = filled(watched[0], watched[1], watched[2]);
+  const returnStarted = filled(watched[3], watched[4], watched[5]);
+  const remindReturn = outboundStarted && !returnStarted;
   return (
     <div>
       <FieldGroup title="Outbound shipping">
@@ -1747,6 +1759,19 @@ export function ShippingPanel() {
         </FormItem>
         <NotesField name="outbound.notes" placeholder="Loading dock instructions, special handling, etc." />
       </FieldGroup>
+
+      {remindReturn ? (
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm" role="note">
+          <Truck className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+          <div>
+            <span className="font-medium text-warning">Don’t forget the return.</span>{' '}
+            <span className="text-foreground">
+              Verify return shipping has been requested — or confirm these items aren’t coming back (e.g. consumables or sold
+              stock). Just a reminder; you can save without it.
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       <FieldGroup title="Return shipping">
         <div className="grid gap-4 sm:grid-cols-2">
