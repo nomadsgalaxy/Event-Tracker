@@ -64,6 +64,7 @@ export interface ItemSignoffProgress {
   damaged: number;
   missing: number;
   consumed: number;
+  sold: number;
   looseTotal: number;
   looseSigned: number;
   byCase: Record<string, { total: number; signed: number }>;
@@ -89,6 +90,7 @@ export function eventSignoffProgress(
     damaged: 0,
     missing: 0,
     consumed: 0,
+    sold: 0,
     looseTotal: 0,
     looseSigned: 0,
     byCase: {},
@@ -102,6 +104,7 @@ export function eventSignoffProgress(
   let damaged = 0;
   let missing = 0;
   let consumed = 0;
+  let sold = 0;
   let looseTotal = 0;
   let looseSigned = 0;
   const byCase: Record<string, { total: number; signed: number }> = {};
@@ -128,6 +131,7 @@ export function eventSignoffProgress(
           if (k === 'damaged') damaged++;
           if (k === 'missing') missing++;
           if (k === 'consumed') consumed++;
+          if (k === 'sold') sold++;
         }
         if (itFlagged || (u.flags || []).some((f) => f && f.status === 'open')) flagged++;
       }
@@ -152,12 +156,13 @@ export function eventSignoffProgress(
         if (k === 'damaged') damaged++;
         if (k === 'missing') missing++;
         if (k === 'consumed') consumed++;
+        if (k === 'sold') sold++;
       }
       if (itFlagged) flagged++;
     }
   }
 
-  return { total, signed, flagged, damaged, missing, consumed, byCase, looseTotal, looseSigned };
+  return { total, signed, flagged, damaged, missing, consumed, sold, byCase, looseTotal, looseSigned };
 }
 
 // ── Per-case manifest group for the checklist (packing + unpacking) ──────────────────────
@@ -450,7 +455,9 @@ export interface CheckinSweep {
 
 const DAMAGED_KINDS = new Set(['returned_damaged', 'damaged']);
 const MISSING_KINDS = new Set(['returned_missing', 'missing']);
-const RETURNED_KINDS = new Set(['ok', 'returned', 'consumed']);
+// 'consumed' + 'sold' are accounted-for dispositions (the item is legitimately gone, not lost/damaged)
+// so the reconcile sweep treats them like a clean return — no discrepancy.
+const RETURNED_KINDS = new Set(['ok', 'returned', 'consumed', 'sold']);
 
 export function buildCheckinSweep(
   event: EventPayload | null | undefined,

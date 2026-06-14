@@ -25,7 +25,7 @@ import type { ParsedTag } from '@/lib/integrations/nfc-decoders';
 // flows write { kind, at, byEmail, byName, role, note } (the disposition); an older outbound code
 // path wrote a leaner { at, by }. The union covers both so a count never mis-reads either shape.
 export interface RowSignoff {
-  kind?: string; // ok | damaged | missing | consumed | other | packing
+  kind?: string; // ok | damaged | missing | consumed | sold | other | packing
   at?: number;
   by?: string;
   byEmail?: string;

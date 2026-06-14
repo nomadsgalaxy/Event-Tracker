@@ -162,11 +162,11 @@ export function ScanScreen({
     [activeCaseId, policy.canUnPack, runWrite]
   );
 
-  // ── Disposition cycle (unpack mode row tap): null → ok → damaged → consumed → null ─────────────
+  // ── Disposition cycle (unpack mode row tap): null → ok → damaged → consumed → sold → null ───────
   const cycleRowDisposition = useCallback(
     (entry: ScanContentEntry) => {
       if (!activeCaseId) return;
-      const order: (DispositionKind | null)[] = [null, 'ok', 'damaged', 'consumed'];
+      const order: (DispositionKind | null)[] = [null, 'ok', 'damaged', 'consumed', 'sold'];
       const cur = rowDispositionKind(entry.dist);
       const ix = order.indexOf(cur);
       const next = order[(ix + 1) % order.length];
@@ -511,12 +511,13 @@ export function ScanScreen({
   ) : null;
 
   const sectionCounters = activeCase && isUnpackMode ? (
-    <div className="grid grid-cols-4 overflow-hidden rounded-lg border border-border">
+    <div className="grid grid-cols-5 overflow-hidden rounded-lg border border-border">
       {(
         [
           { k: 'ok', l: 'OK', v: dispCounts.ok, c: 'var(--success)' },
           { k: 'damaged', l: 'Damaged', v: dispCounts.damaged, c: 'var(--error)' },
           { k: 'consumed', l: 'Consumed', v: dispCounts.consumed, c: 'var(--warning)' },
+          { k: 'sold', l: 'Sold', v: dispCounts.sold, c: 'var(--primary)' },
           { k: 'missing', l: 'Missing', v: dispCounts.missing, c: 'var(--muted-foreground)' },
         ] as const
       ).map((b, i) => (
@@ -848,10 +849,11 @@ function DispChip({ kind }: { kind: DispositionKind | null }) {
     ok: 'var(--success)',
     damaged: 'var(--error)',
     consumed: 'var(--warning)',
+    sold: 'var(--primary)',
     missing: 'var(--muted-foreground)',
     other: 'var(--muted-foreground)',
   };
-  const lbl: Record<DispositionKind, string> = { ok: 'OK', damaged: 'DAMAGED', consumed: 'CONSUMED', missing: 'MISSING', other: 'OTHER' };
+  const lbl: Record<DispositionKind, string> = { ok: 'OK', damaged: 'DAMAGED', consumed: 'CONSUMED', sold: 'SOLD', missing: 'MISSING', other: 'OTHER' };
   return (
     <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.06em]" style={{ color: col[kind] }}>
       {kind === 'damaged' ? <TriangleAlert size={10} aria-hidden /> : null}

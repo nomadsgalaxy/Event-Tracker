@@ -860,6 +860,8 @@ const DISPOSITIONS: { k: string; short: string; full: string; color: string }[] 
   { k: 'damaged', short: 'DMG', full: 'Damaged', color: 'var(--destructive)' },
   { k: 'missing', short: 'MIS', full: 'Missing', color: 'var(--warning)' },
   { k: 'consumed', short: 'CON', full: 'Consumed', color: 'var(--muted-foreground)' },
+  // 'Sold' — product moved at the show (no revenue tracked); a sibling of 'consumed' for stock-to-sell.
+  { k: 'sold', short: 'SOLD', full: 'Sold', color: 'var(--primary)' },
   { k: 'other', short: 'OTH', full: 'Other', color: 'var(--muted-foreground)' },
 ];
 

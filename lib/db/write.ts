@@ -1939,7 +1939,7 @@ export async function packTaggedUnitIntoCase({ itemId, caseId, tagUid, actorRole
 // disposition of 'ok'|'damaged'|'consumed'|'missing' writes the canonical d.signoff = { kind, at,
 // byEmail, byName, role } on the case's distribution row (or every in-case serial unit); a null
 // disposition CLEARS the signoff (+ the legacy flat fields). Gated by scan.pack (authorized+).
-const VALID_DISPOSITIONS: ReadonlySet<string> = new Set(['ok', 'damaged', 'missing', 'consumed', 'other']);
+const VALID_DISPOSITIONS: ReadonlySet<string> = new Set(['ok', 'damaged', 'missing', 'consumed', 'sold', 'other']);
 interface SetDispositionArgs {
   itemId: string;
   caseId: string;
@@ -3075,7 +3075,7 @@ export async function commitEventClosed({ eventId, actor }: CommitClosedArgs): P
 // distIdx, AND logging a signoff / unsignoff / bulk-signoff audit entry on the HOLDING event. Refuses
 // when the item carries an OPEN flag (mirrors the toggle's hasFlags guard). Gated by signoff.commit
 // (lead+ OR lead of the holding event), re-checked server-side; the item + case are pinned to disk.
-const SIGNOFF_KINDS: ReadonlySet<string> = new Set(['ok', 'damaged', 'missing', 'consumed', 'other', 'packing']);
+const SIGNOFF_KINDS: ReadonlySet<string> = new Set(['ok', 'damaged', 'missing', 'consumed', 'sold', 'other', 'packing']);
 interface SignOffItemArgs {
   eventId: string;
   itemId: string;

@@ -22,9 +22,10 @@ import { rankOf } from '@/lib/auth/rbac';
 import type { EventPayload } from '@/lib/types/types';
 
 // ── Disposition vocabulary (unified with Sign-Off, 2026-05-04) ─────────────────────────────────
-// The canonical kind set; the scan-return flow cycles null → ok → damaged → consumed → null and
-// the bulk "mark unscanned missing" stamps 'missing'.
-export type DispositionKind = 'ok' | 'damaged' | 'missing' | 'consumed' | 'other';
+// The canonical kind set; the scan-return flow cycles null → ok → damaged → consumed → sold → null
+// and the bulk "mark unscanned missing" stamps 'missing'. 'consumed' = used up; 'sold' = product
+// sold at the show (no revenue tracked — just the disposition, for exhibitors who bring stock to sell).
+export type DispositionKind = 'ok' | 'damaged' | 'missing' | 'consumed' | 'sold' | 'other';
 
 /**
  * The disposition recorded on a distribution row (or a synthesized serial row). Reads d.signoff.kind
@@ -108,12 +109,13 @@ export interface DispCounts {
   damaged: number;
   missing: number;
   consumed: number;
+  sold: number;
   other: number;
   none: number;
 }
 
 export function dispositionCounts(contents: ScanContentEntry[]): DispCounts {
-  const c: DispCounts = { ok: 0, damaged: 0, missing: 0, consumed: 0, other: 0, none: 0 };
+  const c: DispCounts = { ok: 0, damaged: 0, missing: 0, consumed: 0, sold: 0, other: 0, none: 0 };
   for (const r of contents) {
     const d = rowDispositionKind(r.dist);
     if (d && c[d] !== undefined) c[d]++;
