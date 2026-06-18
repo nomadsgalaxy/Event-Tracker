@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth/auth';
-import { markNotificationsRead, createTravelRequest, decideTravelRequest } from '@/lib/views/notifications';
+import { markNotificationsRead, clearNotifications, createTravelRequest, decideTravelRequest } from '@/lib/views/notifications';
 import { getEvent } from '@/lib/db/data';
 
 // app/notifications/actions.ts — the Server Action boundary for the notification feed.
@@ -41,6 +41,24 @@ export async function markReadAction(ids?: string[]): Promise<NotificationsActio
     return { ok: true, modified };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not update notifications.' };
+  }
+}
+
+/**
+ * Clear (soft-delete) notifications. With no ids, clears ALL of the caller's notifications ("Clear
+ * all"); with ids, clears only that subset (a per-row dismiss). Self-scoped in the lib write exactly
+ * like markReadAction. Returns a form-state object.
+ */
+export async function clearNotificationsAction(ids?: string[]): Promise<NotificationsActionState> {
+  const user = await requireUser();
+  try {
+    const clean = Array.isArray(ids) ? ids.map((s) => String(s)).filter(Boolean) : undefined;
+    const { modified } = await clearNotifications(user.email, clean && clean.length ? clean : undefined);
+    revalidatePath('/notifications');
+    revalidatePath('/');
+    return { ok: true, modified };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not clear notifications.' };
   }
 }
 

@@ -4,12 +4,12 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Bell, CheckCheck, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, Loader2, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/util/utils';
-import { markReadAction, decideTravelRequestAction } from './actions';
+import { markReadAction, clearNotificationsAction, decideTravelRequestAction } from './actions';
 import { renderNotification, relativeTime, type NotificationItem } from '@/components/notifications/notification-meta';
 
 // notifications-list.tsx — the interactive half of the full Notifications page: a "Mark all read"
@@ -41,6 +41,19 @@ export function NotificationsList({ items, viewerEmail }: NotificationsListProps
     });
   };
 
+  // Clear (soft-delete). With no ids → all of mine; with an id → one row. Re-reads live after.
+  const clear = (ids?: string[]) => {
+    startTransition(async () => {
+      const res = await clearNotificationsAction(ids);
+      if (res.ok) {
+        if (!ids) toast.success(res.modified ? `Cleared ${res.modified}.` : 'Nothing to clear.');
+        router.refresh();
+      } else {
+        toast.error(res.error || 'Could not clear notifications.');
+      }
+    });
+  };
+
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-16 text-center">
@@ -60,22 +73,28 @@ export function NotificationsList({ items, viewerEmail }: NotificationsListProps
         <p className="text-sm text-muted-foreground" aria-live="polite">
           <span className="tabular-nums">{unreadCount}</span> unread
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={markAll}
-          disabled={isPending || unreadCount === 0}
-        >
-          {isPending ? <Loader2 className="animate-spin" aria-hidden /> : <CheckCheck aria-hidden />}
-          Mark all read
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={markAll}
+            disabled={isPending || unreadCount === 0}
+          >
+            {isPending ? <Loader2 className="animate-spin" aria-hidden /> : <CheckCheck aria-hidden />}
+            Mark all read
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => clear()} disabled={isPending}>
+            <Trash2 aria-hidden />
+            Clear all
+          </Button>
+        </div>
       </div>
 
       <Card className="p-0">
         <CardContent className="p-0">
           <ul className="divide-y divide-border">
             {items.map((n) => (
-              <NotificationRow key={n.docId} n={n} viewerEmail={viewerEmail} />
+              <NotificationRow key={n.docId} n={n} viewerEmail={viewerEmail} onDismiss={() => clear([n.id])} />
             ))}
           </ul>
         </CardContent>
@@ -84,7 +103,7 @@ export function NotificationsList({ items, viewerEmail }: NotificationsListProps
   );
 }
 
-function NotificationRow({ n, viewerEmail }: { n: NotificationItem; viewerEmail: string }) {
+function NotificationRow({ n, viewerEmail, onDismiss }: { n: NotificationItem; viewerEmail: string; onDismiss: () => void }) {
   const router = useRouter();
   const r = renderNotification(n, viewerEmail);
   const unread = n.mine;
@@ -149,6 +168,14 @@ function NotificationRow({ n, viewerEmail }: { n: NotificationItem; viewerEmail:
           </div>
         )}
       </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss notification"
+        className="-mr-1 mt-0.5 shrink-0 self-start rounded-sm p-1 text-muted-foreground/50 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <X size={16} aria-hidden />
+      </button>
     </li>
   );
 }

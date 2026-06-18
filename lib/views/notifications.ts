@@ -261,6 +261,36 @@ export async function markNotificationsRead(email: string, ids?: string[] | null
   return { modified };
 }
 
+/**
+ * Soft-DELETE (clear) the caller's notifications — all of mine, or only the given ids. Self-scoped
+ * exactly like markNotificationsRead (only docs whose payload.to === me are touched), so a crafted id
+ * list can never clear another user's row. Stamps payload.deletedAt + the envelope deletedAt so
+ * getNotifications drops them and the tombstone replicates via eit_sync. Returns the number cleared.
+ */
+export async function clearNotifications(email: string, ids?: string[] | null): Promise<{ modified: number }> {
+  const me = lc(email);
+  if (!me) return { modified: 0 };
+  const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map((s) => String(s))) : null;
+
+  const db = await getDb();
+  const col = db.collection<NotificationDoc>(NOTIFS_COLLECTION);
+  const mine = await col.find({ 'payload.to': me }).toArray();
+
+  const now = Date.now();
+  let modified = 0;
+  for (const d of mine) {
+    const pl = d.payload || {};
+    if (pl.deletedAt) continue; // already cleared
+    if (idSet && !idSet.has(String(pl.id ?? d._id))) continue; // not in the requested subset
+    const res = await col.updateOne(
+      { _id: d._id, 'payload.to': me },
+      { $set: { 'payload.deletedAt': now, deletedAt: now, updatedAt: now } }
+    );
+    if (res.modifiedCount > 0) modified += 1;
+  }
+  return { modified };
+}
+
 export interface TravelRequestResult {
   /** true = a request now exists for (requester, subject, event). */
   ok: boolean;

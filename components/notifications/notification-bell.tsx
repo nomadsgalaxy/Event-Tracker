@@ -4,12 +4,12 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Bell, Plane, Loader2 } from 'lucide-react';
+import { Bell, Plane, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/util/utils';
-import { markReadAction, decideTravelRequestAction } from '@/app/notifications/actions';
+import { markReadAction, clearNotificationsAction, decideTravelRequestAction } from '@/app/notifications/actions';
 import {
   renderNotification,
   relativeTime,
@@ -106,6 +106,20 @@ export function NotificationBell({
     if (data.actionable > 0) setMarked(false);
   }, [data.actionable]);
 
+  // Clear (soft-delete) notifications. Optimistically drop them from the list, then write + re-poll.
+  // Reminders aren't stored notifications (they're computed), so Clear all leaves them be.
+  const clear = (ids?: string[]) => {
+    setData((d) => ({
+      ...d,
+      items: ids ? d.items.filter((n) => !ids.includes(n.id)) : [],
+      actionable: 0,
+    }));
+    startTransition(async () => {
+      await clearNotificationsAction(ids);
+      load();
+    });
+  };
+
   const empty = data.items.length === 0 && reminderCount === 0;
 
   return (
@@ -129,17 +143,28 @@ export function NotificationBell({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-[22rem] max-w-[92vw] gap-0 p-0">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             Notifications
           </p>
-          <Link
-            href="/notifications"
-            onClick={() => setOpen(false)}
-            className="rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            See all
-          </Link>
+          <div className="flex items-center gap-3">
+            {data.items.length > 0 && (
+              <button
+                type="button"
+                onClick={() => clear()}
+                className="rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Clear all
+              </button>
+            )}
+            <Link
+              href="/notifications"
+              onClick={() => setOpen(false)}
+              className="rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              See all
+            </Link>
+          </div>
         </div>
 
         {empty ? (
@@ -160,6 +185,7 @@ export function NotificationBell({
                   viewerEmail={viewerEmail}
                   onNavigate={() => setOpen(false)}
                   onDecided={load}
+                  onDismiss={() => clear([n.id])}
                 />
               ))}
             </ul>
@@ -209,11 +235,13 @@ function BellRow({
   viewerEmail,
   onNavigate,
   onDecided,
+  onDismiss,
 }: {
   n: NotificationItem;
   viewerEmail: string;
   onNavigate: () => void;
   onDecided: () => void;
+  onDismiss: () => void;
 }) {
   const r = renderNotification(n, viewerEmail);
   const unread = n.mine;
@@ -268,6 +296,14 @@ function BellRow({
           </div>
         )}
       </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss notification"
+        className="-mr-1 mt-0.5 shrink-0 self-start rounded-sm p-1 text-muted-foreground/50 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <X size={14} aria-hidden />
+      </button>
     </li>
   );
 }
