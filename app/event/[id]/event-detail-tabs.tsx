@@ -20,6 +20,7 @@ import {
   CloudLightning,
   ChevronRight,
   MapPin,
+  Users,
 } from 'lucide-react';
 import type { SevereAlert } from '@/lib/integrations/weather-alerts';
 import { Button } from '@/components/ui/button';
@@ -747,33 +748,53 @@ function TeamPanel({
   view,
   viewerIsStaffed,
   canPrintOthers,
+  canPrintTeam,
   onPrint,
+  onPrintTeam,
 }: {
   eventId: string;
   view: EventDetailView;
   viewerIsStaffed: boolean;
   canPrintOthers: boolean;
+  canPrintTeam: boolean;
   onPrint: (s: StaffCardView) => void;
+  onPrintTeam: () => void;
 }) {
   const staff = view.staff;
   const me = staff.find((s) => s.isSelf);
   // "Print my itinerary" — shown when the viewer is staffed here (itinerary.print.self is a self
-  // capability everyone holds for their own record).
-  const myPrint =
-    viewerIsStaffed && me ? (
-      <Button
-        variant="ghost"
-        size="xs"
-        className="text-muted-foreground"
-        title="Print your travel itinerary for this event"
-        onClick={() => onPrint(me)}
-      >
-        <Printer aria-hidden className="size-3.5" />
-        Print my itinerary
-      </Button>
-    ) : null;
+  // capability everyone holds for their own record). "Print team itinerary" (lead/manager) groups the
+  // roster by shared hotel + shared flight.
+  const actions = (
+    <div className="flex items-center gap-1">
+      {canPrintTeam && staff.length > 0 ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="text-muted-foreground"
+          title="Print the team itinerary — shared hotels and flights, then per traveler"
+          onClick={onPrintTeam}
+        >
+          <Users aria-hidden className="size-3.5" />
+          Print team itinerary
+        </Button>
+      ) : null}
+      {viewerIsStaffed && me ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="text-muted-foreground"
+          title="Print your travel itinerary for this event"
+          onClick={() => onPrint(me)}
+        >
+          <Printer aria-hidden className="size-3.5" />
+          Print my itinerary
+        </Button>
+      ) : null}
+    </div>
+  );
   return (
-    <FieldGroup title={`Team · ${staff.length} assigned`} action={myPrint}>
+    <FieldGroup title={`Team · ${staff.length} assigned`} action={actions}>
       {staff.length === 0 ? (
         <EmptyBlock>No staff assigned yet.</EmptyBlock>
       ) : (
@@ -1124,6 +1145,7 @@ export function EventDetailClient({
   canEdit,
   canDelete,
   canPrintOthersItin,
+  canPrintTeam,
   canMarkOnsite,
   viewerIsStaffed,
   eventMatrixCode,
@@ -1143,6 +1165,8 @@ export function EventDetailClient({
   canEdit: boolean;
   canDelete: boolean;
   canPrintOthersItin: boolean;
+  /** Event lead OR manager+ — show the "Print team itinerary" action (shared lodging/flights). */
+  canPrintTeam: boolean;
   /** signoff.commit (lead+/lead-of-event) — show "Mark on site" while the event is in transit. */
   canMarkOnsite: boolean;
   viewerIsStaffed: boolean;
@@ -1176,6 +1200,15 @@ export function EventDetailClient({
   const printItineraryFor = (s: StaffCardView) => {
     window.open(
       `/event/${encodeURIComponent(eventId)}/itinerary/print?staff=${encodeURIComponent(s.email)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
+  // Team itinerary: one document grouping the roster by shared hotel + shared flight, then per traveler.
+  // Lead/manager only (re-checked server-side). Logistics only — no accommodations PII.
+  const printTeamItinerary = () => {
+    window.open(
+      `/event/${encodeURIComponent(eventId)}/itinerary/team/print`,
       '_blank',
       'noopener,noreferrer'
     );
@@ -1333,7 +1366,9 @@ export function EventDetailClient({
             view={view}
             viewerIsStaffed={viewerIsStaffed}
             canPrintOthers={canPrintOthersItin}
+            canPrintTeam={canPrintTeam}
             onPrint={printItineraryFor}
+            onPrintTeam={printTeamItinerary}
           />
         </div>
         <div role="tabpanel" hidden={active !== 'packing'}>

@@ -193,6 +193,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       canEdit={canEdit}
       canDelete={canDelete}
       canPrintOthersItin={canPrintOthersItin}
+      canPrintTeam={canPrintOthersItin || isLead}
       canMarkOnsite={canMarkOnsite}
       viewerIsStaffed={viewerIsStaffed}
       eventMatrixCode={eventMatrixCode}
