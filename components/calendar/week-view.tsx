@@ -19,6 +19,7 @@ import {
   HOUR_START,
   HOUR_END,
   initialsOf,
+  packDayBlocks,
   parseTime,
   SEGMENT_COLORS,
   SEGMENT_LABEL,
@@ -209,6 +210,27 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
           {days.map((d) => {
             const evs = d.events;
             const dtSegs = dayHourSegments(events, d.key);
+            // Column-pack the timed blocks (setup/teardown + show) so overlapping ranges sit side-by-
+            // side instead of painting on top of each other. Keyed by a stable id back to each map.
+            const rawBlocks = [
+              ...dtSegs.map((seg, si) => ({
+                id: `seg-${si}`,
+                start: Math.max(parseTime(seg.startTime, HOUR_START), HOUR_START),
+                end: Math.min(parseTime(seg.endTime, HOUR_END), HOUR_END),
+              })),
+              ...evs.map((ev, ei) => ({
+                id: `show-${ei}`,
+                start: Math.max(parseTime(ev.doorsOpen, 9), HOUR_START),
+                end: Math.min(parseTime(ev.doorsClose, 17), HOUR_END),
+              })),
+            ].filter((b) => b.end > b.start);
+            const posById = new Map(packDayBlocks(rawBlocks).map((b) => [b.id, b]));
+            const colStyle = (id: string): { left: string; width: string } => {
+              const p = posById.get(id);
+              const col = p?.col ?? 0;
+              const cols = p?.cols ?? 1;
+              return { left: `calc(${(col * 100) / cols}% + 3px)`, width: `calc(${100 / cols}% - 6px)` };
+            };
             return (
               <div
                 key={d.key}
@@ -245,8 +267,7 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                       )}
                       style={{
                         top,
-                        left: 4,
-                        right: 4,
+                        ...colStyle(`seg-${si}`),
                         height,
                         background: `${color}22`,
                         border: `1px solid ${color}`,
@@ -301,8 +322,7 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                       className="absolute cursor-pointer overflow-hidden rounded-[3px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       style={{
                         top,
-                        left: 4,
-                        right: 4,
+                        ...colStyle(`show-${ei}`),
                         height: Math.max(height, 0),
                         background: `color-mix(in oklch, ${fg} 14%, transparent)`,
                         border: `1px solid ${fg}`,

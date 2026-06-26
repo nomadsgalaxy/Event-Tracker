@@ -760,6 +760,47 @@ export function dayHourSegments(events: CalEvent[], dayY: string): {
   return out;
 }
 
+// ── Column-pack overlapping timed blocks (week view) ────────────────────────────────────────────
+// A day column stacks show / setup / teardown blocks by their hour range. When two ranges overlap
+// (a teardown that runs into the show hours) they used to paint full-width on top of each other and
+// became unreadable. This is the standard interval-graph lane packer: blocks are grouped into
+// clusters of transitive overlap, each cluster gets the fewest columns that keep its members from
+// overlapping, and every block reports its `col` + the cluster's `cols` so the caller can lay them
+// out side-by-side (left = col/cols, width = 1/cols). A block with no overlap gets cols = 1 (full
+// width, unchanged). Pure + half-open intervals ([start, end), so touching ranges DON'T overlap).
+export interface DayBlockPos {
+  col: number;
+  cols: number;
+}
+export function packDayBlocks<T extends { start: number; end: number }>(blocks: T[]): (T & DayBlockPos)[] {
+  const sorted = [...blocks].sort((a, b) => a.start - b.start || a.end - b.end);
+  const out: (T & DayBlockPos)[] = [];
+  let group: (T & { col: number })[] = [];
+  let colEnds: number[] = []; // end time of the last block placed in each column of the live cluster
+  let groupEnd = -Infinity;
+  const flush = () => {
+    const cols = colEnds.length || 1;
+    for (const g of group) out.push({ ...g, cols });
+    group = [];
+    colEnds = [];
+    groupEnd = -Infinity;
+  };
+  for (const b of sorted) {
+    if (group.length && b.start >= groupEnd) flush(); // disjoint from the running cluster → close it
+    let col = colEnds.findIndex((e) => e <= b.start);
+    if (col === -1) {
+      col = colEnds.length;
+      colEnds.push(b.end);
+    } else {
+      colEnds[col] = b.end;
+    }
+    group.push({ ...b, col });
+    groupEnd = Math.max(groupEnd, b.end);
+  }
+  flush();
+  return out;
+}
+
 /** First covering event's forecast for `dayY`, scanning events whose show window covers the day in
  *  start-date order (the caller passes events already filtered/sorted). Mirrors the Python's
  *  "first event whose show window covers this day AND has cached weather" (CalWeek/CalMonth). */
