@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Trash2, X, Save } from 'lucide-react';
+import { Loader2, Trash2, X, Save, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Form } from '@/components/ui/form';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -242,6 +242,16 @@ export function EventEditor({
               {pending ? (isNew ? 'Creating…' : 'Saving…') : isNew ? 'Create' : conflictFields ? 'Save anyway' : 'Save'}
             </Button>
           </header>
+
+          {conflictFields && conflictFields.length > 0 && (
+            <div role="alert" className="flex items-start gap-2.5 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
+              <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+              <p className="text-foreground">
+                <span className="font-semibold text-warning">Changed elsewhere</span> since you opened this —{' '}
+                {conflictFields.join(', ')}. &ldquo;Save anyway&rdquo; will overwrite {conflictFields.length === 1 ? 'it' : 'them'}.
+              </p>
+            </div>
+          )}
 
           <Tabs value={active} onValueChange={selectTab}>
             {/* w-fit by default → the 5 tab labels overflow the viewport on mobile (page jiggle +
