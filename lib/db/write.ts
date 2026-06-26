@@ -123,18 +123,37 @@ export async function saveEvent({ id, patch, actorEmail, actorRole }: SaveEventA
       set[`payload.${key}`] = patch[key];
     }
   }
-  // PII RE-MERGE (defense-in-depth — the Python authorize_event_payload write rule): if this
-  // editor may NOT see staff PII, never let their staff patch wipe or alter the stored
-  // hotel/travel. Re-merge stored PII per-staffer (matched by email, else by index) so a save can
-  // neither erase nor expose it. Today edit⊆staff.pii.view so this is belt-and-braces — but it
-  // makes a future cap-table change safe, and #64 was exactly this regression class.
-  if (set['payload.staff'] !== undefined && !can('staff.pii.view', actorRole, { isLeadOfEvent: isLead })) {
+  // PII RE-MERGE — preserve per-staffer hotel/travel by DEFAULT, for EVERY editor. A staff patch only
+  // carries hotel/travel when the submitter both may see PII *and* explicitly included the sub-object;
+  // a non-PII editor (the form drops it), a roster-only API/MCP update, and a stale or untouched form
+  // (toPatch omits an empty sub-object) all OMIT the key. An omitted key means "leave it as set", NOT
+  // "clear it" — so we merge the STORED hotel/travel back in whenever the incoming staffer doesn't
+  // carry its own key. This is what stops a routine Save (or a /lodging-then-Save round-trip, or a
+  // partial /api PATCH that only edits the roster) from silently destroying booking info that was set
+  // out-of-band. A PII editor who DID submit hotel/travel still sets/edits them verbatim. (Trade-off:
+  // lodging can't be cleared by blanking it in the main editor — remove the staffer, or write an empty
+  // value through the dedicated /lodging|/travel path, to clear. Preserve-by-default is the safe rule.)
+  if (set['payload.staff'] !== undefined) {
     const incoming = Array.isArray(set['payload.staff']) ? (set['payload.staff'] as Record<string, unknown>[]) : [];
     const storedStaff = Array.isArray(stored.payload.staff) ? stored.payload.staff : [];
+    const mayEditPii = can('staff.pii.view', actorRole, { isLeadOfEvent: isLead });
+    const has = (o: Record<string, unknown>, k: string) => Object.prototype.hasOwnProperty.call(o, k);
     set['payload.staff'] = incoming.map((s, i) => {
       const sEmail = typeof s?.email === 'string' ? s.email : '';
       const orig = (sEmail && storedStaff.find((o) => o?.email === sEmail)) || storedStaff[i];
-      return orig ? { ...s, hotel: orig.hotel, travel: orig.travel } : s;
+      if (!orig) return s; // a newly-added staffer has no stored PII to preserve
+      const out: Record<string, unknown> = { ...s };
+      // Keep the submitted hotel/travel only when this editor may set PII AND explicitly sent the key;
+      // otherwise restore the stored value (and drop a stray key rather than write `undefined`).
+      if (!(mayEditPii && has(s, 'hotel'))) {
+        if (orig.hotel != null) out.hotel = orig.hotel;
+        else delete out.hotel;
+      }
+      if (!(mayEditPii && has(s, 'travel'))) {
+        if (orig.travel != null) out.travel = orig.travel;
+        else delete out.travel;
+      }
+      return out;
     });
   }
 
