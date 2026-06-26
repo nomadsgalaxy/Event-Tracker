@@ -226,8 +226,9 @@ export function EventEditor({
 
           <Tabs value={active} onValueChange={selectTab}>
             {/* w-fit by default → the 5 tab labels overflow the viewport on mobile (page jiggle +
-                last tab clipped). Make the strip span the row and scroll horizontally instead. */}
-            <TabsList aria-label="Event editor sections" className="w-full max-w-full justify-start overflow-x-auto">
+                last tab clipped). WRAP to a second row instead of overflow-x-auto: the latter forces
+                overflow-y:auto, and the trigger's bottom-[-5px] underline then spawns a stray scrollbar. */}
+            <TabsList aria-label="Event editor sections" className="h-auto w-full max-w-full flex-wrap justify-start">
               {TABS.map((t) => (
                 <TabsTrigger key={t.id} value={t.id} className="shrink-0 flex-none">
                   {t.label}

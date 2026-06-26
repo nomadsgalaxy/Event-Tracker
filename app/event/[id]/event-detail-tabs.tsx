@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -1175,6 +1175,25 @@ export function EventDetailClient({
 }) {
   const router = useRouter();
   const [active, setActive] = useState<TabId>('overview');
+  // Persist the active tab to the SAME sessionStorage key the editor reads (eit:evTab), so toggling
+  // view <-> edit (and landing back here after a save) keeps you on the tab you were on. Read once on
+  // mount to avoid a hydration mismatch; written on every tab change.
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('eit:evTab');
+      if (saved && EV_TABS.some((t) => t.id === saved)) setActive(saved as TabId);
+    } catch {
+      /* sessionStorage unavailable — fine */
+    }
+  }, []);
+  const selectTab = useCallback((id: TabId) => {
+    setActive(id);
+    try {
+      sessionStorage.setItem('eit:evTab', id);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [matrixOpen, setMatrixOpen] = useState(false);
   const [deleting, startDelete] = useTransition();
@@ -1356,7 +1375,7 @@ export function EventDetailClient({
 
       {/* Tab strip + panels (all panels stay mounted; only the active one shows — #93 contract). */}
       <div>
-        <TabStrip active={active} onSelect={setActive} />
+        <TabStrip active={active} onSelect={selectTab} />
         <div role="tabpanel" hidden={active !== 'overview'}>
           <OverviewPanel p={payload} forecastRows={forecastRows} tempUnit={tempUnit} power={view.power} severeWeather={severeWeather} />
         </div>
