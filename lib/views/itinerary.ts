@@ -640,13 +640,6 @@ const TEAM_EXTRA_STYLES =
   ".member{margin:0 0 18px;page-break-inside:avoid;}.member .mh{font-size:15px;font-weight:700;color:#111;margin:0 0 6px;}.member .mh .rp{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:8px;background:#eef;color:#15233b;}.member .mh .rp.lead{background:#fd5000;color:#fff;}" +
   ".count{font-size:11px;color:#888;font-weight:600;margin-left:6px;}";
 
-function legLine(l: ItineraryLeg): string {
-  const route = [l.from, l.to].filter(Boolean).map(esc).join(' → ') || esc(l.mode || 'travel');
-  const id = [l.carrier, l.number].filter(Boolean).map(esc).join(' ');
-  const bits = [id, fmtDateTime(l.departAt), l.confirmation ? 'Conf ' + esc(l.confirmation) : ''].filter(Boolean).join(' · ');
-  return '<div class="trip"><div class="dir">' + esc(l.dir) + '</div><div class="route">' + route + '</div>' + (bits ? '<div class="detailrow"><span class="dv">' + bits + '</span></div>' : '') + '</div>';
-}
-
 function hotelCard(h: ItineraryHotel): string {
   const addr = h.address ? esc(h.address) : '';
   const row = [
@@ -674,7 +667,7 @@ export function renderTeamItineraryHtml(team: TeamItinerary): string {
       h += hotelCard(g.hotel);
       h += '<div class="roster">' + g.members.map((m) =>
         '<div class="rm"><span class="who' + (m.role === 'lead' ? ' lead' : '') + '">' + esc(m.name) + '</span>' +
-        [m.room ? 'Room ' + esc(m.room) : '', m.confirmation ? 'Conf ' + esc(m.confirmation) : '', (m.checkInAt || m.checkOutAt) ? esc(dateRange(m.checkInAt, m.checkOutAt)) : '']
+        [m.room ? 'Room ' + esc(m.room) : '', (m.checkInAt || m.checkOutAt) ? esc(dateRange(m.checkInAt, m.checkOutAt)) : '']
           .filter(Boolean).map((x) => '<span class="det">' + x + '</span>').join('') +
         '</div>'
       ).join('') + '</div>';
@@ -688,20 +681,14 @@ export function renderTeamItineraryHtml(team: TeamItinerary): string {
       const route = [g.from, g.to].filter(Boolean).map(esc).join(' → ');
       const id = [g.carrier, g.number].filter(Boolean).map(esc).join(' ');
       h += '<div class="trip"><div class="topline"><span class="mode">' + (id || 'Flight') + '</span><span class="dir">' + esc(fmtDateTime(g.departAt)) + '</span></div>' + (route ? '<div class="route">' + route + '</div>' : '') +
-        '<div class="roster">' + g.members.map((m) => '<div class="rm"><span class="who">' + esc(m.name) + '</span>' + (m.confirmation ? '<span class="det">Conf ' + esc(m.confirmation) + '</span>' : '') + '</div>').join('') + '</div></div>';
+        '<div class="roster">' + g.members.map((m) => '<div class="rm"><span class="who">' + esc(m.name) + '</span></div>').join('') + '</div></div>';
     }
     h += '</div>';
   }
 
-  h += '<div class="section"><h2>Travelers<span class="count">' + team.members.length + '</span></h2>';
-  for (const m of team.members) {
-    h += '<div class="member"><div class="mh">' + esc(m.name) + '<span class="rp' + (m.role === 'lead' ? ' lead' : '') + '">' + m.role + '</span></div>';
-    if (!m.legs.length && !m.hotel) h += '<div class="no-travel">No travel or lodging on file.</div>';
-    if (m.legs.length) h += '<div class="cards">' + m.legs.map(legLine).join('') + '</div>';
-    if (m.hotel) h += hotelCard(m.hotel);
-    h += '</div>';
+  if (!team.sharedHotels.length && !team.sharedTrips.length) {
+    h += '<div class="empty">Nothing shared yet — no two travelers on this event are booked at the same hotel or on the same flight. Add matching hotels or flights to the roster, or use each person’s own “Print my itinerary”.</div>';
   }
-  h += '</div>';
 
   h += '<div class="footer"><span>' + esc(e.name) + ' — team itinerary</span><span>' + (capStr ? 'Printed ' + esc(capStr) : '') + '</span></div>';
   h += '<script>window.addEventListener("load",function(){setTimeout(function(){try{window.print();}catch(e){}},300);});</script></body></html>';
