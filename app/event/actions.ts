@@ -3,8 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireRole, requireUser } from '@/lib/auth/auth';
-import { getUserDisplayName } from '@/lib/db/data';
+import { can } from '@/lib/auth/rbac';
+import { getUserDisplayName, getEvent } from '@/lib/db/data';
+import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { saveEvent, createEvent, softDeleteEvent, markEventOnsite, WriteForbiddenError, type EventPatch } from '@/lib/db/write';
+import { toFormValues, toPatch } from './[id]/edit/schema';
 import { parseIcs, icsLocationToVenue } from '@/lib/integrations/ics';
 import type { EventState } from '@/lib/types/types';
 
@@ -127,9 +130,82 @@ export interface SaveEventState {
   ok?: boolean;
   error?: string;
   savedAt?: number;
+  /** Set when the save was refused because someone else changed the same field(s) since the form
+   *  loaded. The client lists the fields and offers "Save anyway" (re-submit with override). */
+  conflict?: boolean;
+  fields?: string[];
 }
 
-export async function saveEventAction(id: string, rawJson: string): Promise<SaveEventState> {
+// Stable, key-order-independent stringify so two structurally-equal values compare equal regardless of
+// how Mongo/JSON happened to order their keys.
+function canon(v: unknown): string {
+  const sort = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(sort);
+    if (x && typeof x === 'object') {
+      const o: Record<string, unknown> = {};
+      for (const k of Object.keys(x as Record<string, unknown>).sort()) o[k] = sort((x as Record<string, unknown>)[k]);
+      return o;
+    }
+    return x;
+  };
+  return JSON.stringify(sort(v));
+}
+
+/**
+ * Field-level 3-way merge for the event editor. `incoming` is the patch the user is submitting,
+ * `baseline` is the server state the form loaded against, `current` is the live stored state — all
+ * three in the SAME normalized toPatch shape so fields compare cleanly.
+ *
+ *  • A field the user DIDN'T change is omitted from the result, so a concurrent out-of-band edit
+ *    (a /lodging write, a PATCH, the flight-refresh sweep) is preserved instead of clobbered.
+ *  • A field the user changed that nobody else touched is applied.
+ *  • A field the user changed that someone ELSE also changed since load is a conflict — collected and
+ *    (unless `override`) refused, so the user is warned before overwriting another edit.
+ *
+ * `staff` is exempt from the hard conflict: its per-staffer hotel/travel are already preserved by
+ * saveEvent's preserve-by-default merge, and flagging every roster touch would false-positive on the
+ * background flight-refresh (which rewrites staff travel legs).
+ */
+function threeWayMerge(
+  incoming: Record<string, unknown>,
+  baseline: Record<string, unknown>,
+  current: Record<string, unknown>,
+  override: boolean
+): { patch: Record<string, unknown>; conflicts: string[] } {
+  const patch: Record<string, unknown> = {};
+  const conflicts: string[] = [];
+  for (const key of Object.keys(incoming)) {
+    const base = canon(baseline[key]);
+    if (canon(incoming[key]) === base) continue; // user didn't change this field → preserve stored
+    if (key !== 'staff' && !override && canon(current[key]) !== base) {
+      conflicts.push(key);
+      continue;
+    }
+    patch[key] = incoming[key];
+  }
+  return { patch, conflicts };
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  setup: 'setup window',
+  teardown: 'teardown window',
+  startDate: 'start date',
+  endDate: 'end date',
+  doorsOpen: 'doors open',
+  doorsClose: 'doors close',
+  powerDrop: 'power drop',
+  powerNotes: 'power notes',
+  powerReceptacles: 'power receptacles',
+  sideEvents: 'side events',
+  primaryTagId: 'primary tag',
+};
+
+export async function saveEventAction(
+  id: string,
+  rawJson: string,
+  baselineJson?: string,
+  override = false
+): Promise<SaveEventState> {
   // Coarse gate: must be a signed-in writer. Throws/redirects for signed-out;
   // throws Forbidden for read-only. The per-event editor right is checked below.
   let user;
@@ -156,8 +232,59 @@ export async function saveEventAction(id: string, rawJson: string): Promise<Save
   const patch: EventPatch = { ...result.data };
   if (patch.name !== undefined && patch.name.trim() === '') patch.name = 'Untitled event';
 
+  // 3-WAY MERGE (concurrency guard) — only when the editor sent the baseline it loaded against. We
+  // re-read the live doc, normalize it through the same toPatch pipeline the form used, and keep ONLY
+  // the fields the user actually changed; a field someone else changed in the meantime is preserved
+  // (untouched by the user) or refused (also changed by the user). Without a baseline (API/MCP callers
+  // post partial patches directly) this is skipped and saveEvent's own preserve-by-default applies.
+  let finalPatch: Record<string, unknown> = patch;
+  if (baselineJson) {
+    let baseline: unknown = null;
+    try {
+      baseline = JSON.parse(baselineJson);
+    } catch {
+      baseline = null;
+    }
+    if (baseline && typeof baseline === 'object') {
+      const doc = await getEvent(id);
+      if (doc) {
+        const isLead = viewerLeadsEvent(doc.payload, user.email);
+        const piiEditable = can('staff.pii.view', user.role, { isLeadOfEvent: isLead });
+        const current = toPatch(toFormValues(doc.payload, piiEditable)) as Record<string, unknown>;
+        const { patch: merged, conflicts } = threeWayMerge(
+          patch as Record<string, unknown>,
+          baseline as Record<string, unknown>,
+          current,
+          override
+        );
+        if (conflicts.length) {
+          return {
+            ok: false,
+            conflict: true,
+            fields: conflicts.map((k) => FIELD_LABELS[k] || k),
+            error: 'This event changed since you opened it.',
+          };
+        }
+        // Pallet FK integrity: if cases changed but pallets weren't part of the merge, carry the live
+        // pallets so saveEvent's prune still drops any case→pallet ref the new case set orphaned.
+        if ('cases' in merged && !('pallets' in merged) && current.pallets !== undefined) {
+          merged.pallets = current.pallets;
+        }
+        finalPatch = merged;
+      }
+    }
+  }
+
+  // Nothing left to write (every changed field was preserved-as-stored) → report success without a
+  // pointless no-op write.
+  if (Object.keys(finalPatch).length === 0) {
+    revalidatePath(`/event/${id}`);
+    revalidatePath(`/event/${id}/edit`);
+    return { ok: true, savedAt: Date.now() };
+  }
+
   try {
-    await saveEvent({ id, patch, actorEmail: user.email, actorRole: user.role });
+    await saveEvent({ id, patch: finalPatch as EventPatch, actorEmail: user.email, actorRole: user.role });
   } catch (e) {
     if (e instanceof WriteForbiddenError) return { ok: false, error: e.message };
     return { ok: false, error: e instanceof Error ? e.message : 'Save failed.' };

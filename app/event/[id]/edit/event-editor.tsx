@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -144,6 +144,16 @@ export function EventEditor({
   // — see use-unsaved-guard. The editor's own Save/Cancel below clear `dirty` or route through it.
   const guard = useUnsavedGuard(dirty);
 
+  // Concurrency: the editor posts the baseline it loaded against (savedSig) so the server can field-
+  // merge and refuse a save that would overwrite someone else's out-of-band edit. On a conflict we
+  // surface the field names and flip Save to "Save anyway" — the next click arms `overrideRef`, which
+  // re-submits with override so the user's version wins. Cleared on a successful save.
+  const [conflictFields, setConflictFields] = useState<string[] | null>(null);
+  const overrideRef = useRef(false);
+  const armOverride = () => {
+    if (conflictFields) overrideRef.current = true;
+  };
+
   const onSubmit = (values: EventFormValues) => {
     const json = JSON.stringify(toPatch(values));
     startTransition(async () => {
@@ -159,14 +169,23 @@ export function EventEditor({
         }
         return;
       }
-      const res = await saveEventAction(id, json);
+      const override = overrideRef.current;
+      overrideRef.current = false;
+      const res = await saveEventAction(id, json, savedSig, override);
       if (res.ok) {
         // Adopt the saved patch as the new baseline → dirty clears, the guard relaxes. (form.reset keeps
         // RHF's own validation/submit state coherent; the signature is what drives `dirty`.)
         setSavedSig(json);
+        setConflictFields(null);
         form.reset(values);
         toast.success('Event saved.');
         router.refresh();
+      } else if (res.conflict) {
+        setConflictFields(res.fields || []);
+        const list = (res.fields || []).join(', ');
+        toast.error(
+          `This event changed since you opened it${list ? ` (${list})` : ''}. Review, then click “Save anyway” to overwrite.`
+        );
       } else {
         toast.error(res.error || 'Save failed.');
       }
@@ -218,9 +237,9 @@ export function EventEditor({
               <X aria-hidden />
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending} onClick={armOverride}>
               {pending ? <Loader2 aria-hidden className="animate-spin" /> : <Save aria-hidden />}
-              {pending ? (isNew ? 'Creating…' : 'Saving…') : isNew ? 'Create' : 'Save'}
+              {pending ? (isNew ? 'Creating…' : 'Saving…') : isNew ? 'Create' : conflictFields ? 'Save anyway' : 'Save'}
             </Button>
           </header>
 
@@ -275,9 +294,9 @@ export function EventEditor({
                 <X aria-hidden />
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" disabled={pending} onClick={armOverride}>
                 {pending ? <Loader2 aria-hidden className="animate-spin" /> : <Save aria-hidden />}
-                {pending ? (isNew ? 'Creating…' : 'Saving…') : isNew ? 'Create event' : 'Save changes'}
+                {pending ? (isNew ? 'Creating…' : 'Saving…') : isNew ? 'Create event' : conflictFields ? 'Save anyway' : 'Save changes'}
               </Button>
             </div>
           </div>
