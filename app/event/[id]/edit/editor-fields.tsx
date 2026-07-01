@@ -1504,7 +1504,13 @@ function TravelEditor({ base, index }: { base: string; index: number }) {
   const { control, getValues, setValue } = useFormContext<EventFormValues>();
   const travel = useWatch({ control, name: t as Name }) as Record<string, unknown> | undefined;
   const mode = (travel?.mode as string) || '';
-  const hasAny = !!(mode || travel?.outbound || travel?.return);
+  const hasAny = !!(
+    mode ||
+    travel?.outbound ||
+    travel?.return ||
+    (Array.isArray(travel?.outboundConnections) && travel.outboundConnections.length) ||
+    (Array.isArray(travel?.returnConnections) && travel.returnConnections.length)
+  );
   const [expanded, setExpanded] = useState(hasAny);
   const radioName = useId();
 
@@ -1586,11 +1592,110 @@ function TravelEditor({ base, index }: { base: string; index: number }) {
       </div>
       {mode && (
         <>
-          <TravelLeg base={`${t}.outbound`} label="Outbound" mode={mode} legKey="outbound" travelPath={t} getValues={getValues} setValue={setValue} />
-          <TravelLeg base={`${t}.return`} label="Return" mode={mode} legKey="return" travelPath={t} getValues={getValues} setValue={setValue} />
+          <JourneyLegs t={t} dir="outbound" label="Outbound" mode={mode} travel={travel} getValues={getValues} setValue={setValue} />
+          <JourneyLegs t={t} dir="return" label="Return" mode={mode} travel={travel} getValues={getValues} setValue={setValue} />
         </>
       )}
     </fieldset>
+  );
+}
+
+// ── Multi-leg journey (a direction's primary leg + its connection legs + layovers) ──────────────
+// The primary leg stays at travel.outbound|return (single-leg readers untouched); connections live in
+// travel.outboundConnections|returnConnections in travel order. Between consecutive legs a computed
+// layover chip shows where/how long — amber when tight (<45 min), red when the times overlap.
+
+/** Naive 'YYYY-MM-DDTHH:MM' → ms for WALL-CLOCK ARITHMETIC (Date.UTC on the parsed fields — never
+ *  the browser's local Date, whose DST transitions would skew a layover spanning them by ±1h and
+ *  falsely flag/miss a tight connection). Only ever subtracted, never displayed. */
+function legMs(s: unknown): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(s ?? ''));
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+}
+
+function LayoverChip({ prev, next }: { prev: Record<string, unknown> | undefined; next: Record<string, unknown> | undefined }) {
+  const a = legMs(prev?.arriveAt);
+  const b = legMs(next?.departAt);
+  if (a === null || b === null) return null;
+  const min = Math.round((b - a) / 60000);
+  const where = String(prev?.arriveLocation ?? '').trim();
+  const dur = min < 0 ? '' : min >= 60 ? `${Math.floor(min / 60)}h ${min % 60 ? `${min % 60}m` : ''}`.trim() : `${min}m`;
+  const tone = min < 0 ? 'var(--destructive)' : min < 45 ? 'var(--warning)' : 'var(--muted-foreground)';
+  return (
+    <div className="flex items-center gap-2 pl-3 text-[11px]" style={{ color: tone }} aria-live="polite">
+      <span aria-hidden>↳</span>
+      {min < 0
+        ? `Connection departs before the previous leg lands${where ? ` in ${where}` : ''} — check the times`
+        : `Layover${where ? ` in ${where}` : ''} · ${dur}${min < 45 ? ' — tight connection' : ''}`}
+    </div>
+  );
+}
+
+function JourneyLegs({
+  t,
+  dir,
+  label,
+  mode,
+  travel,
+  getValues,
+  setValue,
+}: {
+  t: string;
+  dir: 'outbound' | 'return';
+  label: string;
+  mode: string;
+  travel: Record<string, unknown> | undefined;
+  getValues: ReturnType<typeof useFormContext<EventFormValues>>['getValues'];
+  setValue: ReturnType<typeof useFormContext<EventFormValues>>['setValue'];
+}) {
+  const connsPath = `${t}.${dir}Connections`;
+  const conns = (Array.isArray(travel?.[`${dir}Connections`]) ? (travel![`${dir}Connections`] as Record<string, unknown>[]) : []);
+  const primary = travel?.[dir] as Record<string, unknown> | undefined;
+
+  // STABLE per-leg keys (not the array index): on a middle removal the RHF values shift down one
+  // slot, and an index key would keep the OLD component instance (with its note/busy/lastAutoNum
+  // local state) rendering the SHIFTED-IN leg's data — wrong lookup captions under another leg's PII
+  // and a silently-suppressed auto-lookup. The uid list mirrors the conns array: appended on growth,
+  // spliced in removeConn, trimmed on external shrink (a Copy-from replace).
+  const uidSeq = useRef(0);
+  const uidsRef = useRef<string[]>([]);
+  while (uidsRef.current.length < conns.length) uidsRef.current.push(`leg-${uidSeq.current++}`);
+  if (uidsRef.current.length > conns.length) uidsRef.current.length = conns.length;
+
+  const addConn = () => {
+    const cur = (getValues(connsPath as Name) as unknown[]) || [];
+    setValue(connsPath as Name, [...(Array.isArray(cur) ? cur : []), {}] as never, { shouldDirty: true });
+  };
+  const removeConn = (i: number) => {
+    uidsRef.current.splice(i, 1); // keep uid↔leg pairing across the shift
+    const cur = (getValues(connsPath as Name) as unknown[]) || [];
+    setValue(connsPath as Name, (Array.isArray(cur) ? cur : []).filter((_, x) => x !== i) as never, { shouldDirty: true });
+  };
+
+  return (
+    <div className="grid gap-2">
+      <TravelLeg base={`${t}.${dir}`} label={label} mode={mode} getValues={getValues} setValue={setValue} />
+      {conns.map((_, i) => (
+        <React.Fragment key={uidsRef.current[i] ?? `${dir}-conn-${i}`}>
+          <LayoverChip prev={i === 0 ? primary : conns[i - 1]} next={conns[i]} />
+          <TravelLeg
+            base={`${connsPath}.${i}`}
+            label={`${label} · leg ${i + 2}`}
+            mode={mode}
+            getValues={getValues}
+            setValue={setValue}
+            onRemove={() => removeConn(i)}
+          />
+        </React.Fragment>
+      ))}
+      {mode !== 'drive' && (
+        <Button type="button" variant="ghost" size="xs" className="w-fit text-muted-foreground" onClick={addConn}>
+          <Plus aria-hidden />
+          Add connection
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -1601,18 +1706,17 @@ function TravelLeg({
   base,
   label,
   mode,
-  legKey,
-  travelPath,
   getValues,
   setValue,
+  onRemove,
 }: {
   base: string;
   label: string;
   mode: string;
-  legKey: 'outbound' | 'return';
-  travelPath: string;
   getValues: ReturnType<typeof useFormContext<EventFormValues>>['getValues'];
   setValue: ReturnType<typeof useFormContext<EventFormValues>>['setValue'];
+  /** Present on CONNECTION legs — renders the ✕ that removes this leg from the journey. */
+  onRemove?: () => void;
 }) {
   const { control } = useFormContext<EventFormValues>();
   const { flightLookupAvailable } = useEditorContext();
@@ -1633,8 +1737,15 @@ function TravelLeg({
   const locLabel = (isFlight ? 'airport' : mode === 'train' ? 'station' : 'location');
 
   const applyLeg = useCallback(
-    (looked: FlightLeg, auto: boolean) => {
+    (looked: FlightLeg, auto: boolean, forNum: string) => {
+      // PIN the async write to the leg the lookup was launched FOR: `base` is a positional path, and
+      // between launch and resolve the user may have removed a connection (shifting another leg into
+      // this index) or removed this leg entirely. If the leg now at `base` doesn't still carry the
+      // looked-up flight number, drop the result — never fill another flight's data into it, never
+      // resurrect a removed row. (Same number-pin the flight-refresh write filter uses server-side.)
+      const norm = (v: unknown) => String(v ?? '').trim().toUpperCase().replace(/\s+/g, '');
       const curLeg = (getValues(base as Name) as Record<string, unknown>) || {};
+      if (norm(curLeg.number) !== norm(forNum)) return;
       let next: Record<string, unknown>;
       if (auto) {
         // Fill only blanks — preserve everything the user already entered.
@@ -1646,9 +1757,9 @@ function TravelLeg({
         // Manual: replace with looked-up values, keep the user's confirmation #.
         next = { ...looked, confirmation: (curLeg.confirmation as string) || looked.confirmation || '' };
       }
-      setValue(`${travelPath}.${legKey}` as Name, next as never, { shouldDirty: true });
+      setValue(base as Name, next as never, { shouldDirty: true });
     },
-    [base, legKey, travelPath, getValues, setValue]
+    [base, getValues, setValue]
   );
 
   const doLookup = useCallback(
@@ -1671,7 +1782,7 @@ function TravelLeg({
           if (!auto) setNote('No matching flight for that number + date.');
           return;
         }
-        applyLeg(r.leg, auto);
+        applyLeg(r.leg, auto, num);
         setNote(auto ? `Auto-filled ${num.toUpperCase()}.` : `Filled ${num.toUpperCase()} from flight data.`);
       } catch (e) {
         if (!auto) setNote('Flight lookup failed: ' + (e instanceof Error ? e.message : String(e)));
@@ -1702,19 +1813,32 @@ function TravelLeg({
     <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-3">
       <div className="flex items-center justify-between gap-2">
         <GroupLabel>{label}</GroupLabel>
-        {isFlight && flightLookupAvailable && (
-          <span className="inline-flex items-center gap-2">
-            {busy && <span className="text-[10px] text-muted-foreground">looking up…</span>}
-            <Button type="button" variant="secondary" size="xs" disabled={busy} onClick={() => doLookup(false)}>
-              Look up flight
-            </Button>
-          </span>
-        )}
-        {isFlight && !flightLookupAvailable && (
-          <span className="text-[10px] text-muted-foreground" title="No flight-lookup key configured">
-            Set a FlightAware AeroAPI key to auto-fill flights
-          </span>
-        )}
+        <span className="inline-flex items-center gap-2">
+          {isFlight && flightLookupAvailable && (
+            <>
+              {busy && <span className="text-[10px] text-muted-foreground">looking up…</span>}
+              <Button type="button" variant="secondary" size="xs" disabled={busy} onClick={() => doLookup(false)}>
+                Look up flight
+              </Button>
+            </>
+          )}
+          {isFlight && !flightLookupAvailable && (
+            <span className="text-[10px] text-muted-foreground" title="No flight-lookup key configured">
+              Set a FlightAware AeroAPI key to auto-fill flights
+            </span>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label={`Remove ${label}`}
+              title="Remove this connection"
+              className="rounded p-1 text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <X size={14} aria-hidden />
+            </button>
+          )}
+        </span>
       </div>
       {!isDrive && (
         <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr]">

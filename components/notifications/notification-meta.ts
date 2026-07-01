@@ -95,7 +95,11 @@ export function renderNotification(n: NotificationItem, viewerEmail: string): Re
 
   if (n.type === 'flight_delay') {
     const flight = (d.flightNumber as string) || 'A flight';
-    const leg = d.leg === 'return' ? 'return' : 'outbound';
+    // d.leg is the dotted leg ref ('outbound' | 'return' | 'outboundConnections.0' | …); a connection
+    // ref reads as "outbound connection" so the copy stays human.
+    const legRaw = String(d.leg ?? '');
+    const legDir = legRaw.startsWith('return') ? 'return' : 'outbound';
+    const leg = legRaw.includes('Connections') ? `${legDir} connection` : legDir;
     const iAmSubject = (subject || '').toLowerCase() === me;
     const whose = iAmSubject ? 'Your' : `${subject}'s`;
     const delayMin = Number(d.delayMin || 0);

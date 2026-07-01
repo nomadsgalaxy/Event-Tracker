@@ -59,7 +59,8 @@ const lcs = (v: unknown): string => String(v ?? '').trim().toLowerCase();
 export async function flightProgressAction(
   eventId: string,
   staffEmail: string,
-  legKey: 'outbound' | 'return'
+  // 'outbound' | 'return' | a connection ref like 'outboundConnections.0' (multi-leg journeys).
+  legKey: string
 ): Promise<FlightProgressState> {
   let user;
   try {
@@ -69,7 +70,13 @@ export async function flightProgressAction(
   }
   const id = String(eventId ?? '').trim();
   const email = lcs(staffEmail);
-  if (!id || !email || (legKey !== 'outbound' && legKey !== 'return')) return { ok: false, error: 'Bad request.' };
+  const legRef = /^(outbound|return)$/.exec(String(legKey))
+    ? { dir: String(legKey) as 'outbound' | 'return', conn: -1 }
+    : (() => {
+        const m = /^(outbound|return)Connections\.(\d{1,2})$/.exec(String(legKey));
+        return m ? { dir: m[1] as 'outbound' | 'return', conn: Number(m[2]) } : null;
+      })();
+  if (!id || !email || !legRef) return { ok: false, error: 'Bad request.' };
 
   const db = await getDb();
   const ev = await db.collection<EventDoc>('events').findOne({ _id: id, ...NOT_DELETED });
@@ -87,7 +94,12 @@ export async function flightProgressAction(
   }
 
   const travel = staffer.travel;
-  const leg: TravelLeg | undefined = travel?.mode === 'flight' ? travel?.[legKey] : undefined;
+  const leg: TravelLeg | undefined =
+    travel?.mode === 'flight'
+      ? legRef.conn < 0
+        ? travel?.[legRef.dir]
+        : (Array.isArray(travel?.[`${legRef.dir}Connections`]) ? (travel[`${legRef.dir}Connections`] as TravelLeg[]) : [])[legRef.conn]
+      : undefined;
   if (!leg || !leg.number) return { ok: false, error: 'No flight on this leg.' };
 
   if (!(await openskyConfigured())) return { ok: true, unavailable: true };

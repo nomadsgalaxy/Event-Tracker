@@ -39,8 +39,10 @@ const MAX_CALLS = 20; // per-sweep backstop
 const DAILY_CALL_CAP = 40; // per-UTC-day backstop (~½ the monthly credit even if hit every single day)
 
 const TERMINAL_EVENT_STATES = new Set(['closed', 'complete', 'cancelled', 'canceled']);
-const LEG_KEYS = ['outbound', 'return'] as const;
-type LegKey = (typeof LEG_KEYS)[number];
+// A leg REF is a dotted path under staffer.travel: the primary legs plus any connection legs (the
+// multi-leg journeys — 'outboundConnections.0' etc). Used verbatim in the $set write path + the alert
+// dedup key, so every leg of a journey tracks independently.
+type LegKey = string;
 
 const lc = (v: unknown): string => String(v ?? '').trim().toLowerCase();
 
@@ -113,8 +115,19 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
       if (!email) return; // need an email to filter the write + notify
       const t = s?.travel;
       if (!t || t.mode !== 'flight') return;
-      for (const legKey of LEG_KEYS) {
-        const leg = t[legKey];
+      // Every leg of the journey: the primary outbound/return plus any connection legs, each with its
+      // own ref (= the dotted write path under travel.*), so a delayed CONNECTION alerts too.
+      const legRefs: { legKey: LegKey; leg: TravelLeg | undefined }[] = [
+        { legKey: 'outbound', leg: t.outbound },
+        ...(Array.isArray(t.outboundConnections)
+          ? t.outboundConnections.map((lg, i) => ({ legKey: `outboundConnections.${i}`, leg: lg }))
+          : []),
+        { legKey: 'return', leg: t.return },
+        ...(Array.isArray(t.returnConnections)
+          ? t.returnConnections.map((lg, i) => ({ legKey: `returnConnections.${i}`, leg: lg }))
+          : []),
+      ];
+      for (const { legKey, leg } of legRefs) {
         if (!leg) continue;
         const number = String(leg.number ?? '').trim();
         const departAt = String(leg.departAt ?? '').trim();
@@ -223,12 +236,16 @@ export async function runFlightRefresh(opts: { now?: number; maxCalls?: number }
       }
     }
 
-    // Write by INDEX, filtered on the email AT that index: targets exactly this staffer's leg (no $[s]
-    // fan-out across duplicate emails) and no-ops cleanly if a concurrent roster edit shifted the array.
+    // Write by INDEX, filtered on the email AT that index (targets exactly this staffer's leg, no $[s]
+    // fan-out across duplicate emails) AND on the flight number still present AT the leg path — so a
+    // concurrent edit that shifted the roster, changed the flight, or REMOVED a connection leg makes
+    // the write a clean no-op instead of stamping stale status (or, for a deleted connections array,
+    // materializing an object where an array belongs via the dotted index path).
     const filter = {
       _id: d.eventId,
       ...NOT_DELETED,
       [`payload.staff.${d.staffIdx}.email`]: d.staffEmailRaw,
+      [`payload.staff.${d.staffIdx}.travel.${d.legKey}.number`]: d.leg.number,
     } as unknown as Filter<EventDoc>;
     try {
       const res = await eventsCol.updateOne(filter, { $set: set });

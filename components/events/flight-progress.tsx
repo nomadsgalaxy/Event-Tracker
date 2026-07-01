@@ -35,7 +35,8 @@ export function FlightProgress({
 }: {
   eventId: string;
   staffEmail: string;
-  legKey: 'outbound' | 'return';
+  /** 'outbound' | 'return' | a connection ref like 'outboundConnections.0' (multi-leg journeys). */
+  legKey: string;
   leg: TravelLeg;
 }) {
   const [state, setState] = useState<FlightProgressState | null>(null);

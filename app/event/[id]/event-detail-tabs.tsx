@@ -552,17 +552,33 @@ function HotelBlock({ hotel }: { hotel: HotelInfo }) {
 }
 
 function TravelBlock({ travel, eventId, staffEmail }: { travel: TravelInfo; eventId: string; staffEmail: string }) {
-  if (!travel || !(travel.outbound || travel.return)) return null;
+  const outConns = Array.isArray(travel?.outboundConnections) ? travel.outboundConnections : [];
+  const retConns = Array.isArray(travel?.returnConnections) ? travel.returnConnections : [];
+  if (!travel || !(travel.outbound || travel.return || outConns.length || retConns.length)) return null;
   const isFlight = travel.mode === 'flight';
   const modeLabel = isFlight ? 'Flight' : travel.mode === 'train' ? 'Train' : travel.mode === 'drive' ? 'Drive' : 'Travel';
   const out = legSummary(travel.outbound);
   const ret = legSummary(travel.return);
   // Live in-air progress (OpenSky) — only meaningful for flight legs with a number; the widget
-  // self-gates to the enroute window and renders nothing otherwise.
-  const progress = (legKey: 'outbound' | 'return', leg: TravelLeg | undefined) =>
+  // self-gates to the enroute window and renders nothing otherwise. legKey is the dotted ref under
+  // travel.* ('outbound' | 'outboundConnections.0' | …) — the progress action resolves it.
+  const progress = (legKey: string, leg: TravelLeg | undefined) =>
     isFlight && leg?.number && staffEmail ? (
       <FlightProgress eventId={eventId} staffEmail={staffEmail} legKey={legKey} leg={leg} />
     ) : null;
+  // A connection line: "→ leg 2: <summary>" under its direction, in journey order.
+  const connLines = (dir: 'outbound' | 'return', conns: TravelLeg[]) =>
+    conns.map((lg, i) => {
+      const sum = legSummary(lg);
+      if (!sum) return null;
+      return (
+        <div key={`${dir}-conn-${i}`} className="pl-[34px]">
+          <span className="text-muted-foreground/80">→ leg {i + 2}: </span>
+          {sum}
+          {progress(`${dir}Connections.${i}`, lg)}
+        </div>
+      );
+    });
   return (
     <div className="flex flex-col gap-1 pl-9 text-xs text-muted-foreground">
       <div className="flex items-start gap-2">
@@ -579,6 +595,7 @@ function TravelBlock({ travel, eventId, staffEmail }: { travel: TravelInfo; even
           {progress('outbound', travel.outbound)}
         </div>
       )}
+      {connLines('outbound', outConns)}
       {ret && (
         <div className="pl-[22px]">
           <span className="text-muted-foreground/80">Return: </span>
@@ -586,6 +603,7 @@ function TravelBlock({ travel, eventId, staffEmail }: { travel: TravelInfo; even
           {progress('return', travel.return)}
         </div>
       )}
+      {connLines('return', retConns)}
     </div>
   );
 }

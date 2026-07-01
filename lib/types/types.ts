@@ -72,6 +72,12 @@ export interface TravelInfo {
   mode?: 'flight' | 'train' | 'drive' | string;
   outbound?: TravelLeg;
   return?: TravelLeg;
+  // MULTI-LEG journeys: connection legs AFTER the primary outbound/return leg, in travel order —
+  // e.g. outbound SFO→ORD (outbound) then ORD→ATW (outboundConnections[0]). The primary leg stays in
+  // outbound/return so every single-leg reader keeps working; readers that understand connections
+  // render the full chain ([outbound, ...outboundConnections]) with layovers between legs.
+  outboundConnections?: TravelLeg[];
+  returnConnections?: TravelLeg[];
   [k: string]: unknown;
 }
 

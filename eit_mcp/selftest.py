@@ -39,6 +39,14 @@ def fake_request(method, path, *, params=None, json_body=None):
     CALLS.append(
         {"method": method, "path": path, "params": params, "json_body": json_body}
     )
+    # set_flight's connection mode reads the event before writing (fail-closed on a bad read), so a
+    # GET of a single event returns a minimal roster with the test staffer.
+    if method == "GET" and path.startswith("/api/v1/events/") and path.count("/") == 4:
+        return {
+            "ok": True,
+            "_echo_path": path,
+            "event": {"staff": [{"email": "me@x.test", "travel": {}}]},
+        }
     return {"ok": True, "_echo_path": path}
 
 
@@ -218,6 +226,24 @@ def run_tool_tests():
     expect("staffEmail" not in c["json_body"], f"set_flight omits empty staffEmail -> {c}")
     expect("return" in c["json_body"] and "outbound" not in c["json_body"],
            f"set_flight return leg -> {c['json_body']}")
+
+    # set_flight connection=1 (multi-leg): reads the event first, then posts the connections array
+    # (the fake event has no staff -> the array pads fresh; the leg lands at index 0).
+    before = len(CALLS)
+    server.set_flight("evt-1", "UA100", depart="ORD", arrive="ATW",
+                      direction="outbound", connection=1, staff_email="me@x.test")
+    expect(len(CALLS) == before + 2, f"set_flight connection read+write -> {len(CALLS) - before} calls")
+    expect(CALLS[-2]["method"] == "GET" and CALLS[-2]["path"] == "/api/v1/events/evt-1",
+           f"set_flight connection reads the event -> {CALLS[-2]}")
+    c = last()
+    expect(
+        c["json_body"] == {
+            "mode": "flight",
+            "staffEmail": "me@x.test",
+            "outboundConnections": [{"number": "UA100", "departLocation": "ORD", "arriveLocation": "ATW"}],
+        },
+        f"set_flight connection body -> {c['json_body']}",
+    )
 
     # set_lodging
     server.set_lodging("evt-1", "Hyatt", confirmation="ABC", check_in="2026-09-01")

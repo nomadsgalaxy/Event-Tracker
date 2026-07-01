@@ -357,5 +357,14 @@ function hasAnyValue(obj: Record<string, unknown>): boolean {
 }
 
 function travelHasValue(t: Record<string, unknown>): boolean {
-  return !!(t.mode || (t.outbound && hasAnyValue(t.outbound as Record<string, unknown>)) || (t.return && hasAnyValue(t.return as Record<string, unknown>)));
+  const conns = [
+    ...(Array.isArray(t.outboundConnections) ? t.outboundConnections : []),
+    ...(Array.isArray(t.returnConnections) ? t.returnConnections : []),
+  ];
+  return !!(
+    t.mode ||
+    (t.outbound && hasAnyValue(t.outbound as Record<string, unknown>)) ||
+    (t.return && hasAnyValue(t.return as Record<string, unknown>)) ||
+    conns.some((c) => c && hasAnyValue(c as Record<string, unknown>))
+  );
 }

@@ -521,13 +521,22 @@ def set_flight(
     arrive: str = "",
     direction: str = "outbound",
     staff_email: str = "",
+    connection: int = 0,
 ) -> dict[str, Any]:
     """Record a flight for an event's travel itinerary (WRITE).
 
     This is the "my flight to X is AA1234" tool. It maps to the travel endpoint
-    with mode='flight'; ``direction`` selects which leg (outbound or return) the
-    flight is stored under. If staff_email is omitted, the API defaults to the
+    with mode='flight'; ``direction`` selects which journey (outbound or return)
+    the flight belongs to. If staff_email is omitted, the API defaults to the
     token owner. Needs a write-scope token and a role above read-only.
+
+    Multi-leg journeys (layovers): ``connection`` places the flight within the
+    direction's chain — 0 (default) is the FIRST leg; 1 is the first connection
+    (leg 2 of the journey), and so on. A connection write reads the event first
+    and preserves the other connection legs (the raw endpoint replaces the
+    connections array wholesale). Example SFO→ORD→ATW outbound:
+    set_flight(..., direction='outbound') for SFO→ORD, then
+    set_flight(..., direction='outbound', connection=1) for ORD→ATW.
 
     Args:
         event_id: The event id.
@@ -535,8 +544,9 @@ def set_flight(
         carrier: Airline, e.g. 'American'.
         depart: Departure datetime/airport (ISO datetime or location string).
         arrive: Arrival datetime/airport.
-        direction: 'outbound' (default) or 'return' — which leg this flight is.
+        direction: 'outbound' (default) or 'return' — which journey this leg is on.
         staff_email: Whose itinerary; defaults to the token owner if empty.
+        connection: 0 = the primary leg (default); N>=1 = the Nth connection leg.
 
     Returns {travel}. Maps to POST /api/v1/events/<id>/travel with mode='flight'.
     """
@@ -554,9 +564,65 @@ def set_flight(
             "arriveLocation": arrive,
         }
     )
-    body: dict[str, Any] = {"mode": "flight", leg: flight}
+    body: dict[str, Any] = {"mode": "flight"}
     if (staff_email or "").strip():
         body["staffEmail"] = staff_email
+    if int(connection or 0) <= 0:
+        body[leg] = flight
+        return _request("POST", f"/api/v1/events/{_seg(event_id)}/travel", json_body=body)
+
+    # Connection leg: read-modify-write the direction's connections array so the legs we are NOT
+    # touching survive (the travel endpoint's shallow merge replaces a sent array wholesale). NOTE
+    # this is a client-side RMW — a concurrent edit between the read and the write loses (last write
+    # wins on the whole connections array).
+    idx = int(connection)
+    who = (staff_email or "").strip()
+    if not who:
+        me = _request("GET", "/api/v1/whoami")
+        who = str(me.get("email") or "")
+        if not who:
+            return {
+                "error": "Could not resolve the token owner for a connection write; pass staff_email.",
+                "status": me.get("status"),
+            }
+    ev = _request("GET", f"/api/v1/events/{_seg(event_id)}")
+    if ev.get("error") or not isinstance(ev.get("event"), dict):
+        # NEVER write on a failed read — posting a rebuilt-from-nothing array would wipe the
+        # staffer's existing connection legs.
+        return {
+            "error": f"Could not read the event to merge connection legs: {ev.get('error') or 'no event in response'}",
+            "status": ev.get("status"),
+        }
+    event = ev.get("event") or {}
+    staffer = next(
+        (
+            s
+            for s in (event.get("staff") or [])
+            if str((s or {}).get("email", "")).strip().lower() == who.lower()
+        ),
+        None,
+    )
+    if staffer is None:
+        return {
+            "error": f"{who} is not on this event's roster (or their travel is not visible to this key).",
+            "status": None,
+        }
+    travel = staffer.get("travel") or {}
+    conns = list(travel.get(f"{leg}Connections") or [])
+    if idx > len(conns) + 1:
+        return {
+            "error": (
+                f"connection={idx} would leave a gap — the {leg} journey has "
+                f"{len(conns)} connection leg(s); add connection {len(conns) + 1} next."
+            ),
+            "status": None,
+        }
+    if idx == len(conns) + 1:
+        conns.append({})
+    cur = conns[idx - 1] if isinstance(conns[idx - 1], dict) else {}
+    conns[idx - 1] = {**cur, **flight}
+    body["staffEmail"] = who
+    body[f"{leg}Connections"] = conns
     return _request("POST", f"/api/v1/events/{_seg(event_id)}/travel", json_body=body)
 
 

@@ -48,7 +48,7 @@ tools are the headline UX ("add an event", "my flight is AA1234", "hotel for X")
 | `update_event(event_id, name="", state="", start_date="", end_date="", lead="", website="")` | `POST /events/<id>` | Merge fields onto an event |
 | `assign_cases(event_id, case_ids)` | `POST /events/<id>` | Set the event's case list |
 | `set_shipment(event_id, direction, carrier="", pickup_date="", tracking="", notes="")` | `POST /events/<id>/shipment` | Record an outbound/return shipment |
-| `set_flight(event_id, number, carrier="", depart="", arrive="", direction="outbound", staff_email="")` | `POST /events/<id>/travel` | Record a flight (mode=flight) |
+| `set_flight(event_id, number, carrier="", depart="", arrive="", direction="outbound", staff_email="", connection=0)` | `POST /events/<id>/travel` | Record a flight (mode=flight); `connection=N` sets the Nth connection leg of a multi-leg journey |
 | `set_lodging(event_id, hotel_name, confirmation="", check_in="", check_out="", address="", room="", phone="", staff_email="")` | `POST /events/<id>/lodging` | Record a hotel |
 | `flag_item(item_id, note, severity="med")` | `POST /inventory/<id>/flag` | Flag an inventory item |
 | `create_record(collection, record)` | `POST /db/<collection>` | Create a record in any collection |

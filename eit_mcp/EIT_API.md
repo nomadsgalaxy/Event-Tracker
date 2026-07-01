@@ -140,9 +140,17 @@ Body:
  mode?: 'flight'|'train'|'drive',
  outbound?: {carrier, number, confirmation, departLocation, departAt,
              arriveLocation, arriveAt, notes},
- return?:   {...same}}
+ return?:   {...same},
+ outboundConnections?: [{...same leg fields}, ...],
+ returnConnections?:   [{...same leg fields}, ...]}
 ```
 e.g. flight AA1234: `carrier='American'`, `number='AA1234'`.
+Multi-leg journeys (layovers): `outbound` holds the FIRST leg; each later leg goes in
+`outboundConnections` in travel order (SFO→ORD in `outbound`, ORD→ATW in
+`outboundConnections[0]`). The body is a shallow merge into the stored travel — a connections
+array you send REPLACES the stored array wholesale, so send the full array (read the event first
+to preserve legs you aren't changing), or use the MCP `set_flight(connection=N)` tool which does
+that read-modify-write for you.
 Returns `{travel}`.
 
 #### `POST /api/v1/events/<id>/lodging`

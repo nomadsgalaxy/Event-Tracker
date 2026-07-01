@@ -135,7 +135,13 @@ export function buildItinerarySnapshot(
     };
     if (t) {
       pushLeg('Outbound', t.outbound);
+      (Array.isArray(t.outboundConnections) ? t.outboundConnections : []).forEach((lg, li) =>
+        pushLeg(`Outbound · leg ${li + 2}`, lg)
+      );
       pushLeg('Return', t.return);
+      (Array.isArray(t.returnConnections) ? t.returnConnections : []).forEach((lg, li) =>
+        pushLeg(`Return · leg ${li + 2}`, lg)
+      );
     }
 
     let hotel: ItineraryHotel | null = null;
@@ -272,6 +278,38 @@ function dateRange(s: string, e: string): string {
   return fmtDate(s || e || '');
 }
 
+// ── Layovers (multi-leg journeys) ────────────────────────────────────────────────────────────────
+/** Naive 'YYYY-MM-DDTHH:MM' → ms for WALL-CLOCK ARITHMETIC (Date.UTC on the parsed fields — never a
+ *  local Date, whose DST transitions would skew a layover spanning them by ±1h). Subtraction only. */
+function naiveMs(s: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(s || '');
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+}
+
+/** The journey a leg belongs to — 'Outbound' / 'Return' (connections carry 'Outbound · leg 2'). */
+function journeyOf(dir: string): string {
+  return String(dir || '').split(' · ')[0];
+}
+
+/** The layover strip between two consecutive legs of the SAME journey — where + how long, amber when
+ *  tight (<45 min), red when the connection departs before the previous leg lands. '' when the legs
+ *  are different journeys or either time is missing. */
+function layoverHtml(prev: { dir: string; arriveAt: string; to: string }, next: { dir: string; departAt: string }): string {
+  if (journeyOf(prev.dir) !== journeyOf(next.dir)) return '';
+  const a = naiveMs(prev.arriveAt);
+  const b = naiveMs(next.departAt);
+  if (a === null || b === null) return '';
+  const min = Math.round((b - a) / 60000);
+  const where = (prev.to || '').trim();
+  if (min < 0) {
+    return '<div class="layover overlap">&#8627; Connection departs before the previous leg lands' + (where ? ' in ' + esc(where) : '') + ' — check the times</div>';
+  }
+  const dur = min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ' ' + (min % 60) + 'm' : ''}` : `${min}m`;
+  const cls = min < 45 ? 'layover tight' : 'layover';
+  return '<div class="' + cls + '">&#8627; ' + esc(dur) + ' layover' + (where ? ' in ' + esc(where) : '') + (min < 45 ? ' — tight connection' : '') + '</div>';
+}
+
 const ITIN_STYLES =
   "*{box-sizing:border-box;}html,body{margin:0;}" +
   "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:32px 36px 24px;color:#111;background:#f4f5f7;display:flex;flex-direction:column;min-height:100vh;}" +
@@ -332,6 +370,9 @@ const ITIN_STYLES =
   ".keycard .kl{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#8e96a8;font-weight:700;}" +
   ".keycard .kv{font-size:12px;color:#fff;font-weight:600;margin-top:1px;}" +
   ".keycard .stripe{width:30px;flex-shrink:0;background:repeating-linear-gradient(0deg,#111 0,#111 6px,#333 6px,#333 12px);}" +
+  ".layover{display:flex;align-items:center;gap:6px;padding:0 4px 0 26px;font-size:11px;color:#666;font-family:ui-monospace,Consolas,monospace;}" +
+  ".layover.tight{color:#b45309;font-weight:700;}" +
+  ".layover.overlap{color:#b1370a;font-weight:700;}" +
   ".notes{margin-top:22px;border:1px solid #c98a00;background:#fff7e6;border-left:5px solid #e08e00;border-radius:6px;padding:12px 16px;page-break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact;}" +
   ".notes .nt{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9a6a00;font-weight:700;}" +
   ".notes h3{font-size:14px;font-weight:700;margin:2px 0 8px;color:#111;}" +
@@ -422,7 +463,10 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
       html += '<div class="no-travel">No travel recorded for this event.</div>';
     }
 
-    for (const lg of flights) {
+    for (let fi = 0; fi < flights.length; fi++) {
+      const lg = flights[fi];
+      // Between consecutive legs of the SAME journey (a connection), show the layover.
+      if (fi > 0) html += layoverHtml(flights[fi - 1], lg);
       html += '<div class="pass"><div class="main">';
       html += '<div class="topline"><span class="airline">' + (esc(lg.carrier) || 'Flight') + '</span>';
       html += '<span class="flightno">' + esc((lg.carrier ? lg.carrier + ' ' : '') + (lg.number || '')) + '</span></div>';
@@ -456,7 +500,9 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
       html += '</div></div>';
     }
 
-    for (const lg of ground) {
+    for (let gi = 0; gi < ground.length; gi++) {
+      const lg = ground[gi];
+      if (gi > 0) html += layoverHtml(ground[gi - 1], lg);
       const modeLabel = lg.mode === 'train' ? 'Train' : lg.mode === 'drive' ? 'Drive' : 'Travel';
       html +=
         '<div class="trip"><div class="topline"><span class="mode">' +
@@ -572,7 +618,12 @@ function memberFrom(staffer: Staffer, ev: EventPayload, name: string): TeamMembe
     if (!(lg.carrier || lg.number || lg.departLocation || lg.arriveLocation || lg.departAt || lg.arriveAt || lg.confirmation)) return;
     legs.push({ mode, dir, carrier: lg.carrier || '', number: lg.number || '', confirmation: lg.confirmation || '', from: lg.departLocation || '', to: lg.arriveLocation || '', departAt: lg.departAt || '', arriveAt: lg.arriveAt || '', notes: (lg.notes as string) || '' });
   };
-  if (t) { push('Outbound', t.outbound); push('Return', t.return); }
+  if (t) {
+    push('Outbound', t.outbound);
+    (Array.isArray(t.outboundConnections) ? t.outboundConnections : []).forEach((lg, li) => push(`Outbound · leg ${li + 2}`, lg));
+    push('Return', t.return);
+    (Array.isArray(t.returnConnections) ? t.returnConnections : []).forEach((lg, li) => push(`Return · leg ${li + 2}`, lg));
+  }
   const h = staffer.hotel || null;
   const hotel: ItineraryHotel | null = h && (h.name || h.address || h.room || h.phone || h.checkInAt || h.checkOutAt || h.confirmation || h.notes)
     ? { name: h.name || '', address: h.address || '', room: h.room || '', phone: h.phone || '', checkInAt: h.checkInAt || '', checkOutAt: h.checkOutAt || '', confirmation: h.confirmation || '', notes: h.notes || '' }
@@ -605,14 +656,24 @@ export function buildTeamItinerary(
   }
   const sharedHotels = [...hByKey.values()].filter((g) => g.members.length >= 2);
 
-  // Shared travel: 2+ members on the same carrier|number|date (a numbered leg).
+  // Shared travel: 2+ DISTINCT members on the same carrier|number|date (a numbered leg). Each person
+  // counts once per flight — a data-entry duplicate (the same flight on both a primary leg and a
+  // connection of one traveler) must not make a solo flight read as "shared".
   const tByKey = new Map<string, SharedTrip>();
+  const tSeen = new Map<string, Set<string>>(); // trip key → member emails already counted
   for (const m of members) {
     for (const l of m.legs) {
       if (!l.number) continue;
       const key = norm(l.carrier) + '|' + norm(l.number) + '|' + (l.departAt || '').slice(0, 10);
       let g = tByKey.get(key);
-      if (!g) tByKey.set(key, (g = { carrier: l.carrier, number: l.number, from: l.from, to: l.to, departAt: l.departAt, arriveAt: l.arriveAt, members: [] }));
+      if (!g) {
+        tByKey.set(key, (g = { carrier: l.carrier, number: l.number, from: l.from, to: l.to, departAt: l.departAt, arriveAt: l.arriveAt, members: [] }));
+        tSeen.set(key, new Set());
+      }
+      const seen = tSeen.get(key)!;
+      const who = m.email || m.name;
+      if (seen.has(who)) continue;
+      seen.add(who);
       g.members.push({ name: m.name, confirmation: l.confirmation });
     }
   }
