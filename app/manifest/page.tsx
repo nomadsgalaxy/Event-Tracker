@@ -122,10 +122,15 @@ export default async function ManifestPage({
     return ad < bd ? -1 : ad > bd ? 1 : 0;
   });
 
-  // The selected event: ?event=<id> when valid, else the first event.
+  // The selected event: ?event=<id> when valid, else the first NON-COMPLETED event (completed events
+  // are hidden from the rail by default — don't default-select something the list won't show). Falls
+  // back to the first event outright when everything is closed.
   const requested = sp.event;
   const selected =
-    (requested && sorted.find((e) => e._id === requested)) || sorted[0] || null;
+    (requested && sorted.find((e) => e._id === requested)) ||
+    sorted.find((e) => e.payload.state !== 'closed') ||
+    sorted[0] ||
+    null;
 
   // Precompute every event's manifest so the sidebar shows honest scanned/total/flagged.
   const manifestById: Record<string, EventManifest> = {};

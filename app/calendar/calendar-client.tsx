@@ -121,7 +121,16 @@ export default function CalendarClient({
   const [today, setToday] = useState(() => todayKey());
   useEffect(() => setToday(todayKey()), []);
 
-  const calEvents = useMemo<CalEvent[]>(() => events.map(toCalEvent), [events]);
+  // COMPLETED (state 'closed') events are hidden from every calendar view by default — the season
+  // schedule is a working surface, not the archive. The rail's "Show completed" toggle filters them
+  // back in (Reports keeps the full history regardless).
+  const [showCompleted, setShowCompleted] = useState(false);
+  const allCalEvents = useMemo<CalEvent[]>(() => events.map(toCalEvent), [events]);
+  const completedCount = useMemo(() => allCalEvents.filter((e) => e.state === 'closed').length, [allCalEvents]);
+  const calEvents = useMemo<CalEvent[]>(
+    () => (showCompleted ? allCalEvents : allCalEvents.filter((e) => e.state !== 'closed')),
+    [allCalEvents, showCompleted],
+  );
   // The visible tag directory the chips resolve against (id → DashTag).
   const tagById = useMemo(() => {
     const m = new Map<string, DashTag>();
@@ -339,7 +348,18 @@ export default function CalendarClient({
           )}
         </SidebarSection>
 
-        <div className="mt-auto pt-2">
+        <div className="mt-auto flex flex-col gap-2 pt-2">
+          {completedCount > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="size-3.5 accent-[var(--primary)]"
+              />
+              Show completed ({completedCount})
+            </label>
+          )}
           <Button
             variant="outline"
             size="sm"

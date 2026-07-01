@@ -187,6 +187,7 @@ export function ManifestScreen({
   const pathname = usePathname();
   const params = useSearchParams();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   // ── Modal open state ────────────────────────────────────────────────────────────────────
   const [assignOpen, setAssignOpen] = useState(false);
@@ -275,12 +276,29 @@ export function ManifestScreen({
     </>
   );
 
+  // COMPLETED (closed) events are hidden from the rail by default — the manifest is a working
+  // surface. "Show N completed" filters them back in; the SELECTED event always stays visible (a
+  // deep link to a closed event's manifest must render its row).
+  const completedCount = events.filter((e) => e.state === 'closed').length;
+  const visibleEvents = showCompleted
+    ? events
+    : events.filter((e) => e.state !== 'closed' || e.id === selectedId);
+
   const EventList = (
-    <SidebarSection label={`Events · ${events.length}`}>
+    <SidebarSection label={`Events · ${visibleEvents.length}`}>
       <div className="flex flex-col gap-1">
-        {events.map((e) => (
+        {visibleEvents.map((e) => (
           <EventRow key={e.id} row={e} selected={e.id === selectedId} onPick={pick} />
         ))}
+        {completedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowCompleted((v) => !v)}
+            className="mt-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            {showCompleted ? 'Hide completed' : `Show ${completedCount} completed`}
+          </button>
+        )}
       </div>
     </SidebarSection>
   );
@@ -448,9 +466,18 @@ export function ManifestScreen({
             <SheetDescription>Pick an event to view its manifest.</SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-1 overflow-y-auto px-3 pb-6">
-            {events.map((e) => (
+            {visibleEvents.map((e) => (
               <EventRow key={e.id} row={e} selected={e.id === selectedId} onPick={pick} />
             ))}
+            {completedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowCompleted((v) => !v)}
+                className="mt-1 rounded-md px-2 py-2 text-left text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {showCompleted ? 'Hide completed' : `Show ${completedCount} completed`}
+              </button>
+            )}
           </div>
         </SheetContent>
       </Sheet>
