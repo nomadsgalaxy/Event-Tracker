@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { RotateCcw } from 'lucide-react';
@@ -12,6 +13,7 @@ import {
   buildSegmentIndex,
   buildTravelIndex,
   dayHourSegments,
+  effectiveDayHours,
   eventTags,
   fmtHour,
   HOURS,
@@ -218,11 +220,23 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                 start: Math.max(parseTime(seg.startTime, HOUR_START), HOUR_START),
                 end: Math.min(parseTime(seg.endTime, HOUR_END), HOUR_END),
               })),
-              ...evs.map((ev, ei) => ({
-                id: `show-${ei}`,
-                start: Math.max(parseTime(ev.doorsOpen, 9), HOUR_START),
-                end: Math.min(parseTime(ev.doorsClose, 17), HOUR_END),
-              })),
+              ...evs.map((ev, ei) => {
+                // Per-day effective hours (overrides else default doors); the packing interval is
+                // widened to cover the exhibitor window so a neighbor can't collide with the overlay.
+                // Widen ONLY when BOTH ex fields are set — the same gate the overlay render uses, so
+                // a half-specified window can't reserve blank space nothing will draw in.
+                const h = effectiveDayHours(ev, d.key);
+                const attStart = parseTime(h.open, 9);
+                const attEnd = parseTime(h.close, 17);
+                const hasExWin = !!(h.exOpen && h.exClose);
+                const exStart = hasExWin ? parseTime(h.exOpen, attStart) : attStart;
+                const exEnd = hasExWin ? parseTime(h.exClose, attEnd) : attEnd;
+                return {
+                  id: `show-${ei}`,
+                  start: Math.max(Math.min(attStart, exStart), HOUR_START),
+                  end: Math.min(Math.max(attEnd, exEnd), HOUR_END),
+                };
+              }),
             ].filter((b) => b.end > b.start);
             const posById = new Map(packDayBlocks(rawBlocks).map((b) => [b.id, b]));
             const colStyle = (id: string): { left: string; width: string } => {
@@ -294,12 +308,22 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                   );
                 })}
 
-                {/* Show blocks (doorsOpen → doorsClose). */}
+                {/* Show blocks (this day's effective hours; exhibitor access as a dashed overlay). */}
                 {evs.map((ev, ei) => {
-                  const start = parseTime(ev.doorsOpen, 9);
-                  const end = parseTime(ev.doorsClose, 17);
+                  const dh = effectiveDayHours(ev, d.key);
+                  const start = parseTime(dh.open, 9);
+                  const end = parseTime(dh.close, 17);
                   const top = (start - HOUR_START) * HOUR_HEIGHT;
                   const height = (end - start) * HOUR_HEIGHT - 2;
+                  // Exhibitor window (explicit-only): a faint dashed block behind the show block, in
+                  // the SAME packed column, so early-in / late-out access reads at a glance. Clamped
+                  // to the visible 7am–9pm grid — a window entirely outside it renders nothing (no
+                  // zero-height sliver, nothing painted past the column).
+                  const exStartRaw = dh.exOpen && dh.exClose ? parseTime(dh.exOpen, start) : null;
+                  const exEndRaw = dh.exOpen && dh.exClose ? parseTime(dh.exClose, end) : null;
+                  const exStart = exStartRaw !== null ? Math.max(exStartRaw, HOUR_START) : null;
+                  const exEnd = exEndRaw !== null ? Math.min(exEndRaw, HOUR_END) : null;
+                  const hasEx = exStart !== null && exEnd !== null && exEnd > exStart;
                   const fg = `var(--st-${ev.state})`;
                   const w = ev.weather[d.key];
                   const tags = eventTags(ev, tagById);
@@ -307,8 +331,22 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                   // role="button" div (NOT a <button>) so the navigating tag chips inside are real
                   // <button>s without a button-in-button (invalid HTML → the hydration error).
                   return (
+                    <React.Fragment key={ev.id + '-' + ei}>
+                    {hasEx ? (
+                      <div
+                        aria-hidden
+                        title={`Exhibitor access ${dh.exOpen} – ${dh.exClose}`}
+                        className="pointer-events-none absolute rounded-[3px] border border-dashed"
+                        style={{
+                          top: (exStart - HOUR_START) * HOUR_HEIGHT,
+                          ...colStyle(`show-${ei}`),
+                          height: Math.max((exEnd - exStart) * HOUR_HEIGHT - 2, 0),
+                          borderColor: 'color-mix(in oklch, var(--st-upcoming) 70%, transparent)',
+                          background: 'color-mix(in oklch, var(--st-upcoming) 8%, transparent)',
+                        }}
+                      />
+                    ) : null}
                     <div
-                      key={ev.id + '-' + ei}
                       role="button"
                       tabIndex={0}
                       aria-label={`${ev.name || 'Untitled event'} — open event`}
@@ -365,6 +403,7 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                         </div>
                       ) : null}
                     </div>
+                    </React.Fragment>
                   );
                 })}
               </div>

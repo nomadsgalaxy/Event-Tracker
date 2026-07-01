@@ -107,9 +107,19 @@ export interface CalWindow {
 /** The RICH server projection the Calendar consumes — a DashEvent PLUS the logistics + tag + venue
  *  fields the Year/Month/Week views render (segments, travel ribbon, hour blocks, weather, chips).
  *  Built server-side in lib/calendar-data.ts (the Python's useEnrichedEvents + displayShow). */
+/** Per-day hour overrides ('HH:MM'): open/close = attendee doors (fall back to doorsOpen/Close);
+ *  exOpen/exClose = exhibitor access (explicit only). Keyed by 'YYYY-MM-DD' on the event. */
+export interface CalDayHours {
+  open?: string;
+  close?: string;
+  exOpen?: string;
+  exClose?: string;
+}
+
 export interface CalEventInput extends DashEvent {
   doorsOpen?: string;
   doorsClose?: string;
+  hours?: Record<string, CalDayHours>;
   setup?: CalWindow;
   teardown?: CalWindow;
   outbound?: CalShipLeg;
@@ -134,6 +144,8 @@ export interface CalEvent {
   // ── Logistics / chrome the rich views render (all optional — a lean event simply omits them) ──
   doorsOpen: string;
   doorsClose: string;
+  /** Per-day hour overrides keyed 'YYYY-MM-DD' ({} when none). */
+  hours: Record<string, CalDayHours>;
   setup: CalWindow | null;
   teardown: CalWindow | null;
   outbound: CalShipLeg | null;
@@ -163,6 +175,7 @@ export function toCalEvent(e: DashEvent | CalEventInput): CalEvent {
     lead: e.lead || '',
     doorsOpen: rich.doorsOpen || '',
     doorsClose: rich.doorsClose || '',
+    hours: rich.hours && typeof rich.hours === 'object' ? rich.hours : {},
     setup: rich.setup ?? null,
     teardown: rich.teardown ?? null,
     outbound: rich.outbound ?? null,
@@ -758,6 +771,21 @@ export function dayHourSegments(events: CalEvent[], dayY: string): {
     tryRange(ev.teardown, 'teardown');
   }
   return out;
+}
+
+/** The EFFECTIVE hours for one show day: the per-day override when set, else the event-level doors.
+ *  Exhibitor times are explicit-only (no fallback). Used by the week view's show blocks + overlays. */
+export function effectiveDayHours(
+  ev: Pick<CalEvent, 'doorsOpen' | 'doorsClose' | 'hours'>,
+  dayY: string
+): { open: string; close: string; exOpen: string; exClose: string } {
+  const d = ev.hours?.[dayY];
+  return {
+    open: d?.open || ev.doorsOpen || '',
+    close: d?.close || ev.doorsClose || '',
+    exOpen: d?.exOpen || '',
+    exClose: d?.exClose || '',
+  };
 }
 
 // ── Column-pack overlapping timed blocks (week view) ────────────────────────────────────────────

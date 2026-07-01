@@ -103,6 +103,15 @@ const patchSchema = z
     endDate: z.string().optional(),
     doorsOpen: z.string().optional(),
     doorsClose: z.string().optional(),
+    // Per-day hour overrides keyed by 'YYYY-MM-DD'. CLOSED shape (no passthrough): the entry is
+    // exactly the four time fields — unknown keys are stripped, matching saveEvent's normalization
+    // (the editor round-trip can't preserve extras, so we don't pretend to accept them).
+    hours: z.record(z.string(), z.object({
+      open: z.string().optional(),
+      close: z.string().optional(),
+      exOpen: z.string().optional(),
+      exClose: z.string().optional(),
+    })).optional(),
     city: z.string().optional(),
     venue: z.record(z.string(), z.unknown()).optional(),
     staff: z.array(staffer).optional(),
@@ -189,6 +198,7 @@ function threeWayMerge(
 const FIELD_LABELS: Record<string, string> = {
   setup: 'setup window',
   teardown: 'teardown window',
+  hours: 'daily hours',
   startDate: 'start date',
   endDate: 'end date',
   doorsOpen: 'doors open',

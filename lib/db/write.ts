@@ -51,6 +51,7 @@ const EDITABLE_FIELDS = [
   'endDate',
   'doorsOpen',
   'doorsClose',
+  'hours', // per-day hour overrides keyed 'YYYY-MM-DD' (attendee + exhibitor windows)
   'city',
   'venue',
   'staff',
@@ -176,6 +177,36 @@ export async function saveEvent({ id, patch, actorEmail, actorRole }: SaveEventA
       const caseIds = Array.isArray(p?.caseIds) ? (p.caseIds as unknown[]).map((c) => String(c)).filter((c) => effectiveCases.has(c)) : [];
       return { ...p, caseIds };
     });
+  }
+
+  // PER-DAY HOURS INVARIANT (server-authoritative): payload.hours carries only 'YYYY-MM-DD' keys
+  // inside the EFFECTIVE show range, each entry only the four 'HH:MM' fields. Enforced HERE (the
+  // single write choke-point — editor, /api/v1, MCP) because client-side pruning can't see a
+  // CONCURRENT range change: the 3-way merge treats dates and hours as independent keys, so a stale
+  // form could otherwise strand an out-of-range override (silently resurrected if the range later
+  // re-extends). Runs when hours OR the range is being written; the effective range is incoming-else-
+  // stored per field.
+  {
+    const touchesHours = set['payload.hours'] !== undefined;
+    const touchesRange = set['payload.startDate'] !== undefined || set['payload.endDate'] !== undefined;
+    const src = (touchesHours ? set['payload.hours'] : stored.payload.hours) as Record<string, unknown> | null | undefined;
+    if ((touchesHours || touchesRange) && src && typeof src === 'object') {
+      const effStart = String(set['payload.startDate'] ?? stored.payload.startDate ?? '');
+      const effEnd = String(set['payload.endDate'] ?? stored.payload.endDate ?? '');
+      const rangeOk = /^\d{4}-\d{2}-\d{2}$/.test(effStart) && /^\d{4}-\d{2}-\d{2}$/.test(effEnd) && effStart <= effEnd;
+      const pruned: Record<string, Record<string, string>> = {};
+      for (const key of Object.keys(src).sort()) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+        if (rangeOk && (key < effStart || key > effEnd)) continue;
+        const d = (src[key] ?? {}) as Record<string, unknown>;
+        const entry: Record<string, string> = {};
+        for (const f of ['open', 'close', 'exOpen', 'exClose'] as const) {
+          if (typeof d[f] === 'string' && d[f]) entry[f] = d[f];
+        }
+        if (Object.keys(entry).length) pruned[key] = entry;
+      }
+      set['payload.hours'] = pruned;
+    }
   }
 
   // Keep payload.id consistent with the envelope _id (the flat shape carries its own id).

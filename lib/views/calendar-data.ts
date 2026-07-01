@@ -147,6 +147,7 @@ export async function getCalendarData(canViewPII = false): Promise<CalendarData>
         tags: tagIds.map((id) => tagById.get(id)?.label ?? '').filter(Boolean),
         doorsOpen: typeof p.doorsOpen === 'string' ? p.doorsOpen : '',
         doorsClose: typeof p.doorsClose === 'string' ? p.doorsClose : '',
+        hours: p.hours && typeof p.hours === 'object' ? p.hours : undefined,
         setup: p.setup ?? undefined,
         teardown: p.teardown ?? undefined,
         outbound: p.outbound

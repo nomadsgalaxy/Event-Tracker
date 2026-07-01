@@ -44,6 +44,16 @@ const setupWindowSchema = z.object({
   end: z.string(),
 });
 
+// Per-day hour overrides, keyed by 'YYYY-MM-DD' (the DayHoursEditor strip). open/close = attendee
+// doors (fall back to doorsOpen/doorsClose); exOpen/exClose = exhibitor access (no fallback).
+const dayHoursSchema = z.object({
+  open: z.string(),
+  close: z.string(),
+  exOpen: z.string(),
+  exClose: z.string(),
+});
+export type DayHoursValue = z.infer<typeof dayHoursSchema>;
+
 const sideEventSchema = z.object({
   name: z.string(),
   date: z.string(),
@@ -105,6 +115,7 @@ export const eventFormSchema = z.object({
   endDate: z.string(),
   doorsOpen: z.string(),
   doorsClose: z.string(),
+  hours: z.record(dayHoursSchema),
   city: z.string(),
   website: z.string(),
   powerDrop: z.boolean(),
@@ -187,6 +198,19 @@ function windowFrom(w: unknown): EventFormValues['setup'] {
   return { start: s(x.start), end: s(x.end) };
 }
 
+/** Normalize stored per-day hours to the fully-shaped form record — only 'YYYY-MM-DD' keys, every
+ *  field a string (blank = "use default"), so the DayHoursEditor's inputs never go uncontrolled. */
+function hoursFrom(h: unknown): EventFormValues['hours'] {
+  const src = rec(h);
+  const out: EventFormValues['hours'] = {};
+  for (const key of Object.keys(src)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+    const d = rec(src[key]);
+    out[key] = { open: s(d.open), close: s(d.close), exOpen: s(d.exOpen), exClose: s(d.exClose) };
+  }
+  return out;
+}
+
 /**
  * Normalize a stored EventPayload into the fully-shaped form value react-hook-form expects (every
  * controlled field defined, blanks as '' so no input is ever uncontrolled). When `piiEditable` is
@@ -231,6 +255,7 @@ export function toFormValues(initial: EventPayload, piiEditable: boolean): Event
     endDate: s(initial.endDate),
     doorsOpen: s(initial.doorsOpen),
     doorsClose: s(initial.doorsClose),
+    hours: hoursFrom(initial.hours),
     city: s(initial.city),
     website: s(initial.website),
     powerDrop: initial.powerDrop === true,
@@ -284,6 +309,21 @@ export function toPatch(values: EventFormValues): Record<string, unknown> {
     return out;
   });
 
+  // Per-day hours: emit only non-empty fields and drop empty days (shape normalization — keeps the
+  // 3-way merge's canon compares stable). Range pruning is deliberately NOT done here: the client's
+  // form range can be stale against a concurrent date edit, so the out-of-range prune is enforced
+  // server-side in saveEvent against the EFFECTIVE range (the single write choke-point).
+  const hours: Record<string, Record<string, string>> = {};
+  for (const key of Object.keys(values.hours || {}).sort()) {
+    const d = values.hours[key];
+    const entry: Record<string, string> = {};
+    if (d.open) entry.open = d.open;
+    if (d.close) entry.close = d.close;
+    if (d.exOpen) entry.exOpen = d.exOpen;
+    if (d.exClose) entry.exClose = d.exClose;
+    if (Object.keys(entry).length) hours[key] = entry;
+  }
+
   return {
     name: values.name.trim() === '' ? 'Untitled event' : values.name,
     state: values.state,
@@ -291,6 +331,7 @@ export function toPatch(values: EventFormValues): Record<string, unknown> {
     endDate: values.endDate,
     doorsOpen: values.doorsOpen,
     doorsClose: values.doorsClose,
+    hours,
     city: values.city,
     website: values.website,
     powerDrop: values.powerDrop,

@@ -288,6 +288,18 @@ export interface VenuePayload {
   [k: string]: unknown;
 }
 
+/** Per-day hour overrides for a show day. `open`/`close` are the ATTENDEE doors (fall back to the
+ *  event-level doorsOpen/doorsClose when absent); `exOpen`/`exClose` are the EXHIBITOR access window
+ *  (typically earlier in / later out) — no fallback, shown only when set. All 'HH:MM'. EXACTLY these
+ *  four fields: saveEvent normalizes every write to them (extension keys would be silently dropped
+ *  by the editor round-trip, so the shape is closed on purpose). */
+export interface EventDayHours {
+  open?: string;
+  close?: string;
+  exOpen?: string;
+  exClose?: string;
+}
+
 export interface EventPayload {
   id?: string;
   name?: string;
@@ -296,6 +308,9 @@ export interface EventPayload {
   endDate?: string;
   doorsOpen?: string;
   doorsClose?: string;
+  // Per-day hour overrides keyed by 'YYYY-MM-DD' (multi-start days, exhibitor vs attendee hours).
+  // A day with no entry uses doorsOpen/doorsClose. Edited by the editor's DayHoursEditor strip.
+  hours?: Record<string, EventDayHours>;
   city?: string;
   venue?: VenuePayload;
   staff?: Staffer[];

@@ -224,10 +224,17 @@ export async function getDashboardData(): Promise<DashboardData> {
       const endDate = p.endDate || '';
       const prog = eventProgress(e);
 
-      // When the event is actually OVER, as a naive local 'YYYY-MM-DDTHH:MM': doorsClose on the end
-      // date, or the teardown end if that runs later. Drives the hour-accurate timeline sweep (the
-      // TODAY line reaches a card's right edge exactly when the event finishes). null = no time on file.
-      const doorsClose = typeof p.doorsClose === 'string' ? p.doorsClose : '';
+      // When the event is actually OVER, as a naive local 'YYYY-MM-DDTHH:MM': the FINAL DAY's close
+      // (per-day override else doorsClose), or the teardown end if that runs later. Drives the
+      // hour-accurate timeline sweep (the TODAY line reaches a card's right edge exactly when the
+      // event finishes). null = no time on file.
+      const lastDay = (p.hours && endDate ? (p.hours as Record<string, { close?: unknown }>)[endDate] : undefined) || {};
+      const doorsClose =
+        typeof lastDay.close === 'string' && lastDay.close
+          ? lastDay.close
+          : typeof p.doorsClose === 'string'
+            ? p.doorsClose
+            : '';
       const teardownEnd =
         p.teardown && typeof (p.teardown as { end?: unknown }).end === 'string'
           ? (p.teardown as { end: string }).end

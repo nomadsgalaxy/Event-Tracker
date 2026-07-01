@@ -120,6 +120,65 @@ function EmptyBlock({ children }: { children: ReactNode }) {
   return <div className="py-2 text-sm text-muted-foreground">{children}</div>;
 }
 
+// Per-day hours (the editor's "Daily hours" strip): one compact row per show day, attendee doors +
+// exhibitor access. Rendered only when the event carries any per-day override; days without one show
+// the default doors. Deterministic date math (explicit local Date, never new Date('YYYY-MM-DD')).
+const DH_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function DayHoursRows({ p }: { p: EventPayload }) {
+  const hours = (p.hours ?? {}) as Record<string, { open?: string; close?: string; exOpen?: string; exClose?: string }>;
+  const hasAny = Object.values(hours).some((d) => d && (d.open || d.close || d.exOpen || d.exClose));
+  if (!hasAny) return null;
+
+  // Enumerate the show range (capped), then UNION in any override keys the enumeration missed (out-
+  // of-range strays, days past the cap) so an override present in the doc is never silently hidden.
+  const days: string[] = [];
+  let rangeCapped = false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(p.startDate || '');
+  if (m && p.endDate && p.startDate! <= p.endDate) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    for (let i = 0; i < 31; i++) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (key > p.endDate) break;
+      days.push(key);
+      d.setDate(d.getDate() + 1);
+    }
+    rangeCapped = days.length === 31 && days[30] < p.endDate;
+  }
+  const overrideKeys = Object.keys(hours).filter((k) => hours[k] && (hours[k].open || hours[k].close || hours[k].exOpen || hours[k].exClose));
+  const keys = [...new Set([...days, ...overrideKeys])].sort();
+
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-3 border-b border-border py-2 text-sm last:border-0">
+      <span className="text-muted-foreground">Daily hours</span>
+      <div className="min-w-0">
+        {keys.map((key) => {
+          const d = hours[key] || {};
+          const open = d.open || p.doorsOpen || '';
+          const close = d.close || p.doorsClose || '';
+          const mm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+          const label = mm
+            ? `${DH_WEEKDAYS[new Date(Number(mm[1]), Number(mm[2]) - 1, Number(mm[3])).getDay()]} ${Number(mm[2])}/${Number(mm[3])}`
+            : key;
+          return (
+            <div key={key} className="flex flex-wrap items-baseline gap-x-3 py-0.5 font-mono text-[0.8rem] tabular-nums">
+              <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
+              <span className="text-foreground">{open && close ? `${open} – ${close}` : '—'}</span>
+              {(d.exOpen || d.exClose) && (
+                <span style={{ color: 'var(--st-upcoming)' }}>
+                  Exhib {d.exOpen || '—'} – {d.exClose || '—'}
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {rangeCapped && (
+          <div className="py-0.5 text-[0.8rem] text-muted-foreground">… default hours through {p.endDate}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function venueStr(v: EventPayload['venue'], key: string): string {
   const raw = v?.[key];
   return raw == null || raw === '' ? '' : String(raw);
@@ -347,6 +406,7 @@ function OverviewPanel({
         <DataRow label="Start" value={fmtDate(p.startDate)} />
         <DataRow label="End" value={fmtDate(p.endDate)} />
         <DataRow label="Doors" value={`${p.doorsOpen || '—'} – ${p.doorsClose || '—'}`} mono />
+        <DayHoursRows p={p} />
         <DataRow label="Setup" value={fmtDTRange(p.setup?.start, p.setup?.end)} mono />
         <DataRow label="Teardown" value={fmtDTRange(p.teardown?.start, p.teardown?.end)} mono />
       </FieldGroup>

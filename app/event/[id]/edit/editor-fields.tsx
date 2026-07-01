@@ -9,7 +9,7 @@ import {
   Controller,
   type FieldPath,
 } from 'react-hook-form';
-import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, Copy, Truck } from 'lucide-react';
+import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight, Copy, Truck } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
@@ -239,6 +239,314 @@ function DateTimeRange({
         <BareInput name={endName} type="datetime-local" ariaLabel={endPlaceholder || `${label} ends`} />
       </div>
       {description && <FormDescription>{description}</FormDescription>}
+    </FormItem>
+  );
+}
+
+// ── Per-day hours editor (the "week strip") ─────────────────────────────────────
+// Appears under the date range once both dates are set: one column per show day, each with a vertical
+// time-block visualization (attendee doors in primary, exhibitor access dashed blue behind), draggable
+// block edges (15-min snap), compact time inputs, and ◀ ▶ copy-to-neighbor buttons. A day with no
+// override uses the event-level doorsOpen/doorsClose; entries live in form value `hours` keyed by
+// 'YYYY-MM-DD' (toPatch prunes empties + out-of-range days on save).
+
+const RAIL_START = 6; // 6 AM
+const RAIL_END = 22; // 10 PM
+const RAIL_H = 132; // px
+const DAY_CAP = 21;
+
+/** 'HH:MM' → minutes since midnight, or null when not a valid time string. */
+function tMin(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s || '');
+  if (!m) return null;
+  const v = Number(m[1]) * 60 + Number(m[2]);
+  return v >= 0 && v < 1440 ? v : null;
+}
+function minToT(min: number): string {
+  const m = Math.min(1439, Math.max(0, Math.round(min)));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+/** Minutes → px offset on the rail (clamped to the visible 6:00–22:00 window). */
+function railY(min: number): number {
+  const lo = RAIL_START * 60;
+  const hi = RAIL_END * 60;
+  return ((Math.min(hi, Math.max(lo, min)) - lo) / (hi - lo)) * RAIL_H;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Enumerate 'YYYY-MM-DD' days from start..end inclusive (explicit local Date math, capped). */
+function enumerateDays(start: string, end: string, cap: number): { key: string; label: string }[] {
+  const m1 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
+  const m2 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(end);
+  if (!m1 || !m2 || start > end) return [];
+  const d = new Date(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3]));
+  const out: { key: string; label: string }[] = [];
+  for (let i = 0; i < cap; i++) {
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (key > end) break;
+    out.push({ key, label: `${WEEKDAYS[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}` });
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+type DayHoursRec = EventFormValues['hours'];
+
+export function DayHoursEditor() {
+  const { control, setValue, getValues } = useFormContext<EventFormValues>();
+  const startDate = useWatch({ control, name: 'startDate' });
+  const endDate = useWatch({ control, name: 'endDate' });
+  const doorsOpen = useWatch({ control, name: 'doorsOpen' });
+  const doorsClose = useWatch({ control, name: 'doorsClose' });
+  const hours = (useWatch({ control, name: 'hours' }) ?? {}) as DayHoursRec;
+
+  const days = useMemo(() => enumerateDays(startDate, endDate, DAY_CAP), [startDate, endDate]);
+  const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const setDay = useCallback(
+    (date: string, patch: Partial<EventFormValues['hours'][string]>) => {
+      const cur = (getValues('hours') ?? {}) as DayHoursRec;
+      const prev = cur[date] || { open: '', close: '', exOpen: '', exClose: '' };
+      setValue('hours', { ...cur, [date]: { ...prev, ...patch } }, { shouldDirty: true });
+    },
+    [getValues, setValue]
+  );
+  const clearDay = useCallback(
+    (date: string) => {
+      const cur = { ...((getValues('hours') ?? {}) as DayHoursRec) };
+      delete cur[date];
+      setValue('hours', cur, { shouldDirty: true });
+    },
+    [getValues, setValue]
+  );
+
+  // Effective values for a day: attendee falls back to the default doors; exhibitor is explicit-only.
+  const eff = useCallback(
+    (date: string) => {
+      const d = hours[date];
+      return {
+        open: d?.open || doorsOpen || '',
+        close: d?.close || doorsClose || '',
+        exOpen: d?.exOpen || '',
+        exClose: d?.exClose || '',
+      };
+    },
+    [hours, doorsOpen, doorsClose]
+  );
+
+  // Copy a day's EFFECTIVE hours onto a neighbor (materializes as an explicit override there).
+  const copyTo = useCallback(
+    (from: string, to: string) => {
+      const e = eff(from);
+      setDay(to, { open: e.open, close: e.close, exOpen: e.exOpen, exClose: e.exClose });
+    },
+    [eff, setDay]
+  );
+
+  // Drag a block edge: pointer-captured, 15-min snap, clamped so open stays ≥15min before close (and
+  // both stay inside the rail window). `kind` picks attendee vs exhibitor; `edge` picks which time.
+  const dragEdge = useCallback(
+    (date: string, kind: 'att' | 'ex', edge: 'start' | 'end') => (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const rail = railRefs.current[date];
+      if (!rail) return;
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      const apply = (clientY: number) => {
+        const rect = rail.getBoundingClientRect();
+        const frac = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+        const raw = RAIL_START * 60 + frac * (RAIL_END - RAIL_START) * 60;
+        // Rail-clamp the DRAG POSITION first, then apply the ordering clamp LAST so the written pair
+        // can never invert — a counterpart outside the 6:00–22:00 rail (e.g. a 22:30 typed time) pins
+        // the edge 15 min away from it, possibly past the rail, which is a valid non-inverted time.
+        let min = Math.round(raw / 15) * 15;
+        min = Math.min(RAIL_END * 60, Math.max(RAIL_START * 60, min));
+        const ev = eff(date);
+        const field = kind === 'att' ? (edge === 'start' ? 'open' : 'close') : edge === 'start' ? 'exOpen' : 'exClose';
+        const other = kind === 'att' ? (edge === 'start' ? ev.close : ev.open) : edge === 'start' ? ev.exClose : ev.exOpen;
+        const otherMin = tMin(other);
+        if (otherMin !== null) {
+          if (edge === 'start') min = Math.min(min, otherMin - 15);
+          else min = Math.max(min, otherMin + 15);
+        }
+        setDay(date, { [field]: minToT(min) });
+      };
+      const move = (ev: PointerEvent) => apply(ev.clientY);
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    },
+    [eff, setDay]
+  );
+
+  if (days.length === 0) return null;
+  const capped = !!endDate && days[days.length - 1].key < endDate;
+
+  return (
+    <FormItem>
+      <FormLabel>Daily hours</FormLabel>
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="flex gap-2">
+          {days.map((d, i) => {
+            const e = eff(d.key);
+            const hasOverride = !!hours[d.key] && Object.values(hours[d.key]).some(Boolean);
+            const ao = tMin(e.open);
+            const ac = tMin(e.close);
+            const xo = tMin(e.exOpen);
+            const xc = tMin(e.exClose);
+            const attOk = ao !== null && ac !== null && ac > ao;
+            const exOk = xo !== null && xc !== null && xc > xo;
+            return (
+              <div key={d.key} className="w-[8.25rem] shrink-0 rounded-md border border-border bg-card/60 p-1.5">
+                {/* Header: weekday + copy/clear controls. */}
+                <div className="mb-1 flex items-center justify-between gap-0.5">
+                  <span className={cn('text-[11px] font-semibold', hasOverride ? 'text-foreground' : 'text-muted-foreground')}>
+                    {d.label}
+                    {hasOverride && <span className="ml-1 inline-block size-1.5 rounded-full bg-primary align-middle" aria-label="custom hours" />}
+                  </span>
+                  <span className="flex items-center">
+                    {i > 0 && (
+                      <button
+                        type="button"
+                        title={`Copy ${d.label} hours to ${days[i - 1].label}`}
+                        aria-label={`Copy this day's hours to ${days[i - 1].label}`}
+                        onClick={() => copyTo(d.key, days[i - 1].key)}
+                        className="rounded-sm p-0.5 text-muted-foreground/60 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        <ChevronLeft className="size-3.5" aria-hidden />
+                      </button>
+                    )}
+                    {i < days.length - 1 && (
+                      <button
+                        type="button"
+                        title={`Copy ${d.label} hours to ${days[i + 1].label}`}
+                        aria-label={`Copy this day's hours to ${days[i + 1].label}`}
+                        onClick={() => copyTo(d.key, days[i + 1].key)}
+                        className="rounded-sm p-0.5 text-muted-foreground/60 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        <ChevronRight className="size-3.5" aria-hidden />
+                      </button>
+                    )}
+                    {hasOverride && (
+                      <button
+                        type="button"
+                        title="Reset this day to the default doors"
+                        aria-label="Reset this day to the default doors"
+                        onClick={() => clearDay(d.key)}
+                        className="rounded-sm p-0.5 text-muted-foreground/60 outline-none hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        <X className="size-3.5" aria-hidden />
+                      </button>
+                    )}
+                  </span>
+                </div>
+
+                {/* Rail: 6:00–22:00, hour ticks every 4h; exhibitor block (dashed blue) behind the
+                    attendee block (primary). Edges drag with a 15-min snap. */}
+                <div
+                  ref={(el) => {
+                    railRefs.current[d.key] = el;
+                  }}
+                  className="relative rounded-sm border border-border/60 bg-muted/20"
+                  style={{ height: RAIL_H }}
+                >
+                  {[8, 12, 16, 20].map((h) => (
+                    <div key={h} className="absolute inset-x-0 border-t border-border/40" style={{ top: railY(h * 60) }}>
+                      <span className="absolute left-0.5 -top-0.5 -translate-y-1/2 text-[8px] leading-none text-muted-foreground/50">
+                        {h <= 12 ? `${h}a` : `${h - 12}p`}
+                      </span>
+                    </div>
+                  ))}
+                  {exOk && (
+                    <div
+                      className="absolute inset-x-0.5 rounded-[3px] border border-dashed"
+                      style={{
+                        top: railY(xo),
+                        height: Math.max(6, railY(xc) - railY(xo)),
+                        borderColor: 'var(--st-upcoming)',
+                        background: 'color-mix(in oklch, var(--st-upcoming) 10%, transparent)',
+                      }}
+                    >
+                      <div onPointerDown={dragEdge(d.key, 'ex', 'start')} className="absolute inset-x-0 -top-1 h-2.5 cursor-ns-resize touch-none" aria-hidden />
+                      <div onPointerDown={dragEdge(d.key, 'ex', 'end')} className="absolute inset-x-0 -bottom-1 h-2.5 cursor-ns-resize touch-none" aria-hidden />
+                    </div>
+                  )}
+                  {attOk && (
+                    <div
+                      className="absolute inset-x-2 rounded-[3px] border"
+                      style={{
+                        top: railY(ao),
+                        height: Math.max(6, railY(ac) - railY(ao)),
+                        borderColor: 'var(--primary)',
+                        background: 'color-mix(in oklch, var(--primary) 22%, transparent)',
+                      }}
+                    >
+                      <div onPointerDown={dragEdge(d.key, 'att', 'start')} className="absolute inset-x-0 -top-1 h-2.5 cursor-ns-resize touch-none" aria-hidden />
+                      <div onPointerDown={dragEdge(d.key, 'att', 'end')} className="absolute inset-x-0 -bottom-1 h-2.5 cursor-ns-resize touch-none" aria-hidden />
+                    </div>
+                  )}
+                  {!attOk && (
+                    <div className="absolute inset-0 grid place-items-center p-1 text-center text-[9px] leading-tight text-muted-foreground/60">
+                      Set doors above or type times below
+                    </div>
+                  )}
+                </div>
+
+                {/* Compact per-day time inputs: attendee doors + exhibitor access. */}
+                <div className="mt-1.5 flex flex-col gap-1">
+                  <div className="flex items-center gap-1">
+                    <span className="w-8 shrink-0 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Doors</span>
+                    <input
+                      type="time"
+                      value={e.open}
+                      aria-label={`${d.label} doors open`}
+                      onChange={(ev) => setDay(d.key, { open: ev.target.value })}
+                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    />
+                    <input
+                      type="time"
+                      value={e.close}
+                      aria-label={`${d.label} doors close`}
+                      onChange={(ev) => setDay(d.key, { close: ev.target.value })}
+                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-8 shrink-0 text-[9px] font-bold uppercase tracking-wide" style={{ color: 'var(--st-upcoming)' }}>
+                      Exhib
+                    </span>
+                    <input
+                      type="time"
+                      value={e.exOpen}
+                      aria-label={`${d.label} exhibitor access from`}
+                      onChange={(ev) => setDay(d.key, { exOpen: ev.target.value })}
+                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    />
+                    <input
+                      type="time"
+                      value={e.exClose}
+                      aria-label={`${d.label} exhibitor access until`}
+                      onChange={(ev) => setDay(d.key, { exClose: ev.target.value })}
+                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <FormDescription>
+        Attendee doors + exhibitor access per day. Days without custom times use the default doors above;
+        drag a block&rsquo;s edges (15-min steps), type exact times, or use ◀ ▶ to copy a day to its neighbor.
+        {capped ? ` Showing the first ${DAY_CAP} days of the range.` : ''}
+      </FormDescription>
     </FormItem>
   );
 }
@@ -520,6 +828,7 @@ export function OverviewPanel() {
           <TextField name="doorsOpen" label="Doors open" type="time" />
           <TextField name="doorsClose" label="Doors close" type="time" />
         </div>
+        <DayHoursEditor />
         <DateTimeRange
           startName="setup.start"
           endName="setup.end"
