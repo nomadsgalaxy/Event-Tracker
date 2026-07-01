@@ -459,7 +459,7 @@ export function DayHoursEditor() {
                   {[8, 12, 16, 20].map((h) => (
                     <div key={h} className="absolute inset-x-0 border-t border-border/40" style={{ top: railY(h * 60) }}>
                       <span className="absolute left-0.5 -top-0.5 -translate-y-1/2 text-[8px] leading-none text-muted-foreground/50">
-                        {h <= 12 ? `${h}a` : `${h - 12}p`}
+                        {h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`}
                       </span>
                     </div>
                   ))}
