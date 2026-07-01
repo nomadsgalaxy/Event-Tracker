@@ -48,6 +48,13 @@ export interface DashTimelineEvent extends DashEvent {
   /** Whole days from midnight-today to the (inclusive) event end. null = undated. */
   daysToEnd: number | null;
   /**
+   * When the event is actually OVER, as a naive local 'YYYY-MM-DDTHH:MM' (doorsClose on the end date,
+   * or the teardown end if that's later). Drives the hour-accurate TODAY-line sweep on the timeline so
+   * the marker reaches a card's right edge exactly when the event finishes. null when no time is set
+   * (the timeline then falls back to end-of-day).
+   */
+  endsAt: string | null;
+  /**
    * The event's effective PRIMARY tag (the explicit primaryTagId if it still points at a visible
    * tag, else the first visible applied tag alphabetically — index.html effectivePrimaryTagId
    * ~L2935). null when the event has no visible tags. The shared <TagChip> renders it as "Flair:".

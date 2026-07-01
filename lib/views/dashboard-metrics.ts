@@ -224,6 +224,17 @@ export async function getDashboardData(): Promise<DashboardData> {
       const endDate = p.endDate || '';
       const prog = eventProgress(e);
 
+      // When the event is actually OVER, as a naive local 'YYYY-MM-DDTHH:MM': doorsClose on the end
+      // date, or the teardown end if that runs later. Drives the hour-accurate timeline sweep (the
+      // TODAY line reaches a card's right edge exactly when the event finishes). null = no time on file.
+      const doorsClose = typeof p.doorsClose === 'string' ? p.doorsClose : '';
+      const teardownEnd =
+        p.teardown && typeof (p.teardown as { end?: unknown }).end === 'string'
+          ? (p.teardown as { end: string }).end
+          : '';
+      let endsAt: string | null = endDate && doorsClose ? `${endDate}T${doorsClose}` : null;
+      if (teardownEnd && (!endsAt || teardownEnd > endsAt)) endsAt = teardownEnd;
+
       // Effective primary tag (the "Flair:" chip on the timeline card). Events reference tags by
       // payload.tagIds[] + payload.primaryTagId (NOT a flat tags[] of names).
       const tagIds = Array.isArray(p.tagIds)
@@ -284,6 +295,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         daysToEnd: startDate
           ? Math.round((endMs(startDate, endDate) - today) / 86_400_000)
           : null,
+        endsAt,
       };
     })
   );

@@ -57,15 +57,19 @@ const CARD_MIN_W = 140;
 const CARD_GAP = 8;
 
 export function DashboardTimeline({ events, isOverview, tempUnit = 'F' }: DashboardTimelineProps) {
-  // Re-render every 60s so the TODAY line drifts across the active card over the day without a manual
-  // refresh (Python uses Date.now() in the line position; we bump a tick to re-run the axis math).
-  const [, setTick] = useState(0);
+  // Live, hour-accurate clock for the TODAY-line sweep. null until mount so SSR + the first client
+  // render both use midnight (deterministic — no hydration mismatch on the line's `left:`); after mount
+  // it ticks every 60s so the line drifts across the active card and lands at the card's right edge
+  // exactly when the event is over.
+  const [nowMs, setNowMs] = useState<number | null>(null);
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
   const today = todayMidnightMs();
+  const liveNow = nowMs ?? today;
 
   // The "matters today" set that can appear on the axis (the same predicate the Python `relevant` uses).
   const relevant = useMemo(() => relevantTimelineEvents(events, today), [events, today]);
@@ -92,7 +96,7 @@ export function DashboardTimeline({ events, isOverview, tempUnit = 'F' }: Dashbo
     [relevant, visibleCount, today]
   );
 
-  const axis = useMemo(() => buildTimelineAxis(visibleShows, today), [visibleShows, today]);
+  const axis = useMemo(() => buildTimelineAxis(visibleShows, today, liveNow), [visibleShows, today, liveNow]);
 
   // The active-event register (in-motion events in the current filter) + the not-on-timeline tail.
   const showcases = useMemo(() => activeShowcaseEvents(events), [events]);

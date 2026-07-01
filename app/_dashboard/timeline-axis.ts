@@ -30,6 +30,15 @@ export function ymdToLocalMs(iso: string): number | null {
   return new Date(y, mo - 1, d).getTime();
 }
 
+/** Parse 'YYYY-MM-DD' OR 'YYYY-MM-DDTHH:MM' to LOCAL ms via EXPLICIT fields (no UTC shift) — the
+ *  datetime form is used for the event's real "over" instant (doorsClose / teardown end). */
+export function isoToLocalMs(iso: string): number | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(iso);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || '0'), Number(m[5] || '0')).getTime();
+}
+
 /** End-of-day (23:59:59.999 local) ms for an ISO date, inclusive of the whole end day. */
 function endOfDayMs(iso: string): number | null {
   const ms = ymdToLocalMs(iso);
@@ -278,7 +287,10 @@ function monthYearFromMs(ms: number): { month: string; year: number } | null {
  */
 export function buildTimelineAxis(
   events: DashTimelineEvent[],
-  today = todayMidnightMs()
+  today = todayMidnightMs(),
+  // Hour-accurate "now" for the DURING sweep only (zone/relevance stay on midnight-`today`). Defaults
+  // to `today` so a server render (no live clock) is deterministic; the client passes Date.now().
+  nowMs = today
 ): TimelineAxis {
   const dated = events.filter((e) => !!e.startDate);
 
@@ -346,7 +358,7 @@ export function buildTimelineAxis(
   }
 
   // TODAY marker — zoned against the REAL card slots (never over a card unless an event is running).
-  const todayMarker = resolveTodayMarker(sorted, items, geometry, today);
+  const todayMarker = resolveTodayMarker(sorted, items, geometry, today, nowMs);
 
   // Highlight the next upcoming/active event: prefer a currently-running event (start ≤ today ≤ end),
   // else the soonest future start, else (all past) the most recent — so a card is always called out.
@@ -370,20 +382,26 @@ function resolveTodayMarker(
   sorted: DashTimelineEvent[],
   items: AxisEvent[],
   geometry: TrackGeometry,
-  today: number
+  today: number,
+  nowMs: number
 ): TodayMarker {
   const n = items.length;
   const startMs = (i: number) => ymdToLocalMs(sorted[i].startDate);
   const endMs = (i: number) => endOfDayMs(sorted[i].endDate || sorted[i].startDate);
 
-  // 1) DURING — today inside any event's [start, end]. Sweep across that card by completion fraction.
+  // 1) DURING — today inside any event's [start, end-of-day]. Zone detection stays day-granular; the
+  // in-card SWEEP is hour-accurate and tied to when the event is actually OVER: the fraction runs
+  // (now − start) / (endsAt − start), where endsAt is the real finish (doorsClose on the last day, or
+  // teardown end if later) — so the line reaches the card's right edge exactly when the event ends,
+  // then pins there (clamped) until the day rolls over. Falls back to end-of-day when no time is set.
   for (let i = 0; i < n; i++) {
     const s = startMs(i);
     const e = endMs(i);
     if (s === null || e === null) continue;
     if (today >= s && today <= e) {
-      const span = e - s;
-      const fraction = span > 0 ? Math.min(1, Math.max(0, (today - s) / span)) : 0;
+      const over = (sorted[i].endsAt ? isoToLocalMs(sorted[i].endsAt as string) : null) ?? e;
+      const span = over - s;
+      const fraction = span > 0 ? Math.min(1, Math.max(0, (nowMs - s) / span)) : 0;
       const pos = items[i].left + fraction * (items[i].right - items[i].left);
       return { zone: 'during', index: i, fraction, pos };
     }
