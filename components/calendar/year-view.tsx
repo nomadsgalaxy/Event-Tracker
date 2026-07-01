@@ -63,6 +63,8 @@ export function YearView({ months, focusMonth0, onPickMonth, onPickDay }: YearVi
                 if (cell.day === null) return <div key={i} />;
                 const token = cell.state ? `var(--st-${cell.state})` : undefined;
                 const hasEvent = cell.count > 0;
+                // A completed GHOST day: keep the tint/dot but muted (history at a glance).
+                const tintPct = cell.dimmed ? 12 : 25;
                 const title = cell.isToday
                   ? `Today${cell.names.length ? ` · ${cell.names.join(' · ')}` : ''}`
                   : cell.names.join(' · ');
@@ -80,14 +82,16 @@ export function YearView({ months, focusMonth0, onPickMonth, onPickDay }: YearVi
                       cell.isToday
                         ? 'font-bold text-primary ring-1 ring-inset ring-primary'
                         : hasEvent
-                          ? 'font-semibold text-foreground'
+                          ? cell.dimmed
+                            ? 'font-medium text-muted-foreground'
+                            : 'font-semibold text-foreground'
                           : 'text-muted-foreground/70 hover:text-foreground',
                     )}
                     style={
                       cell.isToday
                         ? { background: 'color-mix(in oklch, var(--primary) 18%, transparent)' }
                         : hasEvent && token
-                          ? { background: `color-mix(in oklch, ${token} 25%, transparent)` }
+                          ? { background: `color-mix(in oklch, ${token} ${tintPct}%, transparent)` }
                           : undefined
                     }
                   >
@@ -95,7 +99,7 @@ export function YearView({ months, focusMonth0, onPickMonth, onPickDay }: YearVi
                     {hasEvent && token ? (
                       <span
                         className="absolute right-[2px] top-[1px] size-1 rounded-full"
-                        style={{ background: token }}
+                        style={{ background: token, opacity: cell.dimmed ? 0.5 : 1 }}
                         aria-hidden
                       />
                     ) : null}

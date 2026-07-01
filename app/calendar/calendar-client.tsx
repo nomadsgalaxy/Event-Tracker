@@ -121,13 +121,20 @@ export default function CalendarClient({
   const [today, setToday] = useState(() => todayKey());
   useEffect(() => setToday(todayKey()), []);
 
-  // COMPLETED (state 'closed') events are hidden from every calendar view by default — the season
-  // schedule is a working surface, not the archive. The rail's "Show completed" toggle filters them
-  // back in (Reports keeps the full history regardless).
+  // COMPLETED (state 'closed') events stay VISIBLE on the grids as greyed-out GHOSTS (the at-a-glance
+  // "we were there" history on the dates themselves) but are dropped from the list-like surfaces (the
+  // year SCHEDULE panel, undated chips). The rail's "Show completed" toggle restores full colour +
+  // relists them. Reports keeps the full history regardless.
   const [showCompleted, setShowCompleted] = useState(false);
   const allCalEvents = useMemo<CalEvent[]>(() => events.map(toCalEvent), [events]);
   const completedCount = useMemo(() => allCalEvents.filter((e) => e.state === 'closed').length, [allCalEvents]);
+  // Grid events: everything, with completed marked `dimmed` while the toggle is off.
   const calEvents = useMemo<CalEvent[]>(
+    () => (showCompleted ? allCalEvents : allCalEvents.map((e) => (e.state === 'closed' ? { ...e, dimmed: true } : e))),
+    [allCalEvents, showCompleted],
+  );
+  // List events: completed excluded unless toggled back in.
+  const listEvents = useMemo<CalEvent[]>(
     () => (showCompleted ? allCalEvents : allCalEvents.filter((e) => e.state !== 'closed')),
     [allCalEvents, showCompleted],
   );
@@ -137,8 +144,8 @@ export default function CalendarClient({
     for (const t of tags) m.set(t.id, t);
     return m;
   }, [tags]);
-  const undated = useMemo(() => undatedEvents(calEvents), [calEvents]);
-  const quickJump = useMemo(() => activeEvents(calEvents, 8), [calEvents]);
+  const undated = useMemo(() => undatedEvents(listEvents), [listEvents]);
+  const quickJump = useMemo(() => activeEvents(listEvents, 8), [listEvents]);
 
   // Per-view derived data — only the active view's structure is built.
   const monthGrid = useMemo(
@@ -150,8 +157,8 @@ export default function CalendarClient({
     [cursor.year, calEvents, today],
   );
   const yearSchedule = useMemo(
-    () => yearScheduleEvents(cursor.year, calEvents),
-    [cursor.year, calEvents],
+    () => yearScheduleEvents(cursor.year, listEvents),
+    [cursor.year, listEvents],
   );
   // Week strip: render exactly vp.dayCount days from the cursor (snap=false). The cursor is snapped
   // to a Sunday when ENTERING week view (pickDay / quick-jump / goToday); the ‹/› day-nav then slides

@@ -287,6 +287,8 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                         border: `1px solid ${color}`,
                         borderLeft: `3px solid ${color}`,
                         padding: isCompact ? '0 6px' : '4px 6px',
+                        // Segment of a completed GHOST event: muted with it.
+                        opacity: seg.event.dimmed ? 0.45 : undefined,
                       }}
                     >
                       <span
@@ -343,6 +345,7 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                           height: Math.max((exEnd - exStart) * HOUR_HEIGHT - 2, 0),
                           borderColor: 'color-mix(in oklch, var(--st-upcoming) 70%, transparent)',
                           background: 'color-mix(in oklch, var(--st-upcoming) 8%, transparent)',
+                          opacity: ev.dimmed ? 0.45 : undefined,
                         }}
                       />
                     ) : null}
@@ -366,6 +369,8 @@ export function WeekView({ grid, events, tagById, dayCount, isPortraitMobile }: 
                         border: `1px solid ${fg}`,
                         borderLeft: `3px solid ${fg}`,
                         padding: '5px 8px',
+                        // Completed GHOST: kept on its dates, muted.
+                        opacity: ev.dimmed ? 0.45 : undefined,
                       }}
                     >
                       <div className="font-mono text-muted-foreground" style={{ fontSize: 9, letterSpacing: '.04em' }}>

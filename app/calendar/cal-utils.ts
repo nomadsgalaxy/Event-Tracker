@@ -155,6 +155,10 @@ export interface CalEvent {
   tagIds: string[];
   /** Per-day forecast keyed 'YYYY-MM-DD' ({} until the weather provider is wired). */
   weather: Record<string, WeatherForecastDay>;
+  /** View-layer flag: render this event GREYED OUT on the grids (a completed event kept visible on
+   *  its dates as an at-a-glance history ghost while "Show completed" is off). Set by the calendar
+   *  client, never stored. */
+  dimmed?: boolean;
 }
 
 /** Normalise a (rich or lean) event into the calendar's CalEvent shape. An event with an endDate
@@ -307,6 +311,8 @@ export interface MiniDay {
   isToday: boolean;
   /** The first covering event's state (drives the dot + tint colour); '' when no event. */
   state: string;
+  /** True when the colouring event is a GHOST (completed, shown greyed while hide-completed is on). */
+  dimmed: boolean;
   /** How many events cover this day (for the title/aria). */
   count: number;
   /** All covering events' names (joined for the cell title). */
@@ -341,13 +347,17 @@ export function buildYearGrid(
     for (let i = 0; i < 42; i++) {
       const dayNum = i - firstDow + 1;
       if (dayNum < 1 || dayNum > daysInMonth) {
-        cells.push({ day: null, isToday: false, state: '', count: 0, names: [], month0, dayNum: 1 });
+        cells.push({ day: null, isToday: false, state: '', dimmed: false, count: 0, names: [], month0, dayNum: 1 });
         continue;
       }
       const key = dayKey(year, month0, dayNum);
       const covering = dated
         .filter((e) => key >= e.start && key <= (e.end || e.start))
         .sort((a, b) => {
+          // A live event always out-colours a completed GHOST sharing the day.
+          const aD = a.dimmed ? 1 : 0;
+          const bD = b.dimmed ? 1 : 0;
+          if (aD !== bD) return aD - bD;
           const aS = spanDays(a);
           const bS = spanDays(b);
           if (aS !== bS) return bS - aS;
@@ -357,6 +367,7 @@ export function buildYearGrid(
         day: dayNum,
         isToday: key === today,
         state: covering[0]?.state ?? '',
+        dimmed: !!covering[0]?.dimmed,
         count: covering.length,
         names: covering.map((e) => e.name || 'Untitled event'),
         month0,

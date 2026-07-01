@@ -276,6 +276,8 @@ export function MonthView({ grid, month0, events, tagById, onStep, onPickWeek }:
                       background: `color-mix(in oklch, ${fg} 14%, transparent)`,
                       border: `1px solid ${fg}`,
                       padding: '0 8px',
+                      // Completed GHOST: keep the bar on its dates, muted (history at a glance).
+                      opacity: b.ev.dimmed ? 0.45 : undefined,
                     }}
                   >
                     <span className="shrink-0 text-[8px]" style={{ color: fg }}>
