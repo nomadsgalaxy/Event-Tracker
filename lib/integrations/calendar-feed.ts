@@ -134,9 +134,9 @@ export async function resolveFeedToken(
   // An OFFBOARDED (soft-deleted) user's feed tokens die with the account — the auth-doc hard-delete
   // is best-effort, so the tombstone is the authority here (same rule as every session/key mint).
   const dir = await db
-    .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>('users')
-    .findOne({ _id: email }, { projection: { deletedAt: 1, 'payload.deletedAt': 1 } });
-  if (dir && (dir.deletedAt || dir.payload?.deletedAt)) return null;
+    .collection<{ _id: string; payload?: { deletedAt?: number | null; offboardedAt?: number | null }; deletedAt?: number | null }>('users')
+    .findOne({ _id: email }, { projection: { deletedAt: 1, 'payload.deletedAt': 1, 'payload.offboardedAt': 1 } });
+  if (dir && (dir.deletedAt || dir.payload?.deletedAt || dir.payload?.offboardedAt)) return null;
 
   // The GLOBAL feed gate re-checks the LIVE directory role (not the auth-doc snapshot, which can go
   // stale — e.g. a manager demoted in the directory must lose the global feed immediately).

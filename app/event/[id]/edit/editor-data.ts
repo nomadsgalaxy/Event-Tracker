@@ -53,8 +53,11 @@ export async function assembleEditorData(role: string, selfEventId: string | nul
     getInventory(),
   ]);
 
-  // Directory — sorted by display name, with the picture for the staffer avatar.
+  // Directory — sorted by display name, with the picture for the staffer avatar. OFFBOARDED users are
+  // excluded so they can't be staffed onto NEW events or picked as lead; they remain on the rosters
+  // they were already on (that history is preserved) and stay listed in Config > Users.
   const directory: DirectoryUser[] = userDocs
+    .filter((u) => !(u.payload as { offboardedAt?: number | null } | undefined)?.offboardedAt)
     .map((u) => {
       const p = (u.payload ?? {}) as { name?: string; preferredName?: string; picture?: string };
       return { email: u._id, name: p.preferredName || p.name || '', picture: p.picture || '' };

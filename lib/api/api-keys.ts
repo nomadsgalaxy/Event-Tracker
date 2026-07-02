@@ -296,9 +296,9 @@ export async function verifyApiKey(token: unknown): Promise<VerifiedKey | null> 
   try {
     const db = await getDb();
     const dir = await db
-      .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>('users')
-      .findOne({ _id: ownerEmail }, { projection: { deletedAt: 1, 'payload.deletedAt': 1 } });
-    if (dir && (dir.deletedAt || dir.payload?.deletedAt)) return null;
+      .collection<{ _id: string; payload?: { deletedAt?: number | null; offboardedAt?: number | null }; deletedAt?: number | null }>('users')
+      .findOne({ _id: ownerEmail }, { projection: { deletedAt: 1, 'payload.deletedAt': 1, 'payload.offboardedAt': 1 } });
+    if (dir && (dir.deletedAt || dir.payload?.deletedAt || dir.payload?.offboardedAt)) return null;
   } catch {
     return null; // fail closed: can't prove the owner is live
   }

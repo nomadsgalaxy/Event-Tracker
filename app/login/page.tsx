@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { getSession } from '@/lib/auth/session';
+import { getCurrentUser } from '@/lib/auth/auth';
 import { googleClientId } from '@/lib/auth/oidc';
 import { getEnabledProviders } from '@/lib/auth/settings-store';
 import {
@@ -36,8 +36,11 @@ export default async function LoginPage({
   const { next } = await searchParams;
   const dest = safeNext(next);
 
-  const session = await getSession();
-  if (session) redirect(dest);
+  // Already signed in → skip to the destination. getCurrentUser is REVOKED-AWARE (returns null for a
+  // deleted/offboarded session), so a locked-out user isn't bounced back into the app (no redirect
+  // loop with requireUser); they see the sign-in form, and any attempt is refused at the gate.
+  const current = await getCurrentUser();
+  if (current) redirect(dest);
 
   const gClientId = googleClientId();
   const enabledProviders = await getEnabledProviders();

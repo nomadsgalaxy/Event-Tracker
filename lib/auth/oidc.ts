@@ -291,7 +291,7 @@ export type OidcSignInResult =
 
 interface DirUser {
   _id: string;
-  payload?: { email?: string; name?: string; picture?: string; role?: string; source?: string; lastLoginAt?: number; deletedAt?: number | null };
+  payload?: { email?: string; name?: string; picture?: string; role?: string; source?: string; lastLoginAt?: number; deletedAt?: number | null; offboardedAt?: number | null };
   deletedAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
@@ -333,9 +333,9 @@ export async function signInWithOidc(profile: SsoProfile, providerId: string): P
   const users = db.collection<DirUser>(USERS);
   const dir = await users.findOne({ _id: email });
 
-  // OFFBOARDED: a soft-deleted directory user is never resurrected — check BOTH the envelope and the
-  // payload tombstone (a peer / the /api path can stamp deletedAt inside payload).
-  if (dir && (dir.deletedAt || dir.payload?.deletedAt)) return { ok: false, reason: 'offboarded' };
+  // REVOKED: a soft-deleted OR offboarded directory user is never resurrected by an SSO sign-in —
+  // check the envelope + payload tombstone AND the offboarded flag.
+  if (dir && (dir.deletedAt || dir.payload?.deletedAt || dir.payload?.offboardedAt)) return { ok: false, reason: 'offboarded' };
 
   const now = Date.now();
   const isNew = !dir;

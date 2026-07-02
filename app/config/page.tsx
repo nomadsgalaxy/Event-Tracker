@@ -76,6 +76,7 @@ export default async function ConfigUsersPage() {
       sourceLabel,
       picture: typeof p.picture === 'string' ? p.picture : '',
       lastLoginAt: typeof p.lastLoginAt === 'number' ? p.lastLoginAt : null,
+      offboardedAt: typeof p.offboardedAt === 'number' ? p.offboardedAt : null,
       isSelf: email === admin.email,
       // Credential posture (no secrets) — drives the right control labels + the 2FA/lock badges.
       hasLocalAccount: Boolean(posture),

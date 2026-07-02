@@ -123,9 +123,9 @@ export async function finishFullLogin(email: string, src = 'local'): Promise<Fin
   try {
     const db = await getDb();
     const dir = await db
-      .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>('users')
+      .collection<{ _id: string; payload?: { deletedAt?: number | null; offboardedAt?: number | null }; deletedAt?: number | null }>('users')
       .findOne({ _id: e });
-    if (dir?.deletedAt || dir?.payload?.deletedAt) return { ok: false, reason: 'offboarded' };
+    if (dir?.deletedAt || dir?.payload?.deletedAt || dir?.payload?.offboardedAt) return { ok: false, reason: 'offboarded' };
   } catch {
     /* a transient store error must not strand a verified login — fall through to role resolution,
        which itself reads the directory and floors a missing/deleted record to read-only */
@@ -416,7 +416,7 @@ export async function unlinkIdentity(email: string, provider: string): Promise<U
 
 import { hashPassword as hashPw } from '@/lib/auth/auth';
 import { rankOf } from '@/lib/auth/rbac';
-import { getDb as _getDb } from '@/lib/db/mongo';
+import { getDb as _getDb, NOT_DELETED } from '@/lib/db/mongo';
 
 const USERS_COLLECTION = 'users';
 
@@ -711,6 +711,65 @@ export async function adminClear2fa({
  * already floors a tombstoned directory user to read-only AND login()/SSO refuse them — so any live
  * session is demoted + a new login refused on the next call.
  */
+/**
+ * OFFBOARD a directory user (terminated employee): stamp payload.offboardedAt so every sign-in path
+ * refuses, live sessions end on their next request, and API keys / calendar feeds go dead — while the
+ * directory RECORD and all event rosters/history are KEPT (distinct from deleteDirectoryUser, which
+ * tombstones + hard-deletes credentials). Credentials are deliberately LEFT intact but inert (the
+ * gates are the enforcement), so Reactivate is a clean one-click restore. Admin-only; refuses self.
+ */
+export async function offboardDirectoryUser({
+  targetEmail,
+  actorEmail,
+}: {
+  targetEmail: string;
+  actorEmail: string;
+}): Promise<{ ok: true; email: string }> {
+  denyInDemo('User provisioning');
+  const actor = await requireAdminActor(actorEmail);
+  const email = norm(targetEmail);
+  if (!email) throw new AdminActionError(400, 'email required');
+  if (email === actor) throw new AdminActionError(400, "you can't offboard your own account");
+
+  const db = await _getDb();
+  const now = Date.now();
+  // Refuse a target that isn't a live directory user (already deleted/missing) — pinned to a scalar
+  // _id + NOT_DELETED so we never resurrect a tombstoned record as merely "offboarded".
+  const res = await db
+    .collection<{ _id: string }>(USERS_COLLECTION)
+    .updateOne(
+      { _id: email, ...NOT_DELETED },
+      { $set: { 'payload.offboardedAt': now, 'payload.updatedAt': now, updatedAt: now } },
+    );
+  if (res.matchedCount === 0) throw new AdminActionError(404, 'user not found');
+  return { ok: true, email };
+}
+
+/** REACTIVATE an offboarded user: clear payload.offboardedAt so access + pickers are restored. Their
+ *  credentials were never removed, so a local/SSO sign-in works again immediately. Admin-only. */
+export async function reactivateDirectoryUser({
+  targetEmail,
+  actorEmail,
+}: {
+  targetEmail: string;
+  actorEmail: string;
+}): Promise<{ ok: true; email: string }> {
+  denyInDemo('User provisioning');
+  await requireAdminActor(actorEmail);
+  const email = norm(targetEmail);
+  if (!email) throw new AdminActionError(400, 'email required');
+  const db = await _getDb();
+  const now = Date.now();
+  const res = await db
+    .collection<{ _id: string }>(USERS_COLLECTION)
+    .updateOne(
+      { _id: email, ...NOT_DELETED },
+      { $set: { 'payload.offboardedAt': null, 'payload.updatedAt': now, updatedAt: now } },
+    );
+  if (res.matchedCount === 0) throw new AdminActionError(404, 'user not found');
+  return { ok: true, email };
+}
+
 export async function deleteDirectoryUser({
   targetEmail,
   actorEmail,

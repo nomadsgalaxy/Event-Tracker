@@ -263,38 +263,48 @@ async function policyAdminEmails(): Promise<Set<string>> {
   return _policyAdmins;
 }
 
-export async function resolveLiveRole(email: string): Promise<Role> {
+/**
+ * The live authority for a session: the current directory role AND whether access is REVOKED
+ * (soft-deleted OR offboarded). One directory read serves both, so a guard pays no extra cost over
+ * the old role-only resolve. `revoked` means the session must be REJECTED (not merely floored) — the
+ * caller (requireUser/getCurrentUser) turns it into a redirect/null so a terminated or deleted user's
+ * still-valid 12h JWT stops working on its very next request.
+ */
+export async function resolveLiveIdentity(email: string): Promise<{ role: Role; revoked: boolean }> {
   // Keep the permission OVERRIDE current before ANY rank/can() decision derived from this role takes
-  // effect (mirrors eit_auth._sync_perms on the hot path) — so a customized __perms__ table that
-  // remaps ranks/grants applies to live enforcement, not just the admin Permissions screen. TTL-cached
-  // (30s) so this adds at most one extra read every 30s per process, never one per guard call.
+  // effect (mirrors eit_auth._sync_perms on the hot path). TTL-cached (30s).
   await syncPermsOverride();
   const e = normEmail(email);
-  if (!e) return DEFAULT_ROLE;
-  // Deploy-time admin override wins over everything (and can't be demoted by a directory write).
-  if (isEnvAdmin(e)) return 'admin';
-  // Access-policy admins (the editable __settings__ overlay) are admin the same way — additive to the
-  // env allowlist, and also immune to a directory-role demotion (the policy is an admin authority).
-  if ((await policyAdminEmails()).has(e)) return 'admin';
+  if (!e) return { role: DEFAULT_ROLE, revoked: false };
+  // Deploy-time admin override wins over everything (break-glass — a directory write can't demote or
+  // revoke it). Access-policy admins are admin the same way (additive to the env allowlist).
+  if (isEnvAdmin(e)) return { role: 'admin', revoked: false };
+  if ((await policyAdminEmails()).has(e)) return { role: 'admin', revoked: false };
   const db = await getDb();
-  // Directory (users) role is the authority. Type the collection with a string _id (the envelope
-  // key is the email) so the driver doesn't default _id to ObjectId.
+  // Directory (users) role is the authority. String _id so the driver doesn't default to ObjectId.
   const dir = await db
-    .collection<{ _id: string; payload?: { role?: string; deletedAt?: number | null }; deletedAt?: number | null }>(USERS_COLLECTION)
+    .collection<{ _id: string; payload?: { role?: string; deletedAt?: number | null; offboardedAt?: number | null }; deletedAt?: number | null }>(USERS_COLLECTION)
     .findOne({ _id: e });
   if (dir) {
-    // OFFBOARDED: a soft-deleted directory user is demoted to the floor role — NEVER fall through to
-    // the auth-record role (that fallback let a deleted user keep elevated access; it was a HIGH in
-    // the Python red-team too). Check BOTH the envelope and the payload tombstone (a peer / the /api
-    // path can stamp deletedAt inside payload). A live session is demoted on its next guard call.
-    if (dir.deletedAt || dir.payload?.deletedAt) return DEFAULT_ROLE;
-    if (dir.payload?.role) return normalizeRole(dir.payload.role);
+    // REVOKED = soft-deleted (deletedAt, envelope or payload) OR offboarded (payload.offboardedAt).
+    // Floor the role to read-only AND flag revoked so the session guard ends the session. NEVER fall
+    // through to the auth-record role (that fallback let a deleted user keep elevated access — a HIGH
+    // in the Python red-team).
+    if (dir.deletedAt || dir.payload?.deletedAt || dir.payload?.offboardedAt) {
+      return { role: DEFAULT_ROLE, revoked: true };
+    }
+    if (dir.payload?.role) return { role: normalizeRole(dir.payload.role), revoked: false };
   }
-  // Back-compat: the auth record's stored role (display snapshot for a pre-sync local account with
-  // no directory entry yet).
+  // Back-compat: the auth record's stored role (a pre-sync local account with no directory entry yet).
   const auth = await db.collection<AuthDoc>(AUTH_COLLECTION).findOne({ _id: e });
-  if (auth?.role) return normalizeRole(auth.role);
-  return DEFAULT_ROLE;
+  if (auth?.role) return { role: normalizeRole(auth.role), revoked: false };
+  return { role: DEFAULT_ROLE, revoked: false };
+}
+
+/** The live directory role (delegates to resolveLiveIdentity). A revoked user resolves to the floor
+ *  role here — the hard session refusal lives in requireUser/getCurrentUser. */
+export async function resolveLiveRole(email: string): Promise<Role> {
+  return (await resolveLiveIdentity(email)).role;
 }
 
 // ── login result ──
@@ -374,9 +384,9 @@ export async function login(email: string, password: string): Promise<LoginResul
   // account-existence oracle.
   try {
     const dirUser = await db
-      .collection<{ _id: string; payload?: { deletedAt?: number | null }; deletedAt?: number | null }>(USERS_COLLECTION)
+      .collection<{ _id: string; payload?: { deletedAt?: number | null; offboardedAt?: number | null }; deletedAt?: number | null }>(USERS_COLLECTION)
       .findOne({ _id: e });
-    if (dirUser?.deletedAt || dirUser?.payload?.deletedAt) {
+    if (dirUser?.deletedAt || dirUser?.payload?.deletedAt || dirUser?.payload?.offboardedAt) {
       return { ok: false, error: 'this account has been deactivated', code: 401 };
     }
   } catch {
@@ -423,7 +433,12 @@ export interface CurrentUser {
 export async function requireUser(): Promise<CurrentUser> {
   const session = await getSession();
   if (!session) redirect('/login');
-  const role = await resolveLiveRole(session.sub);
+  const { role, revoked } = await resolveLiveIdentity(session.sub);
+  // A soft-deleted or OFFBOARDED user's still-valid cookie is refused HERE (not merely floored) — so
+  // access ends on the next request, not when the 12h JWT eventually expires. Redirect to /login,
+  // which is revoked-aware (won't bounce them back = no loop). The stale cookie can't sign in again:
+  // every sign-in path re-checks the tombstone/offboard flag.
+  if (revoked) redirect('/login');
   return { email: session.sub, role, session };
 }
 
@@ -446,6 +461,9 @@ export async function requireRole(min: Role): Promise<CurrentUser> {
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await getSession();
   if (!session) return null;
-  const role = await resolveLiveRole(session.sub);
+  const { role, revoked } = await resolveLiveIdentity(session.sub);
+  // Treat a revoked (deleted/offboarded) session as signed-out — the top-bar shows a Sign-in link and
+  // the /login guard won't redirect them back into the app.
+  if (revoked) return null;
   return { email: session.sub, role, session };
 }

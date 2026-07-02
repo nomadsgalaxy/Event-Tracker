@@ -207,11 +207,12 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
   if (isPublic) {
-    // A signed-in user hitting the /login PAGE is sent on to the app (avoids a flash of the form).
-    // Do NOT redirect public API routes — a 302 would break an in-flight fetch; just pass through.
-    if (pathname === '/login' && looksSignedIn(req)) {
-      return withDemo(NextResponse.redirect(new URL('/', req.url)));
-    }
+    // NOTE: we deliberately do NOT bounce /login → / here for a cookie-holding visitor. looksSignedIn()
+    // is an Edge presence check (cookie + stage + exp) that CANNOT see a revoked/offboarded flag (no DB
+    // at the Edge), so an Edge bounce would trap a revoked user in a loop with the guards that redirect
+    // them BACK to /login. The /login page itself does the "already signed in → go to dest" redirect via
+    // the revoked-aware getCurrentUser (a server 307, no form flash), which correctly shows the form to a
+    // revoked user instead of bouncing them. Public API routes just pass through (a 302 would break a fetch).
     return passThrough();
   }
 

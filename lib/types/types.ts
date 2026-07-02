@@ -376,6 +376,12 @@ export interface UserPayload {
   role?: Role; // the live, synced, authoritative session role (set only via the admin endpoint)
   preferredName?: string;
   lastLoginAt?: number | null;
+  // OFFBOARDED (terminated employee): access is fully revoked — every sign-in path refuses, live
+  // sessions are ended on the next request, API keys + calendar feeds go dead, and the user is dropped
+  // from staffing pickers. Distinct from `deletedAt`: the directory RECORD is KEPT (still listed in
+  // Config > Users with a badge) and event rosters/history are preserved. Reversible (Reactivate
+  // clears this). ms epoch when offboarded, else absent/null.
+  offboardedAt?: number | null;
 }
 
 export type UserDoc = Envelope<UserPayload>;

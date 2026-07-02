@@ -10,6 +10,8 @@ import {
   adminConvertToLocal,
   adminClear2fa,
   deleteDirectoryUser,
+  offboardDirectoryUser,
+  reactivateDirectoryUser,
   AdminActionError,
 } from '@/lib/auth/auth-store';
 import { can } from '@/lib/auth/rbac';
@@ -174,6 +176,36 @@ export async function deleteUserAction(targetEmail: string): Promise<AdminResult
   try {
     await deleteDirectoryUser({ targetEmail, actorEmail: admin.user.email });
     await writeAudit({ actor: admin.user.email, action: 'account.delete', target: String(targetEmail).trim().toLowerCase() });
+    revalidatePath('/config');
+    revalidatePath('/config/audit');
+    return { ok: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+// ── Offboard / Reactivate (terminated employee — keep the record, revoke access) ─────────────────
+
+export async function offboardUserAction(targetEmail: string): Promise<AdminResult> {
+  const admin = await gateAdmin();
+  if ('error' in admin) return admin;
+  try {
+    await offboardDirectoryUser({ targetEmail, actorEmail: admin.user.email });
+    await writeAudit({ actor: admin.user.email, action: 'account.offboard', target: String(targetEmail).trim().toLowerCase() });
+    revalidatePath('/config');
+    revalidatePath('/config/audit');
+    return { ok: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function reactivateUserAction(targetEmail: string): Promise<AdminResult> {
+  const admin = await gateAdmin();
+  if ('error' in admin) return admin;
+  try {
+    await reactivateDirectoryUser({ targetEmail, actorEmail: admin.user.email });
+    await writeAudit({ actor: admin.user.email, action: 'account.reactivate', target: String(targetEmail).trim().toLowerCase() });
     revalidatePath('/config');
     revalidatePath('/config/audit');
     return { ok: true };

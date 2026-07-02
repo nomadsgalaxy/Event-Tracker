@@ -15,6 +15,8 @@ import {
   HeartPulse,
   MoreHorizontal,
   Globe,
+  UserMinus,
+  UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -61,6 +63,8 @@ import {
   addUserAction,
   renameUserAction,
   deleteUserAction,
+  offboardUserAction,
+  reactivateUserAction,
   resetPasswordAction,
   convertToOauthAction,
   clear2faAction,
@@ -95,6 +99,8 @@ export interface UserRow {
   sourceLabel: string;
   picture: string;
   lastLoginAt: number | null;
+  /** ms epoch when offboarded (access revoked, record kept), else null. */
+  offboardedAt: number | null;
   isSelf: boolean;
   hasLocalAccount: boolean;
   hasPassword: boolean;
@@ -152,6 +158,7 @@ export function UsersTable({
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
   const [convertTarget, setConvertTarget] = useState<UserRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [offboardTarget, setOffboardTarget] = useState<UserRow | null>(null);
   const [accTarget, setAccTarget] = useState<UserRow | null>(null);
   const [editingNameFor, setEditingNameFor] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -208,6 +215,33 @@ export function UsersTable({
         return;
       }
       toast.success(`${email} removed.`);
+      router.refresh();
+    });
+  }
+
+  function runOffboard() {
+    if (!offboardTarget) return;
+    const email = offboardTarget.email;
+    startTransition(async () => {
+      const res = await offboardUserAction(email);
+      setOffboardTarget(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${email} offboarded — access revoked, account kept.`);
+      router.refresh();
+    });
+  }
+
+  function runReactivate(row: UserRow) {
+    startTransition(async () => {
+      const res = await reactivateUserAction(row.email);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${row.email} reactivated.`);
       router.refresh();
     });
   }
@@ -310,6 +344,8 @@ export function UsersTable({
                   onClear2fa={() => runClear2fa(r)}
                   onAccommodations={() => setAccTarget(r)}
                   onDelete={() => setDeleteTarget(r)}
+                  onOffboard={() => setOffboardTarget(r)}
+                  onReactivate={() => runReactivate(r)}
                 />
               ))}
             </TableBody>
@@ -359,6 +395,13 @@ export function UsersTable({
         onConfirm={runDelete}
       />
 
+      <OffboardUserDialog
+        target={offboardTarget}
+        pending={isPending}
+        onCancel={() => !isPending && setOffboardTarget(null)}
+        onConfirm={runOffboard}
+      />
+
       {canViewAccommodations && (
         <AccommodationsDialog
           target={accTarget}
@@ -387,6 +430,8 @@ function UserRowView({
   onClear2fa,
   onAccommodations,
   onDelete,
+  onOffboard,
+  onReactivate,
 }: {
   row: UserRow;
   roleOptions: RoleOption[];
@@ -404,6 +449,8 @@ function UserRowView({
   onClear2fa: () => void;
   onAccommodations: () => void;
   onDelete: () => void;
+  onOffboard: () => void;
+  onReactivate: () => void;
 }) {
   const displayName = r.preferredName || r.name || r.email;
   return (
@@ -445,6 +492,15 @@ function UserRowView({
               </button>
             )}
             <span className="block truncate font-mono text-xs text-muted-foreground">{r.email}</span>
+            {r.offboardedAt ? (
+              <Badge
+                variant="outline"
+                className="mt-1 gap-1 text-[10px] text-warning"
+                style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+              >
+                <UserMinus className="size-2.5" aria-hidden /> Offboarded
+              </Badge>
+            ) : null}
           </div>
         </div>
       </TableCell>
@@ -550,6 +606,15 @@ function UserRowView({
             {canManageLocal && !r.isSelf && (
               <>
                 <DropdownMenuSeparator />
+                {r.offboardedAt ? (
+                  <DropdownMenuItem onSelect={onReactivate}>
+                    <UserCheck className="size-4" aria-hidden /> Reactivate
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onSelect={onOffboard}>
+                    <UserMinus className="size-4" aria-hidden /> Offboard…
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem variant="destructive" onSelect={onDelete}>
                   <Trash2 className="size-4" aria-hidden /> Delete user
                 </DropdownMenuItem>
@@ -910,10 +975,11 @@ function DeleteUserDialog({
           <DialogDescription>
             {target && (
               <>
-                Offboard <strong className="text-foreground">{target.email}</strong>? They&apos;ll be
-                removed from the directory and any local sign-in account is deleted. A live session is
-                demoted on its next request and a new sign-in is refused. This is reversible by
-                re-adding them.
+                Remove <strong className="text-foreground">{target.email}</strong> from the directory
+                and delete any local sign-in account. Their live session ends on its next request and
+                sign-in is refused. Use this for a mistaken or duplicate entry — to end a departing
+                employee&apos;s access while keeping their record and event history, choose{' '}
+                <strong className="text-foreground">Offboard</strong> instead.
               </>
             )}
           </DialogDescription>
@@ -927,6 +993,52 @@ function DeleteUserDialog({
           <Button variant="destructive" onClick={onConfirm} disabled={pending}>
             {pending && <Loader2 className="animate-spin" aria-hidden />}
             Delete user
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Offboard (terminated employee — revoke access, keep the record) ──────────────────────────────
+function OffboardUserDialog({
+  target,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  target: UserRow | null;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={target !== null} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Offboard user?</DialogTitle>
+          <DialogDescription>
+            {target && (
+              <>
+                Revoke all access for <strong className="text-foreground">{target.email}</strong>. Every
+                sign-in (password, SSO, passkey) is refused, any live session ends on its next request,
+                and their API keys and calendar feeds stop working. Their account, event rosters, and
+                travel history are <strong className="text-foreground">kept</strong>; they&apos;re
+                removed from staffing pickers going forward. Reassign them as lead on any active events.
+                Reversible any time with Reactivate.
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" autoFocus disabled={pending}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button onClick={onConfirm} disabled={pending}>
+            {pending && <Loader2 className="animate-spin" aria-hidden />}
+            Offboard
           </Button>
         </DialogFooter>
       </DialogContent>

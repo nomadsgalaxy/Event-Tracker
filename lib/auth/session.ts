@@ -1,6 +1,8 @@
 import 'server-only';
 import crypto from 'node:crypto';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
+import { getDb } from '@/lib/db/mongo';
 import type { Role } from '@/lib/types/types';
 
 // lib/auth/session.ts — signed-cookie session for the Next.js stack.
@@ -216,5 +218,33 @@ export async function getSession(): Promise<SessionPayload | null> {
   const token = jar.get(COOKIE_NAME)?.value;
   const payload = verifySession(token);
   if (!payload || payload.stage !== 'full') return null;
+  // REVOCATION at the chokepoint: a soft-deleted or OFFBOARDED directory user's still-valid signed
+  // cookie is treated as NO session HERE — so every authenticated surface that funnels through
+  // getSession() (including the ~dozens of API route handlers that gate only on `if (!session)` and
+  // never call requireUser/getCurrentUser) refuses a revoked user on the NEXT request, not when the
+  // 12h JWT eventually expires. requireUser/getCurrentUser still re-check via resolveLiveIdentity, so
+  // this is defense-in-depth for the page/action paths and the SOLE gate for the bare-getSession ones.
+  if (await isSessionRevoked(payload.sub)) return null;
   return payload;
 }
+
+/**
+ * Is this directory account access-revoked (soft-deleted OR offboarded)? Memoized PER REQUEST via
+ * React cache() so repeated getSession() calls within one request cost at most a single indexed _id
+ * read. FAIL-OPEN on a store error (a transient Mongo blip must not log everyone out): the
+ * interactive guards' own resolveLiveIdentity re-check, plus the independent API-key / calendar-feed
+ * gates, cover the brief window. Kept private to session.ts (a leaf-only getDb import → no cycle).
+ */
+const isSessionRevoked = cache(async (email: string): Promise<boolean> => {
+  const e = String(email ?? '').trim().toLowerCase();
+  if (!e) return false;
+  try {
+    const db = await getDb();
+    const dir = await db
+      .collection<{ _id: string; payload?: { deletedAt?: number | null; offboardedAt?: number | null }; deletedAt?: number | null }>('users')
+      .findOne({ _id: e }, { projection: { deletedAt: 1, 'payload.deletedAt': 1, 'payload.offboardedAt': 1 } });
+    return !!(dir && (dir.deletedAt || dir.payload?.deletedAt || dir.payload?.offboardedAt));
+  } catch {
+    return false; // fail-open: don't strand every signed-in user on a transient store error
+  }
+});
