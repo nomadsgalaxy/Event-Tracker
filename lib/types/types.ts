@@ -118,7 +118,11 @@ export interface StafferFeedback {
   event?: number; // overall event, 1–5
   venue?: number; // 1–5
   hotel?: number; // 1–5 (mirrored to staffer.hotel.rating on submit)
-  comments?: string;
+  // Per-topic details ("what happened") — free text alongside each rating.
+  eventNotes?: string;
+  venueNotes?: string;
+  hotelNotes?: string;
+  comments?: string; // anything else / general
   submittedAt?: number; // ms epoch of the LAST submit (resubmit allowed — updates in place)
   [k: string]: unknown;
 }

@@ -140,6 +140,16 @@ export default async function EventReportPage({ params }: { params: Promise<{ id
         </section>
       )}
 
+      {/* What the team said — per-topic notes, grouped so "what happened" reads in one place. */}
+      <TopicDigest
+        topics={[
+          { title: 'The event', rows: report.rows.filter((r) => r.eventNotes).map((r) => ({ name: r.name, rating: r.event, text: r.eventNotes })) },
+          { title: 'The venue', rows: report.rows.filter((r) => r.venueNotes).map((r) => ({ name: r.name, rating: r.venue, text: r.venueNotes })) },
+          { title: 'The hotel', rows: report.rows.filter((r) => r.hotelNotes).map((r) => ({ name: r.name, rating: r.hotel, text: r.hotelNotes })) },
+          { title: 'Anything else', rows: report.rows.filter((r) => r.comments).map((r) => ({ name: r.name, rating: null, text: r.comments })) },
+        ]}
+      />
+
       {/* Per-staffer feedback */}
       <section className="grid gap-2">
         <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Team feedback</h2>
@@ -159,7 +169,7 @@ export default async function EventReportPage({ params }: { params: Promise<{ id
               </thead>
               <tbody className="divide-y divide-border">
                 {report.rows.map((r) => (
-                  <tr key={r.email || r.name} className={r.submittedAt == null && r.event == null && r.venue == null && r.hotel == null && !r.comments ? 'text-muted-foreground' : ''}>
+                  <tr key={r.email || r.name} className={r.submittedAt == null && r.event == null && r.venue == null && r.hotel == null && !r.comments && !r.eventNotes && !r.venueNotes && !r.hotelNotes ? 'text-muted-foreground' : ''}>
                     <td className="px-3 py-2">
                       <span className="font-medium text-foreground">{r.name}</span>
                       {r.role ? <span className="ml-1.5 text-xs text-muted-foreground">{r.role}</span> : null}
@@ -214,5 +224,39 @@ function RatingCell({ v, label }: { v: number | null; label: string }) {
     <td className="px-3 py-2">
       {v != null ? <StarRating value={v} size={13} label={label} /> : <span className="text-muted-foreground">—</span>}
     </td>
+  );
+}
+
+// "What the team said" — the per-topic detail notes, one subsection per topic, only when someone
+// wrote something. This is the narrative half of the report; the table below stays the numbers.
+function TopicDigest({
+  topics,
+}: {
+  topics: { title: string; rows: { name: string; rating: number | null; text: string }[] }[];
+}) {
+  const withNotes = topics.filter((t) => t.rows.length > 0);
+  if (withNotes.length === 0) return null;
+  return (
+    <section className="grid gap-3">
+      <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">What the team said</h2>
+      <div className="grid gap-3">
+        {withNotes.map((t) => (
+          <div key={t.title} className="rounded-lg border border-border bg-card p-4">
+            <h3 className="mb-2 text-sm font-semibold">{t.title}</h3>
+            <ul className="grid gap-2.5">
+              {t.rows.map((row, i) => (
+                <li key={`${row.name}-${i}`} className="grid gap-0.5">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{row.name}</span>
+                    {row.rating != null && <StarRating value={row.rating} size={11} label={`${row.name} ${t.title} rating`} />}
+                  </div>
+                  <p className="text-sm leading-snug whitespace-pre-wrap">{row.text}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

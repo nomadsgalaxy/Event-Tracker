@@ -89,6 +89,9 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
   const [event, setEvent] = useState(Number(initial?.event) || 0);
   const [venue, setVenue] = useState(Number(initial?.venue) || 0);
   const [hotel, setHotel] = useState(Number(initial?.hotel) || 0);
+  const [eventNotes, setEventNotes] = useState(String(initial?.eventNotes ?? ''));
+  const [venueNotes, setVenueNotes] = useState(String(initial?.venueNotes ?? ''));
+  const [hotelNotes, setHotelNotes] = useState(String(initial?.hotelNotes ?? ''));
   const [comments, setComments] = useState(String(initial?.comments ?? ''));
   const [editing, setEditing] = useState(!initial?.submittedAt);
   const [saving, startSaving] = useTransition();
@@ -98,13 +101,19 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
     setEvent(Number(initial?.event) || 0);
     setVenue(Number(initial?.venue) || 0);
     setHotel(Number(initial?.hotel) || 0);
+    setEventNotes(String(initial?.eventNotes ?? ''));
+    setVenueNotes(String(initial?.venueNotes ?? ''));
+    setHotelNotes(String(initial?.hotelNotes ?? ''));
     setComments(String(initial?.comments ?? ''));
     setEditing(false);
   };
 
+  const hasAnything =
+    !!(event || venue || hotel) || !!(eventNotes.trim() || venueNotes.trim() || hotelNotes.trim() || comments.trim());
+
   const submit = () => {
     startSaving(() => {
-      submitEventFeedbackAction(eventId, { event, venue, hotel, comments }).then((r) => {
+      submitEventFeedbackAction(eventId, { event, venue, hotel, eventNotes, venueNotes, hotelNotes, comments }).then((r) => {
         if (r.ok) {
           toast.success('Thanks — feedback saved.');
           setEditing(false);
@@ -151,20 +160,41 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
         <span className="text-xs text-muted-foreground">Your feedback feeds the event report.</span>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
-        <FeedbackRow label="Event overall" value={event} onChange={setEvent} />
-        <FeedbackRow label="Venue" value={venue} onChange={setVenue} />
-        <FeedbackRow label="Hotel" value={hotel} onChange={setHotel} />
+        <FeedbackRow
+          label="Event overall"
+          value={event}
+          onChange={setEvent}
+          notes={eventNotes}
+          onNotes={setEventNotes}
+          notesPlaceholder="What happened? Traffic, sales, standout moments… (optional)"
+        />
+        <FeedbackRow
+          label="Venue"
+          value={venue}
+          onChange={setVenue}
+          notes={venueNotes}
+          onNotes={setVenueNotes}
+          notesPlaceholder="Space, power, wifi, load-in/out… (optional)"
+        />
+        <FeedbackRow
+          label="Hotel"
+          value={hotel}
+          onChange={setHotel}
+          notes={hotelNotes}
+          onNotes={setHotelNotes}
+          notesPlaceholder="Location, rooms, stay again?… (optional)"
+        />
       </div>
       <Textarea
         value={comments}
         onChange={(e) => setComments(e.target.value)}
-        placeholder="Anything the team should know for next time? (optional)"
+        placeholder="Anything else the team should know for next time? (optional)"
         aria-label="Feedback comments"
         className="min-h-16"
         maxLength={2000}
       />
       <div className="flex items-center gap-2">
-        <Button size="sm" onClick={submit} disabled={saving || (!event && !venue && !hotel && !comments.trim())}>
+        <Button size="sm" onClick={submit} disabled={saving || !hasAnything}>
           {saving ? 'Saving…' : initial?.submittedAt ? 'Update feedback' : 'Submit feedback'}
         </Button>
         {initial?.submittedAt ? (
@@ -177,11 +207,35 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
   );
 }
 
-function FeedbackRow({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+function FeedbackRow({
+  label,
+  value,
+  onChange,
+  notes,
+  onNotes,
+  notesPlaceholder,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  notes: string;
+  onNotes: (s: string) => void;
+  notesPlaceholder: string;
+}) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 sm:flex-col sm:items-start">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <StarRating value={value} onChange={onChange} size={18} label={`${label} rating`} />
+    <div className="flex flex-col gap-2 rounded-md border border-border px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <StarRating value={value} onChange={onChange} size={18} label={`${label} rating`} />
+      </div>
+      <Textarea
+        value={notes}
+        onChange={(e) => onNotes(e.target.value)}
+        placeholder={notesPlaceholder}
+        aria-label={`${label} details`}
+        className="min-h-9 text-xs"
+        maxLength={1000}
+      />
     </div>
   );
 }

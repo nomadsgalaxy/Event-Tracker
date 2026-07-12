@@ -24,6 +24,9 @@ export interface FeedbackInput {
   event?: number;
   venue?: number;
   hotel?: number;
+  eventNotes?: string;
+  venueNotes?: string;
+  hotelNotes?: string;
   comments?: string;
 }
 
@@ -56,10 +59,24 @@ export async function submitEventFeedbackAction(eventId: string, input: Feedback
   if (ev) fb.event = ev;
   if (venue) fb.venue = venue;
   if (hotel) fb.hotel = hotel;
-  const comments = String(input?.comments ?? '').trim().slice(0, 2000);
+  // Slice by code units, then drop a bisected surrogate pair so an emoji straddling the limit
+  // can't persist as a lone surrogate (U+FFFD in every export).
+  const note = (v: unknown, max: number) => {
+    let s = String(v ?? '').trim().slice(0, max);
+    const last = s.charCodeAt(s.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) s = s.slice(0, -1);
+    return s;
+  };
+  const eventNotes = note(input?.eventNotes, 1000);
+  const venueNotes = note(input?.venueNotes, 1000);
+  const hotelNotes = note(input?.hotelNotes, 1000);
+  const comments = note(input?.comments, 2000); // same helper — fixes the pre-existing comments slice too
+  if (eventNotes) fb.eventNotes = eventNotes;
+  if (venueNotes) fb.venueNotes = venueNotes;
+  if (hotelNotes) fb.hotelNotes = hotelNotes;
   if (comments) fb.comments = comments;
-  if (!fb.event && !fb.venue && !fb.hotel && !fb.comments) {
-    return { ok: false, error: 'Rate at least one thing (or leave a comment).' };
+  if (!fb.event && !fb.venue && !fb.hotel && !fb.eventNotes && !fb.venueNotes && !fb.hotelNotes && !fb.comments) {
+    return { ok: false, error: 'Rate at least one thing (or leave a note).' };
   }
   fb.submittedAt = Date.now();
 
