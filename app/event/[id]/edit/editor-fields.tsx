@@ -9,7 +9,8 @@ import {
   Controller,
   type FieldPath,
 } from 'react-hook-form';
-import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight, Copy, Truck } from 'lucide-react';
+import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight, Copy, Truck, Star } from 'lucide-react';
+import { useParams } from 'next/navigation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
@@ -1333,6 +1334,117 @@ function StaffRow({
   );
 }
 
+// ── Hotel stay rating (1–5 stars) ──────────────────────────────────────────────
+// Writes hotel.rating. Clicking the current value clears it (a mistaken tap must be undoable).
+function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex items-center" role="radiogroup" aria-label="Hotel stay rating">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          role="radio"
+          aria-checked={value === n}
+          aria-label={`${n} star${n > 1 ? 's' : ''}`}
+          onClick={() => onChange(n === value ? 0 : n)}
+          className="rounded p-1 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <Star size={16} className={n <= value ? 'fill-primary text-primary' : 'text-muted-foreground'} aria-hidden />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── "Stayed here before" suggestions ───────────────────────────────────────────
+// When the hotel name is still empty, offers past hotels near the event's city (from
+// /api/hotel-suggestions — aggregate of prior events' staff lodging, avg stay rating included).
+// Tapping a chip fills the identity fields (name/address/phone); dates, room, confirmation and the
+// rating stay untouched — the rating is for THIS stay, not inherited from the last one.
+interface HotelSuggestion {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  rating: number | null;
+  stays: number;
+  lastEvent: string;
+}
+
+function HotelSuggestions({ h }: { h: string }) {
+  const { control, getValues, setValue } = useFormContext<EventFormValues>();
+  const params = useParams<{ id: string }>();
+  const name = useWatch({ control, name: `${h}.name` as Name }) as string | undefined;
+  const eventCity = useWatch({ control, name: 'city' }) as string | undefined;
+  const venueCity = useWatch({ control, name: 'venue.city' }) as string | undefined;
+  const target = (eventCity || venueCity || '').trim();
+  const [list, setList] = useState<HotelSuggestion[]>([]);
+
+  useEffect(() => {
+    if (!target) {
+      setList([]);
+      return;
+    }
+    let stale = false;
+    // Debounced: `target` changes keystroke-by-keystroke while the city is being typed.
+    const t = setTimeout(() => {
+      fetch(`/api/hotel-suggestions?city=${encodeURIComponent(target)}&event=${encodeURIComponent(params?.id ?? '')}`)
+        .then((r) => (r.ok ? r.json() : { suggestions: [] }))
+        .then((d) => {
+          if (!stale) setList(Array.isArray(d.suggestions) ? d.suggestions : []);
+        })
+        .catch(() => {
+          if (!stale) setList([]);
+        });
+    }, 350);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [target, params?.id]);
+
+  if ((name || '').trim() || !list.length) return null;
+  const pick = (sug: HotelSuggestion) => {
+    const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+    setValue(
+      h as Name,
+      { ...cur, name: sug.name, address: sug.address, city: sug.city, state: sug.state, zip: sug.zip, phone: sug.phone } as never,
+      { shouldDirty: true }
+    );
+  };
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-[11px] text-muted-foreground">Stayed near {target} before — tap to fill:</span>
+      <div className="flex flex-wrap gap-1.5">
+        {list.map((sug) => (
+          <button
+            key={sug.name}
+            type="button"
+            onClick={() => pick(sug)}
+            title={sug.lastEvent ? `Last stay: ${sug.lastEvent}` : undefined}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            {sug.rating != null ? (
+              <span className="inline-flex items-center gap-0.5 tabular-nums text-primary">
+                <Star size={11} className="fill-primary text-primary" aria-hidden />
+                {sug.rating}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">unrated</span>
+            )}
+            <span className="text-foreground">{sug.name}</span>
+            <span className="text-muted-foreground">
+              · {sug.stays} stay{sug.stays === 1 ? '' : 's'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Hotel sub-editor (PII) ─────────────────────────────────────────────────────
 // Collapsible. On first expand, seeds default check-in/out from the onsite range (Python parity).
 function HotelEditor({ base, index }: { base: string; index: number }) {
@@ -1341,7 +1453,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
   const hotel = useWatch({ control, name: h as Name }) as Record<string, unknown> | undefined;
   const hasAny = !!(
     hotel &&
-    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes)
+    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes || hotel.rating)
   );
   const [expanded, setExpanded] = useState(hasAny);
 
@@ -1452,6 +1564,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
           <ChevronDown size={14} aria-hidden />
         </button>
       </div>
+      <HotelSuggestions h={h} />
       <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
         <BareInput name={`${h}.name` as Name} placeholder="Hotel name (e.g. Marriott Marquis)" ariaLabel="Hotel name" />
         <BareInput name={`${h}.room` as Name} placeholder="Room #" ariaLabel="Room number" />
@@ -1492,6 +1605,19 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
         </FormItem>
       </div>
       <BareInput name={`${h}.notes` as Name} placeholder="Notes (e.g. rooming with M. Kovář, late check-in)" ariaLabel="Hotel notes" />
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">How was the stay?</span>
+        <StarRating
+          value={Number(hotel?.rating) || 0}
+          onChange={(n) => {
+            const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+            const next = { ...cur };
+            if (n) next.rating = n;
+            else delete next.rating;
+            setValue(h as Name, next as never, { shouldDirty: true });
+          }}
+        />
+      </div>
       {/* keep `index` referenced for a stable per-row id space if needed later */}
       <span className="sr-only">Hotel for staffer {index + 1}</span>
     </fieldset>

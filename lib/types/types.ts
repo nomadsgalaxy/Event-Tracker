@@ -38,6 +38,10 @@ export interface HotelInfo {
   checkOutAt?: string;
   confirmation?: string;
   notes?: string;
+  // 1–5 stay rating ("was this hotel good?"). Rated per staffer stay in the editor; the
+  // /api/hotel-suggestions aggregate averages it across past stays so planning a new event in the
+  // same city surfaces "we've stayed here before" with a verdict.
+  rating?: number;
   [k: string]: unknown;
 }
 
