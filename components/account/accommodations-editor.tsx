@@ -263,7 +263,8 @@ export function AccommodationsEditor({ value, onChange, readOnly = false }: Acco
                     />
                     <Input
                       type="tel"
-                      placeholder="Phone"
+                      placeholder="Phone — incl. country code (+1 555 123 4567)"
+                      title="Include the country code (+1, +420, …) so the number dials from abroad"
                       value={c.phone ?? ''}
                       disabled={readOnly}
                       onChange={(e) => updateContact(idx, 'phone', e.target.value)}

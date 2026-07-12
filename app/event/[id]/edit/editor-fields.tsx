@@ -36,7 +36,8 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { PlacesAddressField, type ParsedPlace } from '@/components/ui/places-address-field';
-import { cn } from '@/lib/util/utils';
+import { StarRating } from '@/components/ui/star-rating';
+import { cn, telHref } from '@/lib/util/utils';
 import type { DashTag } from '@/lib/types/types-dashboard';
 import { lookupFlightAction, type FlightLeg } from '@/app/event/flight-actions';
 import { EVENT_STATES, type EventFormValues } from './schema';
@@ -1334,28 +1335,6 @@ function StaffRow({
   );
 }
 
-// ── Hotel stay rating (1–5 stars) ──────────────────────────────────────────────
-// Writes hotel.rating. Clicking the current value clears it (a mistaken tap must be undoable).
-function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  return (
-    <div className="flex items-center" role="radiogroup" aria-label="Hotel stay rating">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          role="radio"
-          aria-checked={value === n}
-          aria-label={`${n} star${n > 1 ? 's' : ''}`}
-          onClick={() => onChange(n === value ? 0 : n)}
-          className="rounded p-1 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <Star size={16} className={n <= value ? 'fill-primary text-primary' : 'text-muted-foreground'} aria-hidden />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ── "Stayed here before" suggestions ───────────────────────────────────────────
 // When the hotel name is still empty, offers past hotels near the event's city (from
 // /api/hotel-suggestions — aggregate of prior events' staff lodging, avg stay rating included).
@@ -1585,7 +1564,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
         <BareInput name={`${h}.phone` as Name} type="tel" placeholder="Front desk phone (tap-to-call)" mono ariaLabel="Front desk phone" />
         {phone ? (
           <a
-            href={`tel:${phone}`}
+            href={telHref(phone)}
             className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm text-primary hover:bg-accent"
           >
             Call front desk
@@ -1608,6 +1587,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-muted-foreground">How was the stay?</span>
         <StarRating
+          label="Hotel stay rating"
           value={Number(hotel?.rating) || 0}
           onChange={(n) => {
             const cur = (getValues(h as Name) as Record<string, unknown>) || {};

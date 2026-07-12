@@ -4,7 +4,7 @@ import { NotificationBell } from '@/components/notifications/notification-bell';
 import { getCurrentUser } from '@/lib/auth/auth';
 import { getUserChrome } from '@/lib/db/data';
 import { companyForEmail } from '@/lib/auth/settings-store';
-import { getNotifications, getTravelReminders } from '@/lib/views/notifications';
+import { getNotifications, getAllReminders } from '@/lib/views/notifications';
 import { rankOf, DEFAULT_ROLES } from '@/lib/auth/rbac';
 import { TopNav } from './top-nav';
 import { UserMenu } from './user-menu';
@@ -32,7 +32,7 @@ export async function TopBar() {
   // Travel reminders (events <14d out with no travel) are computed server-side too, so the bell needs
   // no client-only Date during its initial render (the mount-gate rule); the bell re-polls both.
   const notif = user ? await getNotifications(user.email, user.role) : null;
-  const reminders = user ? await getTravelReminders(user.email) : [];
+  const reminders = user ? await getAllReminders(user.email) : [];
 
   const roleDef = user ? ROLE_BY_ID[user.role] : undefined;
 

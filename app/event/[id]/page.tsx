@@ -110,6 +110,21 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     (s) => String(s?.email ?? '').trim().toLowerCase() === email.toLowerCase()
   );
 
+  // Post-event feedback: the survey opens once the event has STARTED (you can rate the hotel
+  // you're sleeping in); the bell reminder nudges after the END. Local-date compare, same
+  // convention as the travel reminders. The Event Report is the aggregation surface — lead or
+  // manager+ (the same tier that sees everyone's ratings + comments).
+  const startIso = String(doc.payload.startDate ?? '').trim();
+  const now = new Date();
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const eventStarted = /^\d{4}-\d{2}-\d{2}$/.test(startIso) && startIso <= todayYmd;
+  const canSubmitFeedback = viewerIsStaffed && eventStarted;
+  const canViewReport = can('staff.pii.view', role, { isLeadOfEvent: isLead });
+  // The viewer's OWN feedback (their staffer entry survives the PII strip), for prefill.
+  const viewerFeedback =
+    (doc.payload.staff ?? []).find((s) => String(s?.email ?? '').trim().toLowerCase() === email.toLowerCase())
+      ?.feedback ?? null;
+
   const view = assembleEventDetailView({
     doc,
     safePayload,
@@ -196,6 +211,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       canPrintTeam={canPrintOthersItin || isLead}
       canMarkOnsite={canMarkOnsite}
       viewerIsStaffed={viewerIsStaffed}
+      canSubmitFeedback={canSubmitFeedback}
+      canViewReport={canViewReport}
+      viewerFeedback={viewerFeedback}
       eventMatrixCode={eventMatrixCode}
       eventMatrixSvg={eventMatrixSvg}
     />

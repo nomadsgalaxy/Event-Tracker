@@ -30,11 +30,13 @@ export function stripEventForKey(payload: EventPayload, vk: VerifiedKey): EventP
     const seePii = keyCan(vk, 'staff.pii.view', { isSelf, isLeadOfEvent: leads });
     const seeAcc = keyCan(vk, 'accommodations.view', { isSelf });
     if (seePii && seeAcc) return s;
-    const { hotel, travel, accommodations, ...base } = s;
+    // feedback (post-event survey) rides the staff.pii.view tier, same as the UI strip.
+    const { hotel, travel, accommodations, feedback, ...base } = s;
     const out = { ...base } as typeof s;
     if (seePii) {
       if (hotel !== undefined) out.hotel = hotel;
       if (travel !== undefined) out.travel = travel;
+      if (feedback !== undefined) out.feedback = feedback;
     }
     if (seeAcc && accommodations !== undefined) out.accommodations = accommodations;
     return out;

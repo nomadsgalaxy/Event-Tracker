@@ -100,7 +100,15 @@ export function EmergencyContactPanel({
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="em-phone">Phone</Label>
-            <Input id="em-phone" value={draft.phone} onChange={(e) => set({ phone: e.target.value })} disabled={!canManage} />
+            <Input
+              id="em-phone"
+              type="tel"
+              placeholder="+1 555 123 4567"
+              title="Include the country code (+1, +420, …) so the number dials from abroad"
+              value={draft.phone}
+              onChange={(e) => set({ phone: e.target.value })}
+              disabled={!canManage}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="em-email">Email</Label>

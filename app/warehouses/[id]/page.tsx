@@ -12,6 +12,7 @@ import {
   Boxes,
 } from 'lucide-react';
 import { requireUser } from '@/lib/auth/auth';
+import { telHref } from '@/lib/util/utils';
 import { can } from '@/lib/auth/rbac';
 import { getCases, getEvents, getInventory } from '@/lib/db/data';
 import { caseAssignment, caseStatusLabel } from '@/lib/views/case-view';
@@ -159,7 +160,7 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
                 {w.phone && (
                   <p className="flex items-center gap-2">
                     <Phone className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <a href={`tel:${w.phone}`} className="hover:text-foreground hover:underline">
+                    <a href={telHref(w.phone)} className="hover:text-foreground hover:underline">
                       {w.phone}
                     </a>
                   </p>

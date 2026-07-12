@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Bell, Plane, Loader2, X } from 'lucide-react';
+import { Bell, Plane, Star, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -208,19 +208,34 @@ export function NotificationBell({
   );
 }
 
-// A travel reminder row — ✈️ "Add your travel for <event> — it starts <date>." + a "Go" link.
+// A reminder row. kind 'travel' (default): ✈️ "Add your travel for <event> — it starts <date>."
+// kind 'feedback': ⭐ "How was <event>? Rate the venue & hotel." deep-linked to the feedback card.
 function ReminderRow({ r, onNavigate }: { r: TravelReminder; onNavigate: () => void }) {
+  const isFeedback = r.kind === 'feedback';
   return (
     <li className="flex items-start gap-2.5 px-3 py-2.5">
-      <Plane size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+      {isFeedback ? (
+        <Star size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+      ) : (
+        <Plane size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-sm leading-snug text-foreground">
-          Add your travel for <span className="font-medium">{r.eventName || 'an event'}</span> — it
-          starts {formatEventDate(r.startDate)}.
+          {isFeedback ? (
+            <>
+              How was <span className="font-medium">{r.eventName || 'the event'}</span>? Rate the
+              venue &amp; hotel for the event report.
+            </>
+          ) : (
+            <>
+              Add your travel for <span className="font-medium">{r.eventName || 'an event'}</span> — it
+              starts {formatEventDate(r.startDate)}.
+            </>
+          )}
         </p>
       </div>
       <Link
-        href={`/event/${encodeURIComponent(r.eventId)}`}
+        href={`/event/${encodeURIComponent(r.eventId)}${isFeedback ? '#feedback' : ''}`}
         onClick={onNavigate}
         className="shrink-0 rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
       >

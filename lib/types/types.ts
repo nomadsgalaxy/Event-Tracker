@@ -109,12 +109,27 @@ export interface AccommodationsProfile {
   [k: string]: unknown;
 }
 
+/** Post-event feedback one staffer submitted about their own experience (the "How was your stay?"
+ *  survey shown after an event ends). 1–5 ratings; the hotel rating is ALSO mirrored onto
+ *  hotel.rating so it feeds the past-stay suggestions. Open shape — future data points (food,
+ *  logistics, booth traffic…) ride as extra keys without a schema change. Stripped server-side
+ *  with the same gate as hotel/travel (comments are personal opinions). */
+export interface StafferFeedback {
+  event?: number; // overall event, 1–5
+  venue?: number; // 1–5
+  hotel?: number; // 1–5 (mirrored to staffer.hotel.rating on submit)
+  comments?: string;
+  submittedAt?: number; // ms epoch of the LAST submit (resubmit allowed — updates in place)
+  [k: string]: unknown;
+}
+
 export interface Staffer {
   email?: string;
   name?: string;
   role?: string;
   hotel?: HotelInfo; // PII — gated server-side, never sent to a non-privileged client
   travel?: TravelInfo; // PII — gated server-side
+  feedback?: StafferFeedback; // post-event survey — gated like hotel/travel (see stripEventPii)
   onsiteStart?: string;
   onsiteEnd?: string;
   // Display fields resolved server-side from the directory (picture/display name) for the Team

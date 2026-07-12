@@ -139,11 +139,24 @@ export async function saveEvent({ id, patch, actorEmail, actorRole }: SaveEventA
     const storedStaff = Array.isArray(stored.payload.staff) ? stored.payload.staff : [];
     const mayEditPii = can('staff.pii.view', actorRole, { isLeadOfEvent: isLead });
     const has = (o: Record<string, unknown>, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+    const lcMerge = (v: unknown) => String(v ?? '').trim().toLowerCase();
     set['payload.staff'] = incoming.map((s, i) => {
-      const sEmail = typeof s?.email === 'string' ? s.email : '';
-      const orig = (sEmail && storedStaff.find((o) => o?.email === sEmail)) || storedStaff[i];
-      if (!orig) return s; // a newly-added staffer has no stored PII to preserve
+      const sEmail = lcMerge(s?.email);
+      // Match the stored row by CASE-INSENSITIVE email (like every other email compare). The
+      // positional storedStaff[i] fallback is ONLY for legacy email-less rows, where position is
+      // the best key — an email-carrying staffer with no email match is genuinely NEW, and falling
+      // back positionally would graft a REMOVED staffer's hotel/travel/feedback onto them (and the
+      // self-gate downstream would then show the wrong person's PII as "theirs").
+      const orig = sEmail
+        ? storedStaff.find((o) => lcMerge(o?.email) === sEmail)
+        : storedStaff[i];
       const out: Record<string, unknown> = { ...s };
+      // feedback (the post-event survey) is written ONLY via its dedicated self-scoped action —
+      // the editor NEVER supplies it. Always restore the stored value (or drop a crafted key), or
+      // an editor save would silently wipe / seed the team's survey answers.
+      if (orig?.feedback != null) out.feedback = orig.feedback;
+      else delete out.feedback;
+      if (!orig) return out; // a newly-added staffer has no stored PII to preserve
       // Keep the submitted hotel/travel only when this editor may set PII AND explicitly sent the key;
       // otherwise restore the stored value (and drop a stray key rather than write `undefined`).
       if (!(mayEditPii && has(s, 'hotel'))) {

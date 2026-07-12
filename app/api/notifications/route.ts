@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/auth';
-import { getNotifications, getTravelReminders } from '@/lib/views/notifications';
+import { getNotifications, getAllReminders } from '@/lib/views/notifications';
 
 // GET /api/notifications — the bell's POLL endpoint (60s refresh, mirrors the Python
 // NotificationBell's setInterval(load, 60000) hitting /auth/notifications).
@@ -21,7 +21,7 @@ export async function GET() {
   }
   const [{ items, actionable }, reminders] = await Promise.all([
     getNotifications(user.email, user.role),
-    getTravelReminders(user.email),
+    getAllReminders(user.email),
   ]);
   return NextResponse.json(
     { items, actionable, reminders },

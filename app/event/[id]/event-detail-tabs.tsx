@@ -21,6 +21,7 @@ import {
   ChevronRight,
   MapPin,
   Users,
+  ClipboardList,
 } from 'lucide-react';
 import type { SevereAlert } from '@/lib/integrations/weather-alerts';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ import {
 } from '@/components/ui/dialog';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { WeatherChip } from '@/components/ui/weather-chip';
-import { cn } from '@/lib/util/utils';
+import { cn, telHref } from '@/lib/util/utils';
 import type { EventForecastRow } from '@/lib/types/types-dashboard';
 import type {
   EventPayload,
@@ -47,12 +48,16 @@ import type {
   TravelInfo,
   TravelLeg,
   AccommodationsProfile,
+  StafferFeedback,
 } from '@/lib/types/types';
 import type { EventDetailView, StaffCardView } from '@/lib/types/types-event-detail';
 import { toast } from 'sonner';
 import { deleteEventAction, markEventOnsiteAction } from '@/app/event/actions';
+import { submitEventFeedbackAction } from '@/app/event/feedback-actions';
 import { requestTravelInfoAction } from '@/app/notifications/actions';
 import { FlightProgress } from '@/components/events/flight-progress';
+import { StarRating } from '@/components/ui/star-rating';
+import { Textarea } from '@/components/ui/textarea';
 
 // app/event/[id]/event-detail-tabs.tsx — the CLIENT shell for the Event DETAIL view.
 //
@@ -74,6 +79,112 @@ const EV_TABS = [
 ] as const;
 
 type TabId = (typeof EV_TABS)[number]['id'];
+
+// ── Post-event feedback card ("How was your stay?") ─────────────────────────────────────────
+// Shown to a STAFFED viewer once the event has started (server-decided via canSubmitFeedback; the
+// action re-checks). Three star rows + optional comments; resubmit updates in place. Collapsed to
+// a one-line "thanks" bar once submitted, with an Edit re-open.
+function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferFeedback | null }) {
+  const router = useRouter();
+  const [event, setEvent] = useState(Number(initial?.event) || 0);
+  const [venue, setVenue] = useState(Number(initial?.venue) || 0);
+  const [hotel, setHotel] = useState(Number(initial?.hotel) || 0);
+  const [comments, setComments] = useState(String(initial?.comments ?? ''));
+  const [editing, setEditing] = useState(!initial?.submittedAt);
+  const [saving, startSaving] = useTransition();
+
+  // Cancel must discard unsaved edits — the collapsed bar shows SAVED values only.
+  const cancel = () => {
+    setEvent(Number(initial?.event) || 0);
+    setVenue(Number(initial?.venue) || 0);
+    setHotel(Number(initial?.hotel) || 0);
+    setComments(String(initial?.comments ?? ''));
+    setEditing(false);
+  };
+
+  const submit = () => {
+    startSaving(() => {
+      submitEventFeedbackAction(eventId, { event, venue, hotel, comments }).then((r) => {
+        if (r.ok) {
+          toast.success('Thanks — feedback saved.');
+          setEditing(false);
+          router.refresh();
+        } else {
+          toast.error(r.error || 'Could not save feedback.');
+        }
+      });
+    });
+  };
+
+  if (!editing) {
+    return (
+      <section className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-4 py-3" id="feedback">
+        <ClipboardList size={16} className="shrink-0 text-primary" aria-hidden />
+        <p className="text-sm text-foreground">Thanks for your event feedback!</p>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {event > 0 && (
+            <span className="inline-flex items-center gap-1">Event <StarRating value={event} size={12} label="Your event rating" /></span>
+          )}
+          {venue > 0 && (
+            <span className="inline-flex items-center gap-1">Venue <StarRating value={venue} size={12} label="Your venue rating" /></span>
+          )}
+          {hotel > 0 && (
+            <span className="inline-flex items-center gap-1">Hotel <StarRating value={hotel} size={12} label="Your hotel rating" /></span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="ml-auto rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Edit
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="grid gap-3 rounded-lg border border-primary/40 bg-card p-4" id="feedback" aria-label="Post-event feedback">
+      <div className="flex items-center gap-2">
+        <ClipboardList size={16} className="text-primary" aria-hidden />
+        <h2 className="text-sm font-semibold">How was the event?</h2>
+        <span className="text-xs text-muted-foreground">Your feedback feeds the event report.</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <FeedbackRow label="Event overall" value={event} onChange={setEvent} />
+        <FeedbackRow label="Venue" value={venue} onChange={setVenue} />
+        <FeedbackRow label="Hotel" value={hotel} onChange={setHotel} />
+      </div>
+      <Textarea
+        value={comments}
+        onChange={(e) => setComments(e.target.value)}
+        placeholder="Anything the team should know for next time? (optional)"
+        aria-label="Feedback comments"
+        className="min-h-16"
+        maxLength={2000}
+      />
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={submit} disabled={saving || (!event && !venue && !hotel && !comments.trim())}>
+          {saving ? 'Saving…' : initial?.submittedAt ? 'Update feedback' : 'Submit feedback'}
+        </Button>
+        {initial?.submittedAt ? (
+          <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function FeedbackRow({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 sm:flex-col sm:items-start">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <StarRating value={value} onChange={onChange} size={18} label={`${label} rating`} />
+    </div>
+  );
+}
 
 // ── Small shared bits ────────────────────────────────────────────────────────────────────────
 function FieldGroup({
@@ -500,7 +611,7 @@ function OverviewPanel({
               mono
               value={
                 contact?.phone ? (
-                  <a href={`tel:${contact.phone}`} className="text-primary hover:underline">
+                  <a href={telHref(contact.phone)} className="text-primary hover:underline">
                     {contact.phone}
                   </a>
                 ) : (
@@ -542,7 +653,7 @@ function HotelBlock({ hotel }: { hotel: HotelInfo }) {
       )}
       {hotel.phone && (
         <div className="pl-[22px]">
-          <a href={`tel:${hotel.phone}`} className="text-primary hover:underline">
+          <a href={telHref(hotel.phone)} className="text-primary hover:underline">
             ☎ {hotel.phone}
           </a>
         </div>
@@ -678,7 +789,7 @@ function AccommodationsBlock({ acc }: { acc: AccommodationsProfile }) {
                   {ec.relationship ? ` · ${ec.relationship}` : ''}
                 </div>
                 {ec.phone && (
-                  <a href={`tel:${ec.phone}`} className="text-primary hover:underline">
+                  <a href={telHref(ec.phone)} className="text-primary hover:underline">
                     ☎ {ec.phone}
                   </a>
                 )}
@@ -1226,6 +1337,9 @@ export function EventDetailClient({
   canPrintTeam,
   canMarkOnsite,
   viewerIsStaffed,
+  canSubmitFeedback,
+  canViewReport,
+  viewerFeedback,
   eventMatrixCode,
   eventMatrixSvg,
 }: {
@@ -1248,6 +1362,12 @@ export function EventDetailClient({
   /** signoff.commit (lead+/lead-of-event) — show "Mark on site" while the event is in transit. */
   canMarkOnsite: boolean;
   viewerIsStaffed: boolean;
+  /** Staffed viewer + the event has started — show the "How was the event?" feedback card. */
+  canSubmitFeedback: boolean;
+  /** Lead-of-event or staff.pii.view — show the "Event Report" action. */
+  canViewReport: boolean;
+  /** The viewer's own submitted feedback (prefill), or null. */
+  viewerFeedback: StafferFeedback | null;
   eventMatrixCode: string;
   eventMatrixSvg: string;
 }) {
@@ -1423,6 +1543,17 @@ export function EventDetailClient({
             <QrCode aria-hidden />
             <span className="hidden sm:inline">Print Matrix</span>
           </Button>
+          {canViewReport && (
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <Link
+                href={`/event/${encodeURIComponent(eventId)}/report`}
+                title="Post-event report: team feedback, ratings, exports & AI summary"
+              >
+                <ClipboardList aria-hidden />
+                <span className="hidden sm:inline">Event Report</span>
+              </Link>
+            </Button>
+          )}
           {canEdit && (
             <Button asChild size="sm" className="shrink-0">
               <Link href={`/event/${eventId}/edit`} title="Edit event">
@@ -1450,6 +1581,10 @@ export function EventDetailClient({
 
       {/* Readiness strip. */}
       <ReadinessStrip ready={view.readiness.ready} blockers={view.readiness.blockers} />
+
+      {/* Post-event feedback ("How was your stay?") — staffed viewer, event started. Sits above the
+          tabs so the bell's deep link (#feedback) always lands on it regardless of active tab. */}
+      {canSubmitFeedback && <FeedbackCard eventId={eventId} initial={viewerFeedback} />}
 
       {/* Tab strip + panels (all panels stay mounted; only the active one shows — #93 contract). */}
       <div>

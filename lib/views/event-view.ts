@@ -122,14 +122,19 @@ export function stripEventPii(
     // grant). A travel grant or a lead must never widen accommodations, so we can't piggyback both
     // tiers on canSeeStaffPii's single verdict.
     const seePii = canSeeStaffPii(s, payload, viewerEmail, role, grantsSet, eventId);
+    // feedback (the post-event survey) carries personal opinions/comments. Role/self/lead tier —
+    // but NOT the #167 grant path: a travel-data grant is scoped to flights/lodging and must not
+    // quietly widen to survey opinions (same reasoning that keeps accommodations off the grant).
+    const seeFeedback = canSeeStaffPii(s, payload, viewerEmail, role, null, eventId);
     const seeAcc = canSeeAccommodations(s, viewerEmail, role);
-    if (seePii && seeAcc) return s;
-    const { hotel, travel, accommodations, ...base } = s;
+    if (seePii && seeFeedback && seeAcc) return s;
+    const { hotel, travel, accommodations, feedback, ...base } = s;
     const out = { ...base } as typeof s;
     if (seePii) {
       if (hotel !== undefined) out.hotel = hotel;
       if (travel !== undefined) out.travel = travel;
     }
+    if (seeFeedback && feedback !== undefined) out.feedback = feedback;
     if (seeAcc && accommodations !== undefined) out.accommodations = accommodations;
     return out;
   });

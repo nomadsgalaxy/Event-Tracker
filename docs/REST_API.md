@@ -35,7 +35,8 @@ That intersection is re-checked on every request against the live database, so:
 - If you're demoted (or an admin narrows a role in the permissions table), every key you hold narrows
   immediately, with no key edit.
 - Events come back PII-stripped to the key's scope: a key without `staff.pii.view` never sees staff
-  travel or lodging, the same gate the UI applies.
+  travel, lodging, or post-event feedback (`staff[].feedback` — the "How was your stay?" survey), the
+  same gate the UI applies.
 
 The `auth` collection and the audit log are never reachable through the API.
 

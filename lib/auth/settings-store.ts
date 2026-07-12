@@ -46,7 +46,10 @@ export type IntegrationKeyName =
   | 'openskyClientSecret' // OpenSky Network OAuth2 client secret
   | 'easypostKey' // EasyPost shipment tracking (parcel + LTL)
   | 'track17Key' // 17TRACK free-tier fallback
-  | 'aftershipKey'; // AfterShip aggregator (UniShippers/LTL)
+  | 'aftershipKey' // AfterShip aggregator (UniShippers/LTL)
+  | 'anthropicKey' // Anthropic API (AI event-report generator)
+  | 'openaiKey' // OpenAI API (AI event-report generator)
+  | 'geminiKey'; // Google Gemini API (AI event-report generator)
 
 // Per-key ENV fallback precedence. The FIRST non-empty env var wins; the store is consulted only when
 // every listed env var is empty. Mirrors the Python env names (GOOGLE_API_KEY, FLIGHT_RAPIDAPI_KEY,
@@ -61,6 +64,9 @@ const ENV_FALLBACK: Record<IntegrationKeyName, string[]> = {
   easypostKey: ['EASYPOST_API_KEY'],
   track17Key: ['SEVENTEENTRACK_API_KEY', 'TRACK17_API_KEY'],
   aftershipKey: ['AFTERSHIP_API_KEY'],
+  anthropicKey: ['ANTHROPIC_API_KEY'],
+  openaiKey: ['OPENAI_API_KEY'],
+  geminiKey: ['GEMINI_API_KEY', 'GOOGLE_GENAI_API_KEY'],
 };
 
 export const INTEGRATION_KEY_NAMES = Object.keys(ENV_FALLBACK) as IntegrationKeyName[];

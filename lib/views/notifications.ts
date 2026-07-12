@@ -75,13 +75,17 @@ export interface NotificationsResult {
   actionable: number;
 }
 
-/** A client-side travel REMINDER: an event the viewer is staffed on, starting within 14 days, for
- *  which they have no travel set yet → a ✈️ "add your travel" nudge with a "Go" deep-link. */
+/** A computed (not stored) REMINDER row in the bell. kind 'travel': an event the viewer is staffed
+ *  on, starting within 14 days, with no travel set → ✈️ "add your travel". kind 'feedback': an
+ *  event they attended that ended within the last 14 days without their post-event feedback →
+ *  ⭐ "how was it?" (deep-links to the event page's feedback card). */
 export interface TravelReminder {
   id: string;
   eventId: string;
   eventName: string;
   startDate: string;
+  /** Omitted = 'travel' (backwards-compatible with pre-feedback poll payloads). */
+  kind?: 'travel' | 'feedback';
 }
 
 /**
@@ -94,6 +98,28 @@ export interface TravelReminder {
  * server clock at request time; the bell's 60s poll re-reads it so the window stays fresh.
  */
 export async function getTravelReminders(email: string): Promise<TravelReminder[]> {
+  return (await getAllReminders(email)).filter((r) => r.kind !== 'feedback');
+}
+
+/**
+ * The viewer's post-event FEEDBACK reminders: every event they were staffed on that ENDED within
+ * the last 14 days for which they haven't submitted feedback (staffer.feedback.submittedAt). Same
+ * computed-not-stored model as the travel reminders — disappears the moment feedback lands, no
+ * dedup/sweep machinery. Returns [] on any DB error (the bell is ambient chrome).
+ */
+export async function getFeedbackReminders(email: string): Promise<TravelReminder[]> {
+  return (await getAllReminders(email)).filter((r) => r.kind === 'feedback');
+}
+
+/**
+ * BOTH reminder kinds in ONE events scan (the top bar + the bell poll want both; two separate
+ * full-collection reads doubled the hottest read path). Travel: staffed, starts within 14 days,
+ * no travel set. Feedback: staffed, ended within the past 14 days (endDate falling back to
+ * startDate — the editor stores '' for an unset end, so blank-checks, not just nullish), no
+ * feedback submitted, AND a valid startDate (the submit action refuses without one, so a
+ * reminder would deep-link to a card that never renders).
+ */
+export async function getAllReminders(email: string): Promise<TravelReminder[]> {
   const me = lc(email);
   if (!me) return [];
   let docs: EventDoc[];
@@ -102,31 +128,48 @@ export async function getTravelReminders(email: string): Promise<TravelReminder[
     docs = await db
       .collection<EventDoc>('events')
       .find({ $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }] })
+      .project<EventDoc>({ 'payload.name': 1, 'payload.startDate': 1, 'payload.endDate': 1, 'payload.staff': 1 })
       .toArray();
   } catch {
     return [];
   }
   const now = Date.now();
   const soon = now + 14 * 86400000;
-  const out: TravelReminder[] = [];
+  const isYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const travel: TravelReminder[] = [];
+  const feedback: TravelReminder[] = [];
   for (const d of docs) {
     const ev = d?.payload;
     if (!ev) continue;
-    const sd = String(ev.startDate ?? '').trim();
-    // Parse the start as local midnight (matches the source's new Date(startDate + 'T00:00')).
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(sd)) continue;
-    const [y, m, dd] = sd.split('-').map(Number);
-    const start = new Date(y, (m || 1) - 1, dd || 1).getTime();
-    if (!start || start < now || start > soon) continue;
     const staffer = (ev.staff ?? []).find((s) => lc(s?.email) === me);
     if (!staffer) continue;
-    const hasTravel = !!(staffer.travel && (staffer.travel.outbound || staffer.travel.return));
-    if (hasTravel) continue;
-    out.push({ id: `rem_${d._id}`, eventId: d._id, eventName: ev.name || '', startDate: sd });
+
+    const sd = String(ev.startDate ?? '').trim();
+    if (!isYmd(sd)) continue; // both kinds need a real start date
+
+    // TRAVEL: starts within the next 14 days, no travel yet. Local midnight (matches the source's
+    // new Date(startDate + 'T00:00')).
+    const [y, m, dd] = sd.split('-').map(Number);
+    const start = new Date(y, (m || 1) - 1, dd || 1).getTime();
+    if (start && start >= now && start <= soon) {
+      const hasTravel = !!(staffer.travel && (staffer.travel.outbound || staffer.travel.return));
+      if (!hasTravel) travel.push({ id: `rem_${d._id}`, eventId: d._id, eventName: ev.name || '', startDate: sd });
+      continue; // an upcoming event can't also need post-event feedback
+    }
+
+    // FEEDBACK: ended within the past 14 days (end-of-day), no submitted feedback.
+    const edRaw = String(ev.endDate ?? '').trim();
+    const ed = isYmd(edRaw) ? edRaw : sd; // '' or malformed endDate falls back to the start date
+    const [ey, em, edd] = ed.split('-').map(Number);
+    const end = new Date(ey, (em || 1) - 1, edd || 1, 23, 59, 59).getTime();
+    if (!end || end >= now || now - end > 14 * 86400000) continue;
+    if (staffer.feedback && typeof staffer.feedback === 'object' && staffer.feedback.submittedAt) continue;
+    feedback.push({ id: `fb_${d._id}`, eventId: d._id, eventName: ev.name || '', startDate: ed, kind: 'feedback' });
   }
-  // Soonest first.
-  out.sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0));
-  return out;
+  // Travel soonest-first, then feedback most-recently-ended-first.
+  travel.sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0));
+  feedback.sort((a, b) => (a.startDate > b.startDate ? -1 : a.startDate < b.startDate ? 1 : 0));
+  return [...travel, ...feedback];
 }
 
 function lc(v: unknown): string {

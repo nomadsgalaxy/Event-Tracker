@@ -29,7 +29,10 @@ export type KeyName =
   | 'openskyClientSecret'
   | 'easypostKey'
   | 'track17Key'
-  | 'aftershipKey';
+  | 'aftershipKey'
+  | 'anthropicKey'
+  | 'openaiKey'
+  | 'geminiKey';
 
 export interface KeyStatus {
   name: KeyName;
@@ -114,6 +117,30 @@ const GROUPS: KeyGroup[] = [
         label: 'AfterShip API key — UniShippers LTL (paid)',
         hint: 'Aggregator that natively tracks UniShippers/LTL when EasyPost can’t read a number. Paid (~$99/mo); a free tier exists.',
         placeholder: 'asat_…',
+      },
+    ],
+  },
+  {
+    title: 'AI — event report generation',
+    defaultOpen: false,
+    keys: [
+      {
+        name: 'anthropicKey',
+        label: 'Anthropic API key — Claude',
+        hint: 'Powers "Generate AI report" on the post-event Event Report page. Any ONE of the three AI keys is enough; when several are set you pick the provider on the report page. Get a key at console.anthropic.com. Server-side only — never sent to a browser. Without any key the report page still offers a copy-paste prompt for any AI.',
+        placeholder: 'sk-ant-…',
+      },
+      {
+        name: 'openaiKey',
+        label: 'OpenAI API key — GPT',
+        hint: 'Alternative provider for the AI event report. Get a key at platform.openai.com. Server-side only.',
+        placeholder: 'sk-…',
+      },
+      {
+        name: 'geminiKey',
+        label: 'Google Gemini API key',
+        hint: 'Alternative provider for the AI event report. Get a key at aistudio.google.com. Separate from the Google Maps key above. Server-side only.',
+        placeholder: 'AIza…',
       },
     ],
   },
