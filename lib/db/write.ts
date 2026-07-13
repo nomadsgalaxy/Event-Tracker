@@ -60,6 +60,7 @@ const EDITABLE_FIELDS = [
   'outbound',
   'return',
   'tags',
+  'brief', // the Event Brief / planning notes (also API/MCP-writable for AI agents)
   // #93 parity additions (the detail view already reads these; the editor now writes them):
   'website',
   'setup',

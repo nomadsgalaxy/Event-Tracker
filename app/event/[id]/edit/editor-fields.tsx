@@ -821,6 +821,27 @@ export function OverviewPanel() {
       <FieldGroup title="Basics">
         <TextField name="name" label="Name" placeholder="e.g. RAPID + TCT 2026" />
         <StateField />
+        <FormField
+          name="brief"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Brief / Notes</FormLabel>
+              <FormControl>
+                <Textarea
+                  {...field}
+                  value={typeof field.value === 'string' ? field.value : ''}
+                  placeholder="Goals, booth plan, talking points, logistics context — anything the team should read before the show."
+                  rows={5}
+                  maxLength={20000}
+                />
+              </FormControl>
+              <FormDescription>
+                Shown on the event page. Also writable through the API/MCP, so an AI agent can draft or update it.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       </FieldGroup>
 
       <FieldGroup title="Schedule">

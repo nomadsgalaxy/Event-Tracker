@@ -120,6 +120,7 @@ const patchSchema = z
     outbound: shipLeg.optional(),
     return: shipLeg.optional(),
     tags: z.array(z.string()).optional(),
+    brief: z.string().max(20000).optional(), // Event Brief / planning notes
     // #93 parity additions:
     website: z.string().optional(),
     setup: setupWindow.optional(),

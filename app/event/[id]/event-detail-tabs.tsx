@@ -567,6 +567,13 @@ function OverviewPanel({
           </p>
         </div>
       ) : null}
+      {/* The Event Brief / planning notes — editor- or agent-written context the team reads first. */}
+      {typeof p.brief === 'string' && p.brief.trim() !== '' && (
+        <FieldGroup title="Brief / Notes">
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{p.brief}</p>
+        </FieldGroup>
+      )}
+
       <FieldGroup title="Schedule">
         <DataRow label="Start" value={fmtDate(p.startDate)} />
         <DataRow label="End" value={fmtDate(p.endDate)} />

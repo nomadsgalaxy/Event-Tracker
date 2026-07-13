@@ -364,6 +364,7 @@ def create_event(
     booth: str = "",
     website: str = "",
     state: str = "",
+    brief: str = "",
 ) -> dict[str, Any]:
     """Create a new event (WRITE).
 
@@ -377,6 +378,9 @@ def create_event(
         website: Event website URL.
         state: One of draft|upcoming|packing|ready|onsite|returning|unpacking|
             closed|complete|cancelled|flagged. Empty = server default.
+        brief: The Event Brief / planning notes (free text, markdown-friendly).
+            Shown on the event page — put goals, booth plan, talking points,
+            and logistics context here.
 
     Returns {event} (HTTP 201). Maps to POST /api/v1/events.
     """
@@ -395,6 +399,7 @@ def create_event(
             "endDate": end_date,
             "website": website,
             "state": st,
+            "brief": brief,
         }
     )
     venue = _compact({"city": city, "booth": booth})
@@ -412,6 +417,7 @@ def update_event(
     end_date: str = "",
     lead: str = "",
     website: str = "",
+    brief: str = "",
 ) -> dict[str, Any]:
     """Update (merge) fields on an existing event (WRITE).
 
@@ -424,6 +430,11 @@ def update_event(
         name, website, lead: Free-text fields (empty = leave unchanged).
         state: One of the valid event states (empty = leave unchanged).
         start_date / end_date: ISO dates (empty = leave unchanged).
+        brief: The Event Brief / planning notes (free text, markdown-friendly,
+            REPLACES the stored brief). Shown on the event page — the place for
+            an agent to write goals, booth plans, talking points, and logistics
+            context. Read the current one first via get_event() and extend it
+            rather than blindly overwriting a human-written brief.
 
     Returns {event}. Maps to POST /api/v1/events/<id>.
     """
@@ -441,6 +452,7 @@ def update_event(
             "endDate": end_date,
             "lead": lead,
             "website": website,
+            "brief": brief,
         }
     )
     if not body:

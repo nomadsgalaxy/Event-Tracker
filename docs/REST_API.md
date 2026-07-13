@@ -61,7 +61,7 @@ capability (shown), re-intersected with your role.
 | GET | `/status` | read | Event / case / inventory counts |
 | GET | `/events` · `/events/:id` | read | PII-stripped; `:id` includes the manifest |
 | POST | `/events` | `event.create` | Create an event |
-| POST·PATCH | `/events/:id` | `event.edit` (other fields), `pallets.edit` (`cases`) | Partial update |
+| POST·PATCH | `/events/:id` | `event.edit` (other fields), `pallets.edit` (`cases`) | Partial update; `brief` is the Event Brief / planning notes (free text — the field AI agents write via the MCP `update_event`) |
 | DELETE | `/events/:id` | `event.delete` | Soft-delete |
 | POST | `/events/:id/shipment` | `event.edit` | Outbound/return leg |
 | POST | `/events/:id/travel` · `/events/:id/lodging` | `staff.pii.view` | Defaults to the key owner |

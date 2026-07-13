@@ -340,6 +340,10 @@ export interface EventPayload {
   // Per-day hour overrides keyed by 'YYYY-MM-DD' (multi-start days, exhibitor vs attendee hours).
   // A day with no entry uses doorsOpen/doorsClose. Edited by the editor's DayHoursEditor strip.
   hours?: Record<string, EventDayHours>;
+  // Event BRIEF / planning notes — free text (markdown-friendly) shown on the detail Overview.
+  // Editable in the editor AND via the API/MCP (update_event brief=…), so AI agents can write
+  // meeting notes, goals, and logistics context onto the event.
+  brief?: string;
   city?: string;
   venue?: VenuePayload;
   staff?: Staffer[];
