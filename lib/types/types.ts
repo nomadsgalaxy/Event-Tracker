@@ -49,6 +49,11 @@ export interface HotelInfo {
   // 1–5 breakfast QUALITY — mirrored from the post-event survey (StafferFeedback.breakfast), the
   // same way rating mirrors fb.hotel. Feeds the suggestions + the hotel leaderboard.
   breakfastRating?: number;
+  // Amenity flags — canonical ids from the HotelEditor's fixed set ('gym' | 'pool' | 'laundry' |
+  // 'restaurant' | 'parking' | 'shuttle'). Informational booking-time facts (no ratings), carried
+  // forward by suggestion tap-to-fill and shown on the hotel leaderboard. Rendered by
+  // capitalizing the id, so adding a new id needs no label map.
+  amenities?: string[];
   [k: string]: unknown;
 }
 

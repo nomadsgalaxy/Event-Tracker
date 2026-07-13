@@ -740,6 +740,11 @@ function HotelBlock({ hotel }: { hotel: HotelInfo }) {
           </span>
         </div>
       )}
+      {Array.isArray(hotel.amenities) && hotel.amenities.length > 0 && (
+        <div className="pl-[22px] capitalize">
+          Amenities: <span className="text-foreground">{hotel.amenities.filter((a) => typeof a === 'string').join(' · ')}</span>
+        </div>
+      )}
     </div>
   );
 }

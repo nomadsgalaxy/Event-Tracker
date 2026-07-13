@@ -32,6 +32,7 @@ interface Suggestion {
   lastStay: string; // its startDate (YYYY-MM-DD)
   breakfast: string; // 'included' | 'paid' | 'none' | '' (unknown) — from the most recent stay
   breakfastRating: number | null; // avg breakfast QUALITY, same per-event-first math as rating
+  amenities: string[]; // amenity flags (gym/pool/laundry/…) — merged across stays like the display fields
 }
 
 export async function GET(req: NextRequest) {
@@ -128,6 +129,9 @@ export async function GET(req: NextRequest) {
         lastStay: a.lastStay,
         breakfast: ['included', 'paid', 'none'].includes(bf) ? bf : '',
         breakfastRating: perEventBf.length ? Math.round(avg(perEventBf) * 10) / 10 : null,
+        amenities: Array.isArray(a.hotel.amenities)
+          ? a.hotel.amenities.filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 12)
+          : [],
       };
     })
     .sort((x, y) => (y.rating ?? 0) - (x.rating ?? 0) || y.lastStay.localeCompare(x.lastStay))

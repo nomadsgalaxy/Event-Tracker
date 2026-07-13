@@ -812,8 +812,8 @@ export function ReportsScreen({
               ? () =>
                   downloadCsv(
                     'hotel-leaderboard',
-                    ['Hotel', 'City', 'Rating', 'Breakfast', 'Breakfast ★', 'Raters', 'Stays', 'Last stay'],
-                    feedback.hotels.map((h) => [h.name, h.city, h.rating ?? '', h.breakfast, h.breakfastRating ?? '', h.raters, h.stays, h.lastStay])
+                    ['Hotel', 'City', 'Rating', 'Breakfast', 'Breakfast ★', 'Amenities', 'Raters', 'Stays', 'Last stay'],
+                    feedback.hotels.map((h) => [h.name, h.city, h.rating ?? '', h.breakfast, h.breakfastRating ?? '', h.amenities.join('; '), h.raters, h.stays, h.lastStay])
                   )
               : undefined
           }
@@ -839,6 +839,12 @@ export function ReportsScreen({
                 ) : (
                   '—'
                 ),
+            },
+            {
+              key: 'amenities',
+              label: 'Amenities',
+              render: (r) =>
+                r.amenities.length ? <span className="text-xs capitalize">{r.amenities.join(' · ')}</span> : '—',
             },
             { key: 'raters', label: 'Raters', num: true },
             { key: 'stays', label: 'Stays', num: true },

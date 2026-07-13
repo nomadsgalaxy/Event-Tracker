@@ -1373,6 +1373,7 @@ interface HotelSuggestion {
   lastEvent: string;
   breakfast: string; // 'included' | 'paid' | 'none' | ''
   breakfastRating: number | null;
+  amenities: string[];
 }
 
 function HotelSuggestions({ h }: { h: string }) {
@@ -1419,9 +1420,11 @@ function HotelSuggestions({ h }: { h: string }) {
       zip: sug.zip,
       phone: sug.phone,
     };
-    // Breakfast availability is a property of the hotel — carry it into the new booking as a
-    // starting point (unlike the RATING, which belongs to the past stay and is never inherited).
+    // Breakfast availability + amenities are properties of the hotel — carry them into the new
+    // booking as a starting point (unlike the RATING, which belongs to the past stay and is never
+    // inherited).
     if (sug.breakfast) next.breakfast = sug.breakfast;
+    if (Array.isArray(sug.amenities) && sug.amenities.length) next.amenities = sug.amenities;
     setValue(h as Name, next as never, { shouldDirty: true });
   };
   const bfLabel = (b: string) => (b === 'included' ? 'bfast incl.' : b === 'paid' ? 'bfast paid' : b === 'none' ? 'no bfast' : '');
@@ -1434,7 +1437,14 @@ function HotelSuggestions({ h }: { h: string }) {
             key={sug.name}
             type="button"
             onClick={() => pick(sug)}
-            title={sug.lastEvent ? `Last stay: ${sug.lastEvent}` : undefined}
+            title={
+              [
+                sug.lastEvent ? `Last stay: ${sug.lastEvent}` : '',
+                sug.amenities?.length ? `Amenities: ${sug.amenities.join(', ')}` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ') || undefined
+            }
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             {sug.rating != null ? (
@@ -1465,6 +1475,10 @@ function HotelSuggestions({ h }: { h: string }) {
   );
 }
 
+// The fixed amenity vocabulary — ids double as display labels (capitalized), so aggregation
+// across stays never fragments on free-text spellings.
+const HOTEL_AMENITIES = ['gym', 'pool', 'laundry', 'restaurant', 'parking', 'shuttle'] as const;
+
 // ── Hotel sub-editor (PII) ─────────────────────────────────────────────────────
 // Collapsible. On first expand, seeds default check-in/out from the onsite range (Python parity).
 function HotelEditor({ base, index }: { base: string; index: number }) {
@@ -1473,7 +1487,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
   const hotel = useWatch({ control, name: h as Name }) as Record<string, unknown> | undefined;
   const hasAny = !!(
     hotel &&
-    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes || hotel.rating || hotel.breakfast)
+    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes || hotel.rating || hotel.breakfast || (Array.isArray(hotel.amenities) && hotel.amenities.length))
   );
   const [expanded, setExpanded] = useState(hasAny);
 
@@ -1664,6 +1678,37 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
             }}
           />
         </div>
+      </div>
+      {/* Amenity flags — informational (no ratings); ids render capitalized everywhere. */}
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Hotel amenities">
+        <span className="mr-0.5 text-[11px] text-muted-foreground">Amenities</span>
+        {HOTEL_AMENITIES.map((a) => {
+          const selected = Array.isArray(hotel?.amenities) && (hotel.amenities as unknown[]).includes(a);
+          return (
+            <button
+              key={a}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => {
+                const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+                const list = Array.isArray(cur.amenities) ? (cur.amenities as string[]).filter((x) => typeof x === 'string') : [];
+                const nextList = selected ? list.filter((x) => x !== a) : [...list, a];
+                const next = { ...cur };
+                if (nextList.length) next.amenities = nextList;
+                else delete next.amenities;
+                setValue(h as Name, next as never, { shouldDirty: true });
+              }}
+              className={cn(
+                'rounded-full border px-2.5 py-0.5 text-xs capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                selected
+                  ? 'border-primary/60 bg-primary/15 text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-muted/50'
+              )}
+            >
+              {a}
+            </button>
+          );
+        })}
       </div>
       {/* keep `index` referenced for a stable per-row id space if needed later */}
       <span className="sr-only">Hotel for staffer {index + 1}</span>
