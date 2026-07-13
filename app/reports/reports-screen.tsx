@@ -812,8 +812,8 @@ export function ReportsScreen({
               ? () =>
                   downloadCsv(
                     'hotel-leaderboard',
-                    ['Hotel', 'City', 'Rating', 'Raters', 'Stays', 'Last stay'],
-                    feedback.hotels.map((h) => [h.name, h.city, h.rating ?? '', h.raters, h.stays, h.lastStay])
+                    ['Hotel', 'City', 'Rating', 'Breakfast', 'Breakfast ★', 'Raters', 'Stays', 'Last stay'],
+                    feedback.hotels.map((h) => [h.name, h.city, h.rating ?? '', h.breakfast, h.breakfastRating ?? '', h.raters, h.stays, h.lastStay])
                   )
               : undefined
           }
@@ -825,6 +825,21 @@ export function ReportsScreen({
             { key: 'name', label: 'Hotel', strong: true },
             { key: 'city', label: 'City' },
             { key: 'rating', label: 'Rating', num: true, render: (r) => stars(r.rating, `${r.name} rating`) },
+            {
+              key: 'breakfast',
+              label: 'Breakfast',
+              render: (r) =>
+                r.breakfast || r.breakfastRating != null ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {r.breakfast ? (r.breakfast === 'included' ? 'Included' : r.breakfast === 'paid' ? 'Paid' : 'None') : null}
+                    {r.breakfastRating != null && (
+                      <span className="font-mono tabular-nums text-muted-foreground">{r.breakfastRating}★</span>
+                    )}
+                  </span>
+                ) : (
+                  '—'
+                ),
+            },
             { key: 'raters', label: 'Raters', num: true },
             { key: 'stays', label: 'Stays', num: true },
             { key: 'lastStay', label: 'Last stay', num: true, render: (r) => r.lastStay || '—' },

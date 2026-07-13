@@ -574,6 +574,8 @@ export interface FeedbackHotelRow {
   stays: number; // distinct events
   raters: number;
   rating: number | null; // avg of per-event averages
+  breakfast: string; // 'included' | 'paid' | 'none' | '' — from the most recent stay
+  breakfastRating: number | null; // avg breakfast quality, per-event-averaged
   lastStay: string; // startDate of the most recent stay
 }
 
@@ -612,7 +614,15 @@ export function buildFeedbackReport(
   let rosterTotal = 0;
   const hotelAgg = new Map<
     string,
-    { name: string; city: string; perEventRatings: number[][]; stays: Set<string>; lastStay: string }
+    {
+      name: string;
+      city: string;
+      perEventRatings: number[][];
+      perEventBreakfast: number[][];
+      breakfast: string;
+      stays: Set<string>;
+      lastStay: string;
+    }
   >();
 
   for (const { id, payload: e } of events) {
@@ -639,7 +649,7 @@ export function buildFeedbackReport(
     const veR: number[] = [];
     const hoR: number[] = [];
     let responded = 0;
-    const perHotelHere = new Map<string, { name: string; city: string; ratings: number[] }>();
+    const perHotelHere = new Map<string, { name: string; city: string; ratings: number[]; bfRatings: number[]; breakfast: string }>();
     for (const s of staff) {
       const fb = (s.feedback ?? {}) as Record<string, unknown>;
       const submitted = typeof fb.submittedAt === 'number';
@@ -647,6 +657,7 @@ export function buildFeedbackReport(
       const er = fbRating(fb.event);
       const vr = fbRating(fb.venue);
       const hr = fbRating(fb.hotel ?? (submitted ? null : s.hotel?.rating));
+      const bfr = fbRating(fb.breakfast ?? (submitted ? null : s.hotel?.breakfastRating));
       if (er != null) evR.push(er);
       if (vr != null) veR.push(vr);
       if (hr != null) hoR.push(hr);
@@ -655,10 +666,13 @@ export function buildFeedbackReport(
         const key = fbLc(hName);
         let h = perHotelHere.get(key);
         if (!h) {
-          h = { name: hName, city: String(s.hotel?.city || e.city || e.venue?.city || '').trim(), ratings: [] };
+          h = { name: hName, city: String(s.hotel?.city || e.city || e.venue?.city || '').trim(), ratings: [], bfRatings: [], breakfast: '' };
           perHotelHere.set(key, h);
         }
         if (hr != null) h.ratings.push(hr);
+        if (bfr != null) h.bfRatings.push(bfr);
+        const bfa = String(s.hotel?.breakfast ?? '');
+        if (!h.breakfast && ['included', 'paid', 'none'].includes(bfa)) h.breakfast = bfa;
       }
     }
 
@@ -687,15 +701,17 @@ export function buildFeedbackReport(
     for (const [key, h] of perHotelHere) {
       let agg = hotelAgg.get(key);
       if (!agg) {
-        agg = { name: h.name, city: h.city, perEventRatings: [], stays: new Set(), lastStay: '' };
+        agg = { name: h.name, city: h.city, perEventRatings: [], perEventBreakfast: [], breakfast: '', stays: new Set(), lastStay: '' };
         hotelAgg.set(key, agg);
       }
       agg.stays.add(id);
       if (h.ratings.length) agg.perEventRatings.push(h.ratings);
+      if (h.bfRatings.length) agg.perEventBreakfast.push(h.bfRatings);
       if (sd >= agg.lastStay) {
         agg.lastStay = sd;
         agg.name = h.name;
         if (h.city) agg.city = h.city;
+        if (h.breakfast) agg.breakfast = h.breakfast;
       }
     }
   }
@@ -710,6 +726,8 @@ export function buildFeedbackReport(
       stays: a.stays.size,
       raters: a.perEventRatings.reduce((s, l) => s + l.length, 0),
       rating: fbAvg1(a.perEventRatings.map((l) => l.reduce((s, x) => s + x, 0) / l.length)),
+      breakfast: a.breakfast,
+      breakfastRating: fbAvg1(a.perEventBreakfast.map((l) => l.reduce((s, x) => s + x, 0) / l.length)),
       lastStay: a.lastStay,
     }))
     .sort((x, y) => (y.rating ?? 0) - (x.rating ?? 0) || y.lastStay.localeCompare(x.lastStay));

@@ -24,6 +24,7 @@ export interface FeedbackInput {
   event?: number;
   venue?: number;
   hotel?: number;
+  breakfast?: number;
   eventNotes?: string;
   venueNotes?: string;
   hotelNotes?: string;
@@ -56,9 +57,11 @@ export async function submitEventFeedbackAction(eventId: string, input: Feedback
   const ev = cleanRating(input?.event);
   const venue = cleanRating(input?.venue);
   const hotel = cleanRating(input?.hotel);
+  const breakfast = cleanRating(input?.breakfast);
   if (ev) fb.event = ev;
   if (venue) fb.venue = venue;
   if (hotel) fb.hotel = hotel;
+  if (breakfast) fb.breakfast = breakfast;
   // Slice by code units, then drop a bisected surrogate pair so an emoji straddling the limit
   // can't persist as a lone surrogate (U+FFFD in every export).
   const note = (v: unknown, max: number) => {
@@ -75,7 +78,7 @@ export async function submitEventFeedbackAction(eventId: string, input: Feedback
   if (venueNotes) fb.venueNotes = venueNotes;
   if (hotelNotes) fb.hotelNotes = hotelNotes;
   if (comments) fb.comments = comments;
-  if (!fb.event && !fb.venue && !fb.hotel && !fb.eventNotes && !fb.venueNotes && !fb.hotelNotes && !fb.comments) {
+  if (!fb.event && !fb.venue && !fb.hotel && !fb.breakfast && !fb.eventNotes && !fb.venueNotes && !fb.hotelNotes && !fb.comments) {
     return { ok: false, error: 'Rate at least one thing (or leave a note).' };
   }
   fb.submittedAt = Date.now();
@@ -114,6 +117,12 @@ export async function submitEventFeedbackAction(eventId: string, input: Feedback
     set[`payload.staff.${idx}.hotel.rating`] = fb.hotel;
   } else if (!fb.hotel && prevFb?.hotel && curHotel && Number(curHotel.rating) === Number(prevFb.hotel)) {
     unset[`payload.staff.${idx}.hotel.rating`] = '';
+  }
+  // Breakfast QUALITY mirrors to hotel.breakfastRating with identical semantics.
+  if (fb.breakfast && curHotel?.name) {
+    set[`payload.staff.${idx}.hotel.breakfastRating`] = fb.breakfast;
+  } else if (!fb.breakfast && prevFb?.breakfast && curHotel && Number(curHotel.breakfastRating) === Number(prevFb.breakfast)) {
+    unset[`payload.staff.${idx}.hotel.breakfastRating`] = '';
   }
 
   // Pin the index to the email we resolved it from — a concurrent roster reorder makes this a

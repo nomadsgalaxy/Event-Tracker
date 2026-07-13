@@ -30,6 +30,8 @@ interface Suggestion {
   stays: number; // distinct past events
   lastEvent: string; // name of the most recent event stayed
   lastStay: string; // its startDate (YYYY-MM-DD)
+  breakfast: string; // 'included' | 'paid' | 'none' | '' (unknown) — from the most recent stay
+  breakfastRating: number | null; // avg breakfast QUALITY, same per-event-first math as rating
 }
 
 export async function GET(req: NextRequest) {
@@ -51,7 +53,14 @@ export async function GET(req: NextRequest) {
   const events = await getEvents();
   const agg = new Map<
     string,
-    { hotel: HotelInfo; perEventRatings: Map<string, number[]>; stays: Set<string>; lastStay: string; lastEvent: string }
+    {
+      hotel: HotelInfo;
+      perEventRatings: Map<string, number[]>;
+      perEventBreakfast: Map<string, number[]>;
+      stays: Set<string>;
+      lastStay: string;
+      lastEvent: string;
+    }
   >();
   for (const ev of events) {
     const p = ev.payload;
@@ -68,7 +77,7 @@ export async function GET(req: NextRequest) {
       if (!hCity || !(hCity.includes(city) || city.includes(hCity))) continue;
       let a = agg.get(key);
       if (!a) {
-        a = { hotel: {}, perEventRatings: new Map(), stays: new Set(), lastStay: '', lastEvent: '' };
+        a = { hotel: {}, perEventRatings: new Map(), perEventBreakfast: new Map(), stays: new Set(), lastStay: '', lastEvent: '' };
         agg.set(key, a);
       }
       a.stays.add(ev._id);
@@ -77,6 +86,12 @@ export async function GET(req: NextRequest) {
         const list = a.perEventRatings.get(ev._id) || [];
         list.push(r);
         a.perEventRatings.set(ev._id, list);
+      }
+      const br = Number(hotel.breakfastRating);
+      if (Number.isFinite(br) && br >= 1 && br <= 5) {
+        const list = a.perEventBreakfast.get(ev._id) || [];
+        list.push(br);
+        a.perEventBreakfast.set(ev._id, list);
       }
       // The most recent stay wins the display fields (address/phone drift over the years).
       if (startDate >= a.lastStay) {
@@ -91,6 +106,8 @@ export async function GET(req: NextRequest) {
   const suggestions: Suggestion[] = [...agg.values()]
     .map((a) => {
       const perEvent = [...a.perEventRatings.values()].map(avg);
+      const perEventBf = [...a.perEventBreakfast.values()].map(avg);
+      const bf = String(a.hotel.breakfast ?? '');
       return {
         name: String(a.hotel.name || ''),
         address: String(a.hotel.address || ''),
@@ -103,6 +120,8 @@ export async function GET(req: NextRequest) {
         stays: a.stays.size,
         lastEvent: a.lastEvent,
         lastStay: a.lastStay,
+        breakfast: ['included', 'paid', 'none'].includes(bf) ? bf : '',
+        breakfastRating: perEventBf.length ? Math.round(avg(perEventBf) * 10) / 10 : null,
       };
     })
     .sort((x, y) => (y.rating ?? 0) - (x.rating ?? 0) || y.lastStay.localeCompare(x.lastStay))

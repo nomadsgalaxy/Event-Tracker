@@ -1371,6 +1371,8 @@ interface HotelSuggestion {
   rating: number | null;
   stays: number;
   lastEvent: string;
+  breakfast: string; // 'included' | 'paid' | 'none' | ''
+  breakfastRating: number | null;
 }
 
 function HotelSuggestions({ h }: { h: string }) {
@@ -1408,12 +1410,21 @@ function HotelSuggestions({ h }: { h: string }) {
   if ((name || '').trim() || !list.length) return null;
   const pick = (sug: HotelSuggestion) => {
     const cur = (getValues(h as Name) as Record<string, unknown>) || {};
-    setValue(
-      h as Name,
-      { ...cur, name: sug.name, address: sug.address, city: sug.city, state: sug.state, zip: sug.zip, phone: sug.phone } as never,
-      { shouldDirty: true }
-    );
+    const next: Record<string, unknown> = {
+      ...cur,
+      name: sug.name,
+      address: sug.address,
+      city: sug.city,
+      state: sug.state,
+      zip: sug.zip,
+      phone: sug.phone,
+    };
+    // Breakfast availability is a property of the hotel — carry it into the new booking as a
+    // starting point (unlike the RATING, which belongs to the past stay and is never inherited).
+    if (sug.breakfast) next.breakfast = sug.breakfast;
+    setValue(h as Name, next as never, { shouldDirty: true });
   };
+  const bfLabel = (b: string) => (b === 'included' ? 'bfast incl.' : b === 'paid' ? 'bfast paid' : b === 'none' ? 'no bfast' : '');
   return (
     <div className="grid gap-1.5">
       <span className="text-[11px] text-muted-foreground">Stayed near {target} before — tap to fill:</span>
@@ -1438,6 +1449,15 @@ function HotelSuggestions({ h }: { h: string }) {
             <span className="text-muted-foreground">
               · {sug.stays} stay{sug.stays === 1 ? '' : 's'}
             </span>
+            {bfLabel(sug.breakfast) && (
+              <span
+                className="text-muted-foreground"
+                title={sug.breakfastRating != null ? `Breakfast rated ${sug.breakfastRating}/5` : undefined}
+              >
+                · {bfLabel(sug.breakfast)}
+                {sug.breakfastRating != null ? ` ${sug.breakfastRating}★` : ''}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1453,7 +1473,7 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
   const hotel = useWatch({ control, name: h as Name }) as Record<string, unknown> | undefined;
   const hasAny = !!(
     hotel &&
-    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes || hotel.rating)
+    (hotel.name || hotel.address || hotel.room || hotel.phone || hotel.checkInAt || hotel.checkOutAt || hotel.confirmation || hotel.notes || hotel.rating || hotel.breakfast)
   );
   const [expanded, setExpanded] = useState(hasAny);
 
@@ -1605,19 +1625,45 @@ function HotelEditor({ base, index }: { base: string; index: number }) {
         </FormItem>
       </div>
       <BareInput name={`${h}.notes` as Name} placeholder="Notes (e.g. rooming with M. Kovář, late check-in)" ariaLabel="Hotel notes" />
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">How was the stay?</span>
-        <StarRating
-          label="Hotel stay rating"
-          value={Number(hotel?.rating) || 0}
-          onChange={(n) => {
-            const cur = (getValues(h as Name) as Record<string, unknown>) || {};
-            const next = { ...cur };
-            if (n) next.rating = n;
-            else delete next.rating;
-            setValue(h as Name, next as never, { shouldDirty: true });
-          }}
-        />
+      {/* Breakfast availability — a booking-time fact (quality gets rated in the post-event survey). */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Breakfast</span>
+          <Select
+            value={String(hotel?.breakfast ?? 'unknown')}
+            onValueChange={(v) => {
+              const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+              const next = { ...cur };
+              if (v === 'unknown') delete next.breakfast;
+              else next.breakfast = v;
+              setValue(h as Name, next as never, { shouldDirty: true });
+            }}
+          >
+            <SelectTrigger size="sm" className="h-8 w-40" aria-label="Breakfast availability">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unknown">Unknown</SelectItem>
+              <SelectItem value="included">Included</SelectItem>
+              <SelectItem value="paid">Available (paid)</SelectItem>
+              <SelectItem value="none">None</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">How was the stay?</span>
+          <StarRating
+            label="Hotel stay rating"
+            value={Number(hotel?.rating) || 0}
+            onChange={(n) => {
+              const cur = (getValues(h as Name) as Record<string, unknown>) || {};
+              const next = { ...cur };
+              if (n) next.rating = n;
+              else delete next.rating;
+              setValue(h as Name, next as never, { shouldDirty: true });
+            }}
+          />
+        </div>
       </div>
       {/* keep `index` referenced for a stable per-row id space if needed later */}
       <span className="sr-only">Hotel for staffer {index + 1}</span>

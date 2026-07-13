@@ -117,6 +117,7 @@ export default async function EventReportPage({ params }: { params: Promise<{ id
                 <tr className="border-b border-border bg-card text-left text-xs text-muted-foreground">
                   <th className="px-3 py-2 font-medium">Hotel</th>
                   <th className="px-3 py-2 font-medium">Rating</th>
+                  <th className="px-3 py-2 font-medium">Breakfast</th>
                   <th className="px-3 py-2 font-medium">Guests</th>
                 </tr>
               </thead>
@@ -134,6 +135,25 @@ export default async function EventReportPage({ params }: { params: Promise<{ id
                         </span>
                       ) : (
                         <span className="text-muted-foreground">not rated</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {h.breakfast || h.breakfastRating != null ? (
+                        <span className="inline-flex items-center gap-2">
+                          {h.breakfast && (
+                            <span className={h.breakfast === 'none' ? 'text-muted-foreground' : ''}>
+                              {h.breakfast === 'included' ? 'Included' : h.breakfast === 'paid' ? 'Paid' : 'None'}
+                            </span>
+                          )}
+                          {h.breakfastRating != null && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <StarRating value={Math.round(h.breakfastRating)} size={12} label={`${h.name} breakfast rating`} />
+                              <span className="tabular-nums text-muted-foreground">{h.breakfastRating}</span>
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 tabular-nums">{h.guests}</td>

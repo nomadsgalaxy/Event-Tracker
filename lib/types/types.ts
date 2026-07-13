@@ -42,6 +42,13 @@ export interface HotelInfo {
   // /api/hotel-suggestions aggregate averages it across past stays so planning a new event in the
   // same city surfaces "we've stayed here before" with a verdict.
   rating?: number;
+  // Breakfast at this hotel: 'included' (free with the room), 'paid' (available for purchase),
+  // 'none'. Absent = unknown. A booking-time fact set in the HotelEditor; suggestions carry it
+  // forward to the next booking in the same city.
+  breakfast?: 'included' | 'paid' | 'none' | string;
+  // 1–5 breakfast QUALITY — mirrored from the post-event survey (StafferFeedback.breakfast), the
+  // same way rating mirrors fb.hotel. Feeds the suggestions + the hotel leaderboard.
+  breakfastRating?: number;
   [k: string]: unknown;
 }
 
@@ -118,6 +125,7 @@ export interface StafferFeedback {
   event?: number; // overall event, 1–5
   venue?: number; // 1–5
   hotel?: number; // 1–5 (mirrored to staffer.hotel.rating on submit)
+  breakfast?: number; // 1–5 breakfast quality (mirrored to staffer.hotel.breakfastRating)
   // Per-topic details ("what happened") — free text alongside each rating.
   eventNotes?: string;
   venueNotes?: string;

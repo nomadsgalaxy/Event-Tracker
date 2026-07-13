@@ -89,6 +89,7 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
   const [event, setEvent] = useState(Number(initial?.event) || 0);
   const [venue, setVenue] = useState(Number(initial?.venue) || 0);
   const [hotel, setHotel] = useState(Number(initial?.hotel) || 0);
+  const [breakfast, setBreakfast] = useState(Number(initial?.breakfast) || 0);
   const [eventNotes, setEventNotes] = useState(String(initial?.eventNotes ?? ''));
   const [venueNotes, setVenueNotes] = useState(String(initial?.venueNotes ?? ''));
   const [hotelNotes, setHotelNotes] = useState(String(initial?.hotelNotes ?? ''));
@@ -101,6 +102,7 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
     setEvent(Number(initial?.event) || 0);
     setVenue(Number(initial?.venue) || 0);
     setHotel(Number(initial?.hotel) || 0);
+    setBreakfast(Number(initial?.breakfast) || 0);
     setEventNotes(String(initial?.eventNotes ?? ''));
     setVenueNotes(String(initial?.venueNotes ?? ''));
     setHotelNotes(String(initial?.hotelNotes ?? ''));
@@ -109,11 +111,12 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
   };
 
   const hasAnything =
-    !!(event || venue || hotel) || !!(eventNotes.trim() || venueNotes.trim() || hotelNotes.trim() || comments.trim());
+    !!(event || venue || hotel || breakfast) ||
+    !!(eventNotes.trim() || venueNotes.trim() || hotelNotes.trim() || comments.trim());
 
   const submit = () => {
     startSaving(() => {
-      submitEventFeedbackAction(eventId, { event, venue, hotel, eventNotes, venueNotes, hotelNotes, comments }).then((r) => {
+      submitEventFeedbackAction(eventId, { event, venue, hotel, breakfast, eventNotes, venueNotes, hotelNotes, comments }).then((r) => {
         if (r.ok) {
           toast.success('Thanks — feedback saved.');
           setEditing(false);
@@ -183,6 +186,12 @@ function FeedbackCard({ eventId, initial }: { eventId: string; initial: StafferF
           notes={hotelNotes}
           onNotes={setHotelNotes}
           notesPlaceholder="Location, rooms, stay again?… (optional)"
+          extra={
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">Breakfast</span>
+              <StarRating value={breakfast} onChange={setBreakfast} size={15} label="Breakfast quality rating" />
+            </div>
+          }
         />
       </div>
       <Textarea
@@ -214,6 +223,7 @@ function FeedbackRow({
   notes,
   onNotes,
   notesPlaceholder,
+  extra,
 }: {
   label: string;
   value: number;
@@ -221,6 +231,8 @@ function FeedbackRow({
   notes: string;
   onNotes: (s: string) => void;
   notesPlaceholder: string;
+  /** An extra sub-rating row (the Hotel block's Breakfast stars). */
+  extra?: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border px-3 py-2">
@@ -228,6 +240,7 @@ function FeedbackRow({
         <span className="text-xs text-muted-foreground">{label}</span>
         <StarRating value={value} onChange={onChange} size={18} label={`${label} rating`} />
       </div>
+      {extra}
       <Textarea
         value={notes}
         onChange={(e) => onNotes(e.target.value)}
@@ -717,6 +730,14 @@ function HotelBlock({ hotel }: { hotel: HotelInfo }) {
           <a href={telHref(hotel.phone)} className="text-primary hover:underline">
             ☎ {hotel.phone}
           </a>
+        </div>
+      )}
+      {(hotel.breakfast === 'included' || hotel.breakfast === 'paid' || hotel.breakfast === 'none') && (
+        <div className="pl-[22px]">
+          Breakfast:{' '}
+          <span className="text-foreground">
+            {hotel.breakfast === 'included' ? 'included' : hotel.breakfast === 'paid' ? 'available (paid)' : 'none'}
+          </span>
         </div>
       )}
     </div>
