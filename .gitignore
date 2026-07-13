@@ -12,3 +12,4 @@
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+__pycache__/
