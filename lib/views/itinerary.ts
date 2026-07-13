@@ -245,6 +245,18 @@ function flightLink(carrier: string, number: string, inner: string): string {
   const q = [carrier, number, 'flight status'].filter(Boolean).join(' ');
   return number ? aLink('https://www.google.com/search?q=' + encodeURIComponent(q), inner) : inner;
 }
+/** One boarding-pass port cell — big code style for airport codes, a smaller wrapping style for
+ *  free-text names like "Philadelphia (PHL)" (which used to CLIP with an ellipsis). */
+function portHtml(code: string, lbl: string, time: string): string {
+  const t = String(code || '').trim();
+  const cls = t.length > 5 ? 'code long' : 'code';
+  return (
+    '<div class="port"><div class="' + cls + '">' + (esc(t) || '&mdash;') + '</div><div class="lbl">' + lbl + '</div>' +
+    (time ? '<div class="tm">' + esc(fmtDateTime(time)) + '</div>' : '') +
+    '</div>'
+  );
+}
+
 /** The venue as a maps-searchable string (address when present, else name + city). */
 function venuePlace(v: { name: string; city: string; address: string }): string {
   return (v.address || [v.name, v.city].filter(Boolean).join(', ')).trim();
@@ -380,7 +392,7 @@ const ITIN_STYLES =
   ".pass .flightno{font-size:22px;font-weight:800;color:#111;letter-spacing:.02em;}" +
   ".pass .route{display:flex;align-items:flex-end;gap:14px;margin-top:10px;}" +
   ".pass .port{min-width:0;}" +
-  ".pass .port .code{font-size:24px;font-weight:800;color:#15233b;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}" +
+  ".pass .port .code{font-size:24px;font-weight:800;color:#15233b;line-height:1;max-width:220px;overflow-wrap:break-word;}"+".pass .port .code.long{font-size:14px;font-weight:700;line-height:1.2;letter-spacing:0;}" +
   ".pass .port .lbl{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#999;font-weight:700;margin-top:3px;}" +
   ".pass .port .tm{font-size:11px;color:#555;margin-top:2px;}" +
   ".pass .arrow{flex:1;border-bottom:2px dotted #b5b9c0;position:relative;margin-bottom:18px;min-width:24px;}" +
@@ -420,7 +432,15 @@ const ITIN_STYLES =
   ".notes .nrow b{color:#7a4400;}" +
   ".notes .sev{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.05em;color:#b1370a;}" +
   ".footer{margin-top:auto;padding-top:12px;border-top:1px solid #ccc;font-size:10px;color:#666;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;}" +
-  ".empty{font-style:italic;color:#777;font-size:13px;padding:8px 0;}"+"a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px;}a:hover{color:#083f9b;}.kc-dirs{margin-top:6px;font-size:11px;}" +
+  ".empty{font-style:italic;color:#777;font-size:13px;padding:8px 0;}" +
+  // Links: understated (these are documents first) — inherit color, dotted underline as the
+  // affordance; solid on hover. Dark cards (badge/keycard) get light tints for contrast.
+  "a{color:inherit;text-decoration:underline;text-decoration-style:dotted;text-decoration-thickness:1px;text-decoration-color:#9aa3b0;text-underline-offset:3px;}a:hover{text-decoration-style:solid;color:#0b57d0;}" +
+  ".badge a{text-decoration-color:rgba(205,221,242,.6);}.badge a:hover{color:#fff;}" +
+  ".keycard a{text-decoration-color:rgba(195,201,214,.6);}.keycard a:hover{color:#fff;}" +
+  ".kc-dirs{margin-top:8px;font-size:11px;}.kc-dirs a{color:#ffc9ad;font-weight:600;text-decoration-color:rgba(255,201,173,.55);}.kc-dirs a:hover{color:#ffe1d1;}" +
+  ".pass .flightno a,.trip .mode a{text-decoration:none;}.pass .flightno a:hover,.trip .mode a:hover{text-decoration:underline;}" +
+  ".pass .travellers{font-family:inherit;font-weight:600;}" +
   ".badge .dm{flex-shrink:0;width:62px;height:62px;background:#fff;padding:3px;border-radius:4px;}.badge .dm svg{display:block;width:100%;height:100%;}" +
   ".pass .stub .dm{width:60px;height:60px;background:#fff;padding:2px;border-radius:2px;}.pass .stub .dm svg{display:block;width:100%;height:100%;}" +
   "@media print{body{padding:12mm 10mm;display:block;min-height:auto;background:#fff;}.toolbar{display:none;}a{color:inherit;text-decoration:none;}.badge,.pass,.keycard,.trip,.notes{page-break-inside:avoid;}-webkit-print-color-adjust:exact;print-color-adjust:exact;}";
@@ -510,21 +530,13 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
       if (fi > 0) html += layoverHtml(flights[fi - 1], lg);
       html += '<div class="pass"><div class="main">';
       html += '<div class="topline"><span class="airline">' + (esc(lg.carrier) || 'Flight') + '</span>';
-      html += '<span class="flightno">' + flightLink(lg.carrier, lg.number, esc((lg.carrier ? lg.carrier + ' ' : '') + (lg.number || ''))) + '</span></div>';
+      // The number badge shows just the NUMBER (the airline already labels the left side — the old
+      // carrier+number duplication read twice and shouted in link styling).
+      html += '<span class="flightno">' + flightLink(lg.carrier, lg.number, esc(lg.number || lg.carrier || '')) + '</span></div>';
       html += '<div class="route">';
-      html +=
-        '<div class="port"><div class="code">' +
-        (esc(lg.from) || '—') +
-        '</div><div class="lbl">From</div>' +
-        (lg.departAt ? '<div class="tm">' + esc(fmtDateTime(lg.departAt)) + '</div>' : '') +
-        '</div>';
+      html += portHtml(lg.from, 'From', lg.departAt);
       html += '<div class="arrow"></div>';
-      html +=
-        '<div class="port"><div class="code">' +
-        (esc(lg.to) || '—') +
-        '</div><div class="lbl">To</div>' +
-        (lg.arriveAt ? '<div class="tm">' + esc(fmtDateTime(lg.arriveAt)) + '</div>' : '') +
-        '</div>';
+      html += portHtml(lg.to, 'To', lg.arriveAt);
       html += '</div>';
       const dets: string[] = [];
       if (lg.departAt) dets.push('<div><div class="dl">Date</div><div class="dv">' + esc(fmtDate(lg.departAt)) + '</div></div>');
@@ -654,7 +666,7 @@ export interface TeamMember {
   hotel: ItineraryHotel | null;
 }
 interface SharedHotel { hotel: ItineraryHotel; members: { name: string; role: string; room: string; confirmation: string; checkInAt: string; checkOutAt: string }[]; }
-interface SharedTrip { carrier: string; number: string; from: string; to: string; departAt: string; arriveAt: string; members: { name: string; confirmation: string }[]; }
+interface SharedTrip { mode: string; carrier: string; number: string; from: string; to: string; departAt: string; arriveAt: string; members: { name: string; confirmation: string }[]; }
 export interface TeamItinerary {
   event: { name: string; dates: { start: string; end: string }; venue: { name: string; city: string; booth: string; address: string } };
   capturedAt: string;
@@ -724,7 +736,7 @@ export function buildTeamItinerary(
       const key = norm(l.carrier) + '|' + norm(l.number) + '|' + (l.departAt || '').slice(0, 10);
       let g = tByKey.get(key);
       if (!g) {
-        tByKey.set(key, (g = { carrier: l.carrier, number: l.number, from: l.from, to: l.to, departAt: l.departAt, arriveAt: l.arriveAt, members: [] }));
+        tByKey.set(key, (g = { mode: l.mode, carrier: l.carrier, number: l.number, from: l.from, to: l.to, departAt: l.departAt, arriveAt: l.arriveAt, members: [] }));
         tSeen.set(key, new Set());
       }
       const seen = tSeen.get(key)!;
@@ -758,14 +770,15 @@ const TEAM_EXTRA_STYLES =
   ".member{margin:0 0 18px;page-break-inside:avoid;}.member .mh{font-size:15px;font-weight:700;color:#111;margin:0 0 6px;}.member .mh .rp{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:8px;background:#eef;color:#15233b;}.member .mh .rp.lead{background:#fd5000;color:#fff;}" +
   ".count{font-size:11px;color:#888;font-weight:600;margin-left:6px;}";
 
-function hotelCard(h: ItineraryHotel): string {
+function hotelCard(h: ItineraryHotel, venue?: string): string {
   const addr = h.address ? mapsLink(h.address, esc(h.address)) : '';
   const row = [
     h.phone ? '<div><div class="kl">Phone</div><div class="kv">' + telLink(h.phone, esc(h.phone)) + '</div></div>' : '',
     h.checkInAt ? '<div><div class="kl">Check-in</div><div class="kv">' + esc(fmtDateTime(h.checkInAt)) + '</div></div>' : '',
     h.checkOutAt ? '<div><div class="kl">Check-out</div><div class="kv">' + esc(fmtDateTime(h.checkOutAt)) + '</div></div>' : '',
   ].filter(Boolean).join('');
-  return '<div class="keycard"><div class="face"><div class="kc-eyebrow">Lodging</div><div class="kc-name">' + (esc(h.name) || 'Hotel') + '</div>' + (addr ? '<div class="kc-addr">' + addr + '</div>' : '') + (row ? '<div class="kc-row">' + row + '</div>' : '') + '</div><div class="stripe"></div></div>';
+  const dirs = h.address && venue ? '<div class="kc-dirs">' + dirLink(h.address, venue, 'Directions: hotel &rarr; venue') + '</div>' : '';
+  return '<div class="keycard"><div class="face"><div class="kc-eyebrow">Lodging</div><div class="kc-name">' + (esc(h.name) || 'Hotel') + '</div>' + (addr ? '<div class="kc-addr">' + addr + '</div>' : '') + (row ? '<div class="kc-row">' + row + '</div>' : '') + dirs + '</div><div class="stripe"></div></div>';
 }
 
 /** Render the team itinerary to a standalone, self-printing HTML document. Logistics only. */
@@ -782,7 +795,7 @@ export function renderTeamItineraryHtml(team: TeamItinerary): string {
   if (team.sharedHotels.length) {
     h += '<div class="section"><h2>Shared lodging<span class="count">' + team.sharedHotels.length + '</span></h2>';
     for (const g of team.sharedHotels) {
-      h += hotelCard(g.hotel);
+      h += hotelCard(g.hotel, venuePlace(e.venue));
       h += '<div class="roster">' + g.members.map((m) =>
         '<div class="rm"><span class="who' + (m.role === 'lead' ? ' lead' : '') + '">' + esc(m.name) + '</span>' +
         [m.room ? 'Room ' + esc(m.room) : '', (m.checkInAt || m.checkOutAt) ? esc(dateRange(m.checkInAt, m.checkOutAt)) : '']
@@ -794,15 +807,34 @@ export function renderTeamItineraryHtml(team: TeamItinerary): string {
   }
 
   if (team.sharedTrips.length) {
-    h += '<div class="section"><h2>Shared travel<span class="count">' + team.sharedTrips.length + '</span></h2>';
+    h += '<div class="section"><h2>Shared travel<span class="count">' + team.sharedTrips.length + '</span></h2><div class="cards">';
     for (const g of team.sharedTrips) {
-      const route = [g.from, g.to].filter(Boolean).map(esc).join(' → ');
-      const id = [g.carrier, g.number].filter(Boolean).map(esc).join(' ');
-      const idLinked = id ? flightLink(g.carrier, g.number, id) : '';
-      h += '<div class="trip"><div class="topline"><span class="mode">' + (idLinked || 'Flight') + '</span><span class="dir">' + esc(fmtDateTime(g.departAt)) + '</span></div>' + (route ? '<div class="route">' + route + '</div>' : '') +
-        '<div class="roster">' + g.members.map((m) => '<div class="rm"><span class="who">' + esc(m.name) + '</span></div>').join('') + '</div></div>';
+      const names = g.members.map((m) => esc(m.name)).join(' · ');
+      if (g.mode && g.mode !== 'flight') {
+        // A numbered train/drive leg — the plain trip card (a plane stub would lie).
+        const id = [g.carrier, g.number].filter(Boolean).map(esc).join(' ');
+        h += '<div class="trip"><div class="topline"><span class="mode">' + (id || esc(g.mode)) + '</span><span class="dir">' + esc(fmtDateTime(g.departAt)) + '</span></div>' +
+          '<div class="route">' + ([g.from, g.to].filter(Boolean).map(esc).join(' &rarr; ') || '') + '</div>' +
+          '<div class="detailrow"><div><div class="dl">Travelers</div><div class="dv travellers">' + names + '</div></div></div></div>';
+        continue;
+      }
+      // Same boarding-pass anatomy as the personal itinerary — main face + perforated stub.
+      h += '<div class="pass"><div class="main">';
+      h += '<div class="topline"><span class="airline">' + (esc(g.carrier) || 'Flight') + '</span>';
+      h += '<span class="flightno">' + flightLink(g.carrier, g.number, esc(g.number || g.carrier || '')) + '</span></div>';
+      h += '<div class="route">' + portHtml(g.from, 'From', g.departAt) + '<div class="arrow"></div>' + portHtml(g.to, 'To', g.arriveAt) + '</div>';
+      const dets: string[] = [];
+      if (g.departAt) dets.push('<div><div class="dl">Date</div><div class="dv">' + esc(fmtDate(g.departAt)) + '</div></div>');
+      dets.push('<div><div class="dl">Travelers</div><div class="dv travellers">' + names + '</div></div>');
+      h += '<div class="detailrow">' + dets.join('') + '</div>';
+      h += '</div>';
+      h += '<div class="stub"><div class="dir">' + g.members.length + ' traveler' + (g.members.length === 1 ? '' : 's') + '</div>';
+      const dm = dmCode([g.carrier, g.number, (g.departAt || '').slice(0, 10)].filter(Boolean).join(' '));
+      if (dm) h += '<div class="dm">' + dm + '</div>';
+      h += '<div class="stubconf">' + (esc(g.number) || '&mdash;') + '</div>';
+      h += '</div></div>';
     }
-    h += '</div>';
+    h += '</div></div>';
   }
 
   if (!team.sharedHotels.length && !team.sharedTrips.length) {
