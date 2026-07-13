@@ -47,7 +47,7 @@ interface ItineraryEvent {
   eventId: string;
   eventName: string;
   dates: { start: string; end: string };
-  venue: { name: string; city: string; booth: string };
+  venue: { name: string; city: string; booth: string; address: string };
   role: 'lead' | 'staff';
   legs: ItineraryLeg[];
   hotel: ItineraryHotel | null;
@@ -175,6 +175,7 @@ export function buildItinerarySnapshot(
         name: (ev.venue && (ev.venue.name as string)) || '',
         city: (ev.venue && (ev.venue.city as string)) || '',
         booth: (ev.venue && (ev.venue.booth as string)) || '',
+        address: (ev.venue && (ev.venue.address as string)) || '',
       },
       role: isLead ? 'lead' : 'staff',
       legs,
@@ -208,6 +209,45 @@ export function buildItinerarySnapshot(
     capturedAt: new Date().toISOString(),
     events,
   };
+}
+
+// ── Clickable links (maps / tel / flight status) ────────────────────────────────────────────
+// The print routes open in a browser tab (and survive "Save as PDF"), so links are genuinely
+// useful: tap an address for Google Maps, a phone to dial, a flight number for live status.
+// On PAPER they print as plain ink (see the print CSS: color inherit, no underline).
+function aLink(href: string, inner: string): string {
+  return '<a href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>';
+}
+function mapsLink(query: string, inner: string): string {
+  return aLink('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query), inner);
+}
+/** Google Maps driving directions between two free-text places. */
+function dirLink(origin: string, destination: string, inner: string): string {
+  return aLink(
+    'https://www.google.com/maps/dir/?api=1&origin=' + encodeURIComponent(origin) + '&destination=' + encodeURIComponent(destination),
+    inner
+  );
+}
+/** tel: href from free-text (same rules as lib/util/utils telHref — kept inline, this module is server-only). */
+function telLink(phone: string, inner: string): string {
+  const s = phone.trim();
+  if (!s) return inner;
+  const m = s.match(/^(.*?)(?:\s*(?:ext\.?|extension|x|#)\s*(\d{1,7}))\s*$/i);
+  const main = (m ? m[1] : s).trim();
+  const ext = m ? m[2] : '';
+  const plus = main.startsWith('+') ? '+' : '';
+  const dialable = main.replace(/[^0-9A-Za-z]/g, '');
+  if (!dialable || !/\d/.test(dialable)) return inner;
+  return aLink('tel:' + plus + dialable + (ext ? ';ext=' + ext : ''), inner);
+}
+/** Live flight-status search for a numbered leg (carrier + number). */
+function flightLink(carrier: string, number: string, inner: string): string {
+  const q = [carrier, number, 'flight status'].filter(Boolean).join(' ');
+  return number ? aLink('https://www.google.com/search?q=' + encodeURIComponent(q), inner) : inner;
+}
+/** The venue as a maps-searchable string (address when present, else name + city). */
+function venuePlace(v: { name: string; city: string; address: string }): string {
+  return (v.address || [v.name, v.city].filter(Boolean).join(', ')).trim();
 }
 
 // ── HTML renderer (faithful port of renderItineraryHtml's boarding-pass styling) ───────────────
@@ -380,10 +420,10 @@ const ITIN_STYLES =
   ".notes .nrow b{color:#7a4400;}" +
   ".notes .sev{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.05em;color:#b1370a;}" +
   ".footer{margin-top:auto;padding-top:12px;border-top:1px solid #ccc;font-size:10px;color:#666;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;}" +
-  ".empty{font-style:italic;color:#777;font-size:13px;padding:8px 0;}" +
+  ".empty{font-style:italic;color:#777;font-size:13px;padding:8px 0;}"+"a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px;}a:hover{color:#083f9b;}.kc-dirs{margin-top:6px;font-size:11px;}" +
   ".badge .dm{flex-shrink:0;width:62px;height:62px;background:#fff;padding:3px;border-radius:4px;}.badge .dm svg{display:block;width:100%;height:100%;}" +
   ".pass .stub .dm{width:60px;height:60px;background:#fff;padding:2px;border-radius:2px;}.pass .stub .dm svg{display:block;width:100%;height:100%;}" +
-  "@media print{body{padding:12mm 10mm;display:block;min-height:auto;background:#fff;}.toolbar{display:none;}.badge,.pass,.keycard,.trip,.notes{page-break-inside:avoid;}-webkit-print-color-adjust:exact;print-color-adjust:exact;}";
+  "@media print{body{padding:12mm 10mm;display:block;min-height:auto;background:#fff;}.toolbar{display:none;}a{color:inherit;text-decoration:none;}.badge,.pass,.keycard,.trip,.notes{page-break-inside:avoid;}-webkit-print-color-adjust:exact;print-color-adjust:exact;}";
 
 /** Render the itinerary snapshot to a full standalone HTML document (boarding-pass styled). Faithful
  *  to renderItineraryHtml, MINUS the embedded Data Matrix codes (no client code-lib in this route).
@@ -445,7 +485,8 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
     const bMeta: string[] = [];
     const drange = dateRange(ev.dates.start, ev.dates.end);
     if (drange) bMeta.push(esc(drange));
-    if (ev.venue.name) bMeta.push(esc(ev.venue.name));
+    const vPlace = venuePlace(ev.venue);
+    if (ev.venue.name) bMeta.push(vPlace ? mapsLink(vPlace, esc(ev.venue.name)) : esc(ev.venue.name));
     if (ev.venue.city) bMeta.push(esc(ev.venue.city));
     if (ev.venue.booth) bMeta.push('Booth ' + esc(ev.venue.booth));
     if (bMeta.length) html += '<div class="meta">' + bMeta.join(' · ') + '</div>';
@@ -469,7 +510,7 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
       if (fi > 0) html += layoverHtml(flights[fi - 1], lg);
       html += '<div class="pass"><div class="main">';
       html += '<div class="topline"><span class="airline">' + (esc(lg.carrier) || 'Flight') + '</span>';
-      html += '<span class="flightno">' + esc((lg.carrier ? lg.carrier + ' ' : '') + (lg.number || '')) + '</span></div>';
+      html += '<span class="flightno">' + flightLink(lg.carrier, lg.number, esc((lg.carrier ? lg.carrier + ' ' : '') + (lg.number || ''))) + '</span></div>';
       html += '<div class="route">';
       html +=
         '<div class="port"><div class="code">' +
@@ -527,7 +568,7 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
       html += '<div class="keycard"><div class="face">';
       html += '<div class="kc-eyebrow">Hotel keycard</div>';
       html += '<div class="kc-name">' + (esc(h.name) || 'Hotel') + '</div>';
-      if (h.address) html += '<div class="kc-addr">' + esc(h.address) + '</div>';
+      if (h.address) html += '<div class="kc-addr">' + mapsLink(h.address, esc(h.address)) + '</div>';
       html += '<div class="kc-row">';
       if (h.checkInAt) html += '<div><div class="kl">Check-in</div><div class="kv">' + esc(fmtDateTime(h.checkInAt)) + '</div></div>';
       if (h.checkOutAt)
@@ -538,9 +579,16 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
           '</div></div>';
       if (h.room) html += '<div><div class="kl">Room</div><div class="kv">' + esc(h.room) + '</div></div>';
       if (h.confirmation) html += '<div><div class="kl">Confirmation</div><div class="kv">' + esc(h.confirmation) + '</div></div>';
-      if (h.phone) html += '<div><div class="kl">Phone</div><div class="kv">' + esc(h.phone) + '</div></div>';
+      if (h.phone) html += '<div><div class="kl">Phone</div><div class="kv">' + telLink(h.phone, esc(h.phone)) + '</div></div>';
       html += '</div>';
       if (h.notes) html += '<div class="kc-addr" style="margin-top:8px">' + esc(h.notes) + '</div>';
+      // One-tap driving directions hotel -> venue (screen/PDF only; prints as plain text).
+      {
+        const vPlace = venuePlace(ev.venue);
+        if (h.address && vPlace) {
+          html += '<div class="kc-dirs">' + dirLink(h.address, vPlace, 'Directions: hotel &rarr; ' + (esc(ev.venue.name) || 'venue')) + '</div>';
+        }
+      }
       html += '</div><div class="stripe"></div></div>';
     }
 
@@ -568,7 +616,16 @@ export function renderItineraryHtml(snap: ItinerarySnapshot): string {
         : [];
     const cRows = contacts
       .filter((c) => c && (c.name || c.phone || c.email))
-      .map((c) => [c.name, c.relationship, c.phone, c.email].filter(Boolean).map(esc).join(' · '));
+      .map((c) =>
+        [
+          c.name ? esc(c.name) : '',
+          c.relationship ? esc(c.relationship) : '',
+          c.phone ? telLink(String(c.phone), esc(c.phone)) : '',
+          c.email ? aLink('mailto:' + String(c.email), esc(c.email)) : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      );
     if (cRows.length)
       rows.push('<div class="nrow"><b>Emergency contact' + (cRows.length === 1 ? '' : 's') + ':</b> ' + cRows.join('<br>') + '</div>');
     if (a.notes) rows.push('<div class="nrow"><b>Notes:</b> ' + esc(a.notes) + '</div>');
@@ -599,7 +656,7 @@ export interface TeamMember {
 interface SharedHotel { hotel: ItineraryHotel; members: { name: string; role: string; room: string; confirmation: string; checkInAt: string; checkOutAt: string }[]; }
 interface SharedTrip { carrier: string; number: string; from: string; to: string; departAt: string; arriveAt: string; members: { name: string; confirmation: string }[]; }
 export interface TeamItinerary {
-  event: { name: string; dates: { start: string; end: string }; venue: { name: string; city: string; booth: string } };
+  event: { name: string; dates: { start: string; end: string }; venue: { name: string; city: string; booth: string; address: string } };
   capturedAt: string;
   capturedBy: { name: string; role: string } | null;
   sharedHotels: SharedHotel[];
@@ -683,7 +740,7 @@ export function buildTeamItinerary(
     event: {
       name: ev.name || '',
       dates: { start: ev.startDate || '', end: ev.endDate || '' },
-      venue: { name: (ev.venue?.name as string) || '', city: (ev.venue?.city as string) || '', booth: (ev.venue?.booth as string) || '' },
+      venue: { name: (ev.venue?.name as string) || '', city: (ev.venue?.city as string) || '', booth: (ev.venue?.booth as string) || '', address: (ev.venue?.address as string) || '' },
     },
     capturedAt,
     capturedBy,
@@ -702,9 +759,9 @@ const TEAM_EXTRA_STYLES =
   ".count{font-size:11px;color:#888;font-weight:600;margin-left:6px;}";
 
 function hotelCard(h: ItineraryHotel): string {
-  const addr = h.address ? esc(h.address) : '';
+  const addr = h.address ? mapsLink(h.address, esc(h.address)) : '';
   const row = [
-    h.phone ? '<div><div class="kl">Phone</div><div class="kv">' + esc(h.phone) + '</div></div>' : '',
+    h.phone ? '<div><div class="kl">Phone</div><div class="kv">' + telLink(h.phone, esc(h.phone)) + '</div></div>' : '',
     h.checkInAt ? '<div><div class="kl">Check-in</div><div class="kv">' + esc(fmtDateTime(h.checkInAt)) + '</div></div>' : '',
     h.checkOutAt ? '<div><div class="kl">Check-out</div><div class="kv">' + esc(fmtDateTime(h.checkOutAt)) + '</div></div>' : '',
   ].filter(Boolean).join('');
@@ -719,7 +776,7 @@ export function renderTeamItineraryHtml(team: TeamItinerary): string {
     : '';
   let h = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(e.name) + ' — team itinerary</title><style>' + ITIN_STYLES + TEAM_EXTRA_STYLES + '</style></head><body>';
   h += '<div class="toolbar"><button class="primary" onclick="window.print()">Print</button><button onclick="window.close()">Close</button></div>';
-  h += '<div class="head"><div><div class="eyebrow">Team itinerary</div><h1>' + (esc(e.name) || 'Event') + '</h1><div class="sub">' + esc(dateRange(e.dates.start, e.dates.end)) + (e.venue.name ? ' · ' + esc(e.venue.name) : '') + (e.venue.city ? ' · ' + esc(e.venue.city) : '') + '</div><div class="poc">' + team.members.length + ' traveler' + (team.members.length === 1 ? '' : 's') + '</div></div>';
+  h += '<div class="head"><div><div class="eyebrow">Team itinerary</div><h1>' + (esc(e.name) || 'Event') + '</h1><div class="sub">' + esc(dateRange(e.dates.start, e.dates.end)) + (e.venue.name ? ' · ' + (venuePlace(e.venue) ? mapsLink(venuePlace(e.venue), esc(e.venue.name)) : esc(e.venue.name)) : '') + (e.venue.city ? ' · ' + esc(e.venue.city) : '') + '</div><div class="poc">' + team.members.length + ' traveler' + (team.members.length === 1 ? '' : 's') + '</div></div>';
   h += '<div class="head-stamp">' + (capStr ? 'Printed ' + esc(capStr) : '') + (team.capturedBy?.name ? '<br>by ' + esc(team.capturedBy.name) : '') + '</div></div>';
 
   if (team.sharedHotels.length) {
@@ -741,7 +798,8 @@ export function renderTeamItineraryHtml(team: TeamItinerary): string {
     for (const g of team.sharedTrips) {
       const route = [g.from, g.to].filter(Boolean).map(esc).join(' → ');
       const id = [g.carrier, g.number].filter(Boolean).map(esc).join(' ');
-      h += '<div class="trip"><div class="topline"><span class="mode">' + (id || 'Flight') + '</span><span class="dir">' + esc(fmtDateTime(g.departAt)) + '</span></div>' + (route ? '<div class="route">' + route + '</div>' : '') +
+      const idLinked = id ? flightLink(g.carrier, g.number, id) : '';
+      h += '<div class="trip"><div class="topline"><span class="mode">' + (idLinked || 'Flight') + '</span><span class="dir">' + esc(fmtDateTime(g.departAt)) + '</span></div>' + (route ? '<div class="route">' + route + '</div>' : '') +
         '<div class="roster">' + g.members.map((m) => '<div class="rm"><span class="who">' + esc(m.name) + '</span></div>').join('') + '</div></div>';
     }
     h += '</div>';
