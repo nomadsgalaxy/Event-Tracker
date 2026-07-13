@@ -93,11 +93,17 @@ export async function GET(req: NextRequest) {
         list.push(br);
         a.perEventBreakfast.set(ev._id, list);
       }
-      // The most recent stay wins the display fields (address/phone drift over the years).
+      // The most recent stay wins the display fields (address/phone drift over the years) —
+      // merged per-field, non-empty values only, so a colleague's bare-name hotel row on the same
+      // stay can't erase the address/phone/breakfast another row carried.
       if (startDate >= a.lastStay) {
         a.lastStay = startDate;
         a.lastEvent = String(p.name || '');
-        a.hotel = hotel;
+        const merged: HotelInfo = { ...a.hotel };
+        for (const [k, v] of Object.entries(hotel)) {
+          if (v !== undefined && v !== null && String(v).trim() !== '') merged[k] = v;
+        }
+        a.hotel = merged;
       }
     }
   }
