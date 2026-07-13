@@ -542,3 +542,185 @@ export function buildPeopleReport(
 
   return { leadGaps, assignments, travel, eventCount: events.length, accVisible, accGated, accGateActive: true };
 }
+
+// ── FEEDBACK / EVENT-REVIEW report (the post-event survey rollup) ───────────────────────────
+// The cross-event view of the per-event Event Report (/event/[id]/report): per-event response
+// rates + average ratings with a deep link to the full report, an all-time hotels leaderboard
+// (the same per-event-averaged math the hotel suggestions use), and topline KPIs.
+//
+// GATE: ratings + response data are staff.pii.view-tier (the same verdict requireReportAccess
+// runs) — an event is included only when the viewer is manager+ OR leads it. Excluded events are
+// COUNTED (gatedEvents) so the screen can say "N more events are visible to their leads/managers"
+// instead of silently looking empty. Comments/notes deliberately do NOT cross to this screen —
+// the per-event report page is the deep-dive surface.
+
+export interface FeedbackEventRow {
+  id: string;
+  name: string;
+  startDate: string;
+  city: string;
+  state: EventState | string;
+  rosterSize: number;
+  responses: number;
+  responseRate: number; // whole percent
+  event: number | null;
+  venue: number | null;
+  hotel: number | null;
+}
+
+export interface FeedbackHotelRow {
+  name: string;
+  city: string;
+  stays: number; // distinct events
+  raters: number;
+  rating: number | null; // avg of per-event averages
+  lastStay: string; // startDate of the most recent stay
+}
+
+export interface FeedbackReport {
+  perEvent: FeedbackEventRow[];
+  hotels: FeedbackHotelRow[];
+  gatedEvents: number; // events with survey data the viewer may NOT see
+  responses: number;
+  rosterTotal: number;
+  responseRate: number;
+  avg: { event: number | null; venue: number | null; hotel: number | null };
+}
+
+const fbLc = (v: unknown): string => String(v ?? '').trim().toLowerCase();
+const fbRating = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+};
+const fbAvg1 = (xs: number[]): number | null =>
+  xs.length ? Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10 : null;
+
+export function buildFeedbackReport(
+  events: EventEntry[],
+  viewerEmail: string,
+  role: string | null | undefined
+): FeedbackReport {
+  const today = new Date();
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const perEvent: FeedbackEventRow[] = [];
+  let gatedEvents = 0;
+  const allEvent: number[] = [];
+  const allVenue: number[] = [];
+  const allHotel: number[] = [];
+  let responses = 0;
+  let rosterTotal = 0;
+  const hotelAgg = new Map<
+    string,
+    { name: string; city: string; perEventRatings: number[][]; stays: Set<string>; lastStay: string }
+  >();
+
+  for (const { id, payload: e } of events) {
+    const staff = (e.staff ?? []).filter((s): s is Staffer => !!s && typeof s === 'object');
+    // The "review universe": an event that has ENDED (endDate || startDate before today) or that
+    // already has a survey submission. Future events with no data stay off the report.
+    const endYmd = String(e.endDate || e.startDate || '').trim();
+    const ended = /^\d{4}-\d{2}-\d{2}$/.test(endYmd) && endYmd < todayYmd;
+    const hasResponses = staff.some((s) => typeof s.feedback?.submittedAt === 'number');
+    if (!ended && !hasResponses) continue;
+
+    // The exact requireReportAccess verdict: manager+ (staff.pii.view outright) or lead-of-event.
+    // canSeeStaffPii with a synthetic empty staffer gives role/lead without any self short-circuit.
+    const visible = canSeeStaffPii({}, e, viewerEmail, role, null, id);
+    if (!visible) {
+      if (hasResponses) gatedEvents += 1;
+      continue;
+    }
+
+    // Per-event row math mirrors lib/views/event-report.buildEventReport (kept inline — that module
+    // is server-only and this one is isomorphic): responded = submittedAt only; a NON-submitter's
+    // editor-set hotel.rating still counts toward the hotel average.
+    const evR: number[] = [];
+    const veR: number[] = [];
+    const hoR: number[] = [];
+    let responded = 0;
+    const perHotelHere = new Map<string, { name: string; city: string; ratings: number[] }>();
+    for (const s of staff) {
+      const fb = (s.feedback ?? {}) as Record<string, unknown>;
+      const submitted = typeof fb.submittedAt === 'number';
+      if (submitted) responded += 1;
+      const er = fbRating(fb.event);
+      const vr = fbRating(fb.venue);
+      const hr = fbRating(fb.hotel ?? (submitted ? null : s.hotel?.rating));
+      if (er != null) evR.push(er);
+      if (vr != null) veR.push(vr);
+      if (hr != null) hoR.push(hr);
+      const hName = String(s.hotel?.name ?? '').trim();
+      if (hName) {
+        const key = fbLc(hName);
+        let h = perHotelHere.get(key);
+        if (!h) {
+          h = { name: hName, city: String(s.hotel?.city || e.city || e.venue?.city || '').trim(), ratings: [] };
+          perHotelHere.set(key, h);
+        }
+        if (hr != null) h.ratings.push(hr);
+      }
+    }
+
+    perEvent.push({
+      id,
+      name: e.name || id,
+      startDate: String(e.startDate || ''),
+      city: String(e.city || e.venue?.city || ''),
+      state: e.state || 'draft',
+      rosterSize: staff.length,
+      responses: responded,
+      responseRate: staff.length ? Math.round((responded / staff.length) * 100) : 0,
+      event: fbAvg1(evR),
+      venue: fbAvg1(veR),
+      hotel: fbAvg1(hoR),
+    });
+    allEvent.push(...evR);
+    allVenue.push(...veR);
+    allHotel.push(...hoR);
+    responses += responded;
+    rosterTotal += staff.length;
+
+    // Roll this event's hotels into the all-time leaderboard (per-event average first, so one big
+    // team can't outvote another event's stay).
+    const sd = String(e.startDate || '');
+    for (const [key, h] of perHotelHere) {
+      let agg = hotelAgg.get(key);
+      if (!agg) {
+        agg = { name: h.name, city: h.city, perEventRatings: [], stays: new Set(), lastStay: '' };
+        hotelAgg.set(key, agg);
+      }
+      agg.stays.add(id);
+      if (h.ratings.length) agg.perEventRatings.push(h.ratings);
+      if (sd >= agg.lastStay) {
+        agg.lastStay = sd;
+        agg.name = h.name;
+        if (h.city) agg.city = h.city;
+      }
+    }
+  }
+
+  // Most recent first.
+  perEvent.sort((a, b) => (a.startDate > b.startDate ? -1 : a.startDate < b.startDate ? 1 : 0));
+
+  const hotels: FeedbackHotelRow[] = [...hotelAgg.values()]
+    .map((a) => ({
+      name: a.name,
+      city: a.city,
+      stays: a.stays.size,
+      raters: a.perEventRatings.reduce((s, l) => s + l.length, 0),
+      rating: fbAvg1(a.perEventRatings.map((l) => l.reduce((s, x) => s + x, 0) / l.length)),
+      lastStay: a.lastStay,
+    }))
+    .sort((x, y) => (y.rating ?? 0) - (x.rating ?? 0) || y.lastStay.localeCompare(x.lastStay));
+
+  return {
+    perEvent,
+    hotels,
+    gatedEvents,
+    responses,
+    rosterTotal,
+    responseRate: rosterTotal ? Math.round((responses / rosterTotal) * 100) : 0,
+    avg: { event: fbAvg1(allEvent), venue: fbAvg1(allVenue), hotel: fbAvg1(allHotel) },
+  };
+}

@@ -87,6 +87,11 @@ export default async function EventReportPage({ params }: { params: Promise<{ id
           <div className="flex flex-wrap items-center gap-2 print:hidden">
             <PrintButton />
             <ExportButtons eventId={id} />
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/reports?tab=feedback" title="Cross-event scorecards, averages and the hotel leaderboard">
+                All scorecards
+              </Link>
+            </Button>
           </div>
         </div>
       </div>

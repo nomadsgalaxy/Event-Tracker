@@ -1,13 +1,16 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import {
   Boxes,
   CalendarRange,
   ShieldAlert,
   Users,
   Download,
+  Star,
 } from 'lucide-react';
+import { StarRating } from '@/components/ui/star-rating';
 
 import { cn } from '@/lib/util/utils';
 import { Button } from '@/components/ui/button';
@@ -31,6 +34,7 @@ import type {
   EventsReport,
   ConditionReport,
   PeopleReport,
+  FeedbackReport,
 } from '@/lib/views/reports';
 import { formatMoney } from '@/lib/util/money';
 
@@ -203,19 +207,21 @@ function downloadCsv(name: string, headers: string[], rows: (string | number)[][
   URL.revokeObjectURL(url);
 }
 
-type TabId = 'inventory' | 'events' | 'condition' | 'people';
+type TabId = 'inventory' | 'events' | 'condition' | 'people' | 'feedback';
 
 export function ReportsScreen({
   inventory,
   events,
   condition,
   people,
+  feedback,
   weightUnit,
 }: {
   inventory: InventoryReport;
   events: EventsReport;
   condition: ConditionReport;
   people: PeopleReport;
+  feedback: FeedbackReport;
   /** The viewer's preferred weight unit (unitPrefs.weight) — every mass is rendered through
    *  formatWeight() so it honors kg/lbs instead of a hardcoded unit (#11/#12). */
   weightUnit: WeightUnit;
@@ -227,11 +233,20 @@ export function ReportsScreen({
   const fmtWt = React.useCallback((kg: number) => formatWeight(kg, weightUnit), [weightUnit]);
 
   // Restore the last-viewed tab from sessionStorage (mirrors the existing editor's evTab key) so a
-  // refresh / nav-back lands on the same section. Read in an effect to stay SSR-safe.
+  // refresh / nav-back lands on the same section. A ?tab= query param wins over the saved tab so
+  // other screens can deep-link a section (e.g. the Event Report's "All scorecards" →
+  // /reports?tab=feedback). Read in an effect to stay SSR-safe.
   React.useEffect(() => {
+    const valid = ['inventory', 'events', 'condition', 'people', 'feedback'];
     try {
+      const fromUrl = new URLSearchParams(window.location.search).get('tab');
+      if (fromUrl && valid.includes(fromUrl)) {
+        setTab(fromUrl as TabId);
+        sessionStorage.setItem(TAB_STORAGE_KEY, fromUrl);
+        return;
+      }
       const saved = sessionStorage.getItem(TAB_STORAGE_KEY) as TabId | null;
-      if (saved && ['inventory', 'events', 'condition', 'people'].includes(saved)) setTab(saved);
+      if (saved && valid.includes(saved)) setTab(saved);
     } catch {
       /* sessionStorage unavailable — keep the default */
     }
@@ -275,8 +290,14 @@ export function ReportsScreen({
           ['Name', 'Email', 'Events'],
           people.assignments.map((a) => [a.name, a.email, a.events])
         );
+      case 'feedback':
+        return downloadCsv(
+          'event-feedback',
+          ['Event', 'Start', 'City', 'Responses', 'Roster', 'Rate %', 'Event ★', 'Venue ★', 'Hotel ★'],
+          feedback.perEvent.map((r) => [r.name, r.startDate, r.city, r.responses, r.rosterSize, r.responseRate, r.event ?? '', r.venue ?? '', r.hotel ?? ''])
+        );
     }
-  }, [tab, inventory, events, condition, people]);
+  }, [tab, inventory, events, condition, people, feedback]);
 
   // ── Tab panels ────────────────────────────────────────────────────────────────────────────
   const inventoryPanel = (
@@ -694,11 +715,131 @@ export function ReportsScreen({
     </div>
   );
 
+  // ── Feedback / event reviews panel ─────────────────────────────────────────────────────────
+  // The cross-event rollup of the post-event surveys. Rows are pre-gated server-side (manager+ or
+  // lead-of-event only — the same verdict as the per-event Event Report this deep-links to);
+  // comments/notes stay on the per-event page.
+  const stars = (v: number | null, label: string) =>
+    v != null ? (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="font-mono tabular-nums">{v}</span>
+        <StarRating value={Math.round(v)} size={12} label={label} />
+      </span>
+    ) : (
+      '—'
+    );
+  const feedbackPanel = (
+    <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-3">
+        <SectionHead
+          label="Survey topline"
+          sub={`${feedback.responses.toLocaleString()} responses across ${feedback.perEvent.length.toLocaleString()} reviewed event${feedback.perEvent.length === 1 ? '' : 's'}${
+            feedback.gatedEvents ? ` · ${feedback.gatedEvents} more visible only to their leads/managers` : ''
+          }`}
+        />
+        <KpiStrip>
+          <KpiCard
+            label="Response rate"
+            value={`${feedback.responseRate}%`}
+            subnote={`${feedback.responses.toLocaleString()} of ${feedback.rosterTotal.toLocaleString()} staffed spots`}
+            accent
+          />
+          <KpiCard label="Event avg" value={feedback.avg.event != null ? `${feedback.avg.event} ★` : '—'} subnote="all ratings, all events" />
+          <KpiCard label="Venue avg" value={feedback.avg.venue != null ? `${feedback.avg.venue} ★` : '—'} subnote="all ratings, all events" />
+          <KpiCard label="Hotel avg" value={feedback.avg.hotel != null ? `${feedback.avg.hotel} ★` : '—'} subnote="survey + editor-set stay ratings" />
+        </KpiStrip>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <SectionHead
+          label={`Event scorecards · ${feedback.perEvent.length}`}
+          sub="Every ended or reviewed event you may see — open one for comments, exports and the AI summary."
+          onExport={
+            feedback.perEvent.length
+              ? () =>
+                  downloadCsv(
+                    'event-feedback',
+                    ['Event', 'Start', 'City', 'Responses', 'Roster', 'Rate %', 'Event ★', 'Venue ★', 'Hotel ★'],
+                    feedback.perEvent.map((r) => [r.name, r.startDate, r.city, r.responses, r.rosterSize, r.responseRate, r.event ?? '', r.venue ?? '', r.hotel ?? ''])
+                  )
+              : undefined
+          }
+        />
+        <ReportTable
+          empty={
+            feedback.gatedEvents
+              ? 'No reviewed events visible to you — event reports are visible to their leads and managers.'
+              : 'No ended events yet. Scorecards appear here once events wrap and the team submits feedback.'
+          }
+          rows={feedback.perEvent}
+          cols={[
+            {
+              key: 'name',
+              label: 'Event',
+              strong: true,
+              render: (r) => (
+                <Link href={`/event/${encodeURIComponent(r.id)}/report`} className="text-primary underline-offset-4 hover:underline">
+                  {r.name}
+                </Link>
+              ),
+            },
+            { key: 'startDate', label: 'Start', num: true, render: (r) => r.startDate || '—' },
+            { key: 'city', label: 'City' },
+            {
+              key: 'responses',
+              label: 'Responses',
+              num: true,
+              render: (r) => (
+                <span>
+                  {r.responses}/{r.rosterSize}
+                  <span className="ml-1 text-xs text-muted-foreground">({r.responseRate}%)</span>
+                </span>
+              ),
+            },
+            { key: 'event', label: 'Event', num: true, render: (r) => stars(r.event, `${r.name} event rating`) },
+            { key: 'venue', label: 'Venue', num: true, render: (r) => stars(r.venue, `${r.name} venue rating`) },
+            { key: 'hotel', label: 'Hotel', num: true, render: (r) => stars(r.hotel, `${r.name} hotel rating`) },
+          ]}
+        />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <SectionHead
+          label={`Hotels · ${feedback.hotels.length}`}
+          sub="Every hotel the team has stayed at, ranked by stay rating — the same history that powers the booking suggestions in the event editor."
+          onExport={
+            feedback.hotels.length
+              ? () =>
+                  downloadCsv(
+                    'hotel-leaderboard',
+                    ['Hotel', 'City', 'Rating', 'Raters', 'Stays', 'Last stay'],
+                    feedback.hotels.map((h) => [h.name, h.city, h.rating ?? '', h.raters, h.stays, h.lastStay])
+                  )
+              : undefined
+          }
+        />
+        <ReportTable
+          empty="No hotel stays on file yet."
+          rows={feedback.hotels}
+          cols={[
+            { key: 'name', label: 'Hotel', strong: true },
+            { key: 'city', label: 'City' },
+            { key: 'rating', label: 'Rating', num: true, render: (r) => stars(r.rating, `${r.name} rating`) },
+            { key: 'raters', label: 'Raters', num: true },
+            { key: 'stays', label: 'Stays', num: true },
+            { key: 'lastStay', label: 'Last stay', num: true, render: (r) => r.lastStay || '—' },
+          ]}
+        />
+      </div>
+    </div>
+  );
+
   const tabs: TabStripItem[] = [
     { id: 'inventory', label: 'Inventory & stock', icon: Boxes, content: inventoryPanel },
     { id: 'events', label: 'Events & cases', icon: CalendarRange, content: eventsPanel },
     { id: 'condition', label: 'Condition & loss', icon: ShieldAlert, content: conditionPanel },
     { id: 'people', label: 'People & travel', icon: Users, content: peoplePanel },
+    { id: 'feedback', label: 'Feedback & reviews', icon: Star, content: feedbackPanel },
   ];
 
   return (

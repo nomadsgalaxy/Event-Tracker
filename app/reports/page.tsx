@@ -6,6 +6,7 @@ import {
   buildEventsReport,
   buildConditionReport,
   buildPeopleReport,
+  buildFeedbackReport,
   type ItemEntry,
   type EventEntry,
   type CaseEntry,
@@ -54,6 +55,9 @@ export default async function ReportsPage() {
   // People PII is gated per (event, staffer) inside the builder using the AUTHORITATIVE session email
   // + live role + the viewer's active grant set + the envelope event id — never a client value.
   const people = buildPeopleReport(events, user.email, user.role, grants);
+  // Post-event survey rollup — per-event rows are included only where the viewer passes the same
+  // manager+/lead gate as the per-event Event Report page (comments never cross to this screen).
+  const feedback = buildFeedbackReport(events, user.email, user.role);
 
   return (
     <ReportsScreen
@@ -61,6 +65,7 @@ export default async function ReportsPage() {
       events={eventsReport}
       condition={condition}
       people={people}
+      feedback={feedback}
       weightUnit={weightUnit}
     />
   );
