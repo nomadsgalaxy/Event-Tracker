@@ -161,15 +161,19 @@ export function UsersTable({
   const [offboardTarget, setOffboardTarget] = useState<UserRow | null>(null);
   const [accTarget, setAccTarget] = useState<UserRow | null>(null);
   const [editingNameFor, setEditingNameFor] = useState<string | null>(null);
+  const [showOffboarded, setShowOffboarded] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const offboardedCount = useMemo(() => rows.filter((r) => r.offboardedAt).length, [rows]);
+
   const visible = useMemo(() => {
+    const base = showOffboarded ? rows : rows.filter((r) => !r.offboardedAt);
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
+    if (!q) return base;
+    return base.filter((r) =>
       `${r.email} ${r.name} ${r.preferredName} ${r.role} ${r.source} ${r.sourceLabel}`.toLowerCase().includes(q)
     );
-  }, [rows, query]);
+  }, [rows, query, showOffboarded]);
 
   function requestChange(row: UserRow, nextRole: string) {
     if (nextRole === row.role) return;
@@ -276,10 +280,22 @@ export function UsersTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          {rows.length} {rows.length === 1 ? 'user' : 'users'} in the directory. Change a role from the
-          menu — your own role is locked.
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">
+            {rows.length - offboardedCount} {rows.length - offboardedCount === 1 ? 'user' : 'users'} in
+            the directory. Change a role from the menu — your own role is locked.
+          </p>
+          {offboardedCount > 0 && (
+            <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={showOffboarded}
+                onCheckedChange={(v) => setShowOffboarded(v === true)}
+                aria-label="Show offboarded users"
+              />
+              Show offboarded ({offboardedCount})
+            </label>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <div className="relative w-full sm:w-64">
             <Search
@@ -308,7 +324,11 @@ export function UsersTable({
           <UsersIcon className="size-6 text-muted-foreground" aria-hidden />
           <p className="text-sm font-medium">No users match</p>
           <p className="text-xs text-muted-foreground">
-            {rows.length === 0 ? 'The directory is empty.' : 'Adjust the search to see users.'}
+            {rows.length === 0
+              ? 'The directory is empty.'
+              : query.trim()
+                ? 'Adjust the search to see users.'
+                : 'Everyone here is offboarded — tick "Show offboarded" to see them.'}
           </p>
         </div>
       ) : (
