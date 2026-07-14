@@ -112,11 +112,12 @@ const svgNema515 = (
     {dGround}
   </svg>
 );
-// NEMA 5-20 (125 V 20 A): the neutral is a T whose crossbar extends ONE way, toward the hot — that
-// one-sided T is the whole 5-20-vs-5-15 tell.
+// NEMA 5-20 (125 V 20 A): the neutral is a sideways T — the vertical slot (5-15 compatible) with a
+// horizontal member branching from MID-HEIGHT toward the hot (per the NEMA WD-6 5-20R face; the
+// one-sided ⊢ is the whole 5-20-vs-5-15 tell).
 const svgNema520 = (
   <svg viewBox="0 0 44 44" aria-hidden>{round}
-    <path {...F} d="M12.5 11.5 h4.2 v11 h-4.2 Z M12.5 11.5 h7.6 v3.5 h-7.6 Z" />
+    <path {...F} d="M12.5 11.5 h4.2 v11 h-4.2 Z M12.5 15.25 h7.6 v3.5 h-7.6 Z" />
     <rect {...F} x="27.3" y="11.5" width="3.4" height="11" rx="1" />
     {dGround}
   </svg>

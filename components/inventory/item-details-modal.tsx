@@ -299,7 +299,8 @@ export function ItemDetailsModal({
   const defaultFixedPlug = useMemo(() => {
     const firstCase = itemCaseIds(item)[0];
     const region = (cases.find((c) => c.id === firstCase)?.region as Region | undefined) ?? 'NA';
-    return `${REGION_DEFAULT_PLUG[region] ?? 'NEMA 5-15P'} (${region})`;
+    const id = REGION_DEFAULT_PLUG[region] ?? 'NEMA 5-15P';
+    return { id, label: `${id} (${region})` };
   }, [item, cases]);
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
@@ -1648,26 +1649,52 @@ export function ItemDetailsModal({
                     <span className="text-[10px] text-muted-foreground">Stored value: “{plugType}” (legacy text — pick a cell to replace it)</span>
                   ) : null}
                   {isFixedCordInlet(plugType) ? (
-                    <div className="flex flex-wrap items-end gap-2">
-                      <div className="flex w-64 flex-col gap-1.5">
-                        <Label htmlFor="item-fixedplug">Fixed plug (international)</Label>
-                        <select
-                          id="item-fixedplug"
-                          value={fixedPlug}
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Fixed plug (what the cord ends in)</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {/* '' = follow the home warehouse's region — shown with that region's plug face. */}
+                        <button
+                          type="button"
+                          aria-pressed={fixedPlug === ''}
                           disabled={!canEdit}
-                          onChange={(e) => setFixedPlug(e.target.value)}
-                          className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none dark:bg-input/30"
+                          onClick={() => setFixedPlug('')}
+                          title={`Default for region — ${defaultFixedPlug.label}`}
+                          className={cn(
+                            'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                            fixedPlug === '' ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                          )}
                         >
-                          <option value="">Default for region — {defaultFixedPlug}</option>
-                          {WALL_PLUGS.map((w) => (
-                            <option key={w.id} value={w.id}>
-                              {w.label} · {cableEndRating(w)}
-                            </option>
-                          ))}
-                        </select>
+                          <span className="size-9 text-foreground">{cableEndById(defaultFixedPlug.id, 'male')?.svg}</span>
+                          <span className="text-[10px] font-medium leading-tight">Region default</span>
+                          <span className="text-[9px] leading-tight">{defaultFixedPlug.label}</span>
+                        </button>
+                        {WALL_PLUGS.map((w) => {
+                          const on = fixedPlug === w.id;
+                          return (
+                            <button
+                              key={w.id}
+                              type="button"
+                              aria-pressed={on}
+                              disabled={!canEdit}
+                              onClick={() => setFixedPlug(on ? '' : w.id)}
+                              title={`${w.label} · ${cableEndRating(w)}`}
+                              className={cn(
+                                'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                                on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                              )}
+                            >
+                              <span className="size-9 text-foreground">{w.svg}</span>
+                              <span className="text-[10px] font-medium leading-tight">{w.label}</span>
+                              <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(w)}</span>
+                            </button>
+                          );
+                        })}
                       </div>
+                      {fixedPlug && !WALL_PLUGS.some((w) => w.id === fixedPlug) ? (
+                        <span className="text-[10px] text-muted-foreground">Stored value: “{fixedPlug}” (legacy text — pick a cell to replace it)</span>
+                      ) : null}
                       {tracking === 'serial' ? (
-                        <span className="pb-2 text-[10px] text-muted-foreground">Per-serial overrides: see the units below.</span>
+                        <span className="text-[10px] text-muted-foreground">Per-serial overrides: see the units below.</span>
                       ) : null}
                     </div>
                   ) : null}
