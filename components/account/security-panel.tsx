@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { QrCode } from '@/components/auth/qr-code';
+import { WebhookSubscriptionsCard } from '@/app/config/admin/webhook-subscriptions-card';
 
 // components/account/security-panel.tsx — the Account → Security self-management tab. The SERVER is
 // the sole authority for every action here (the /api/auth/* routes re-check the session + step-up +
@@ -265,6 +266,9 @@ export function SecurityPanel({ initial }: { initial: SecurityInitial }) {
       <LinkedLoginsCard status={status} isLocal={isLocal} onRefresh={refresh} requireStepUp={requireStepUp} />
 
       <ApiKeysCard />
+
+      {/* Webhooks live beside API keys: same per-user mint flow, but editable after creation. */}
+      <WebhookSubscriptionsCard scope="mine" />
 
       <CalendarCard />
 
