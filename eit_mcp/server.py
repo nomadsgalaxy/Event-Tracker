@@ -809,6 +809,102 @@ def delete_record(collection: str, record_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Webhooks (push/get notifications for external systems and agents)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_webhooks() -> dict[str, Any]:
+    """List outbound webhook subscriptions + the available event types (READ).
+
+    Needs a key owned by an ADMIN. Each subscription shows its url, method
+    (POST push / GET ping), event filter, and last delivery status.
+
+    Returns {webhooks, eventTypes}. Maps to GET /api/v1/webhooks.
+    """
+    return _request("GET", "/api/v1/webhooks")
+
+
+@mcp.tool()
+def create_webhook(
+    url: str,
+    events: list[str],
+    method: str = "POST",
+    secret: str = "",
+    description: str = "",
+) -> dict[str, Any]:
+    """Register an outbound webhook subscription (WRITE).
+
+    Needs a write-scope key owned by an ADMIN. Confirm with the user before
+    registering — the endpoint will receive workspace-wide notifications.
+
+    Args:
+        url: HTTPS endpoint (private/internal hosts are refused).
+        events: Event types to receive — any of item_flagged, flight_delay,
+            severe_weather, ship_kit_signoff, low_stock, event_created,
+            event_state_changed, feedback_submitted.
+        method: 'POST' (JSON push, default) or 'GET' (query-string ping for
+            simple receivers).
+        secret: Optional HMAC secret — POST gets an X-EIT-Signature header,
+            GET gets a &sig= param, both sha256.
+        description: What this endpoint is for.
+
+    Returns {webhook}. Maps to POST /api/v1/webhooks.
+    """
+    body = _compact({"url": url, "method": method, "secret": secret, "description": description})
+    body["events"] = [e for e in (events or []) if str(e).strip()]
+    if not body["events"]:
+        return {"error": "events must include at least one event type.", "status": None}
+    return _request("POST", "/api/v1/webhooks", json_body=body)
+
+
+@mcp.tool()
+def update_webhook(
+    webhook_id: str,
+    url: str = "",
+    events: list[str] | None = None,
+    method: str = "",
+    description: str = "",
+    active: bool | None = None,
+) -> dict[str, Any]:
+    """Edit a webhook subscription in place (WRITE, admin-owned key).
+
+    Unlike API keys, webhooks are editable — pass only the fields to change
+    (empty string / None = leave unchanged). Secrets can only be replaced via
+    the REST API directly, not through this tool.
+
+    Returns {webhook}. Maps to PATCH /api/v1/webhooks/<id>.
+    """
+    body: dict[str, Any] = _compact({"url": url, "method": method, "description": description})
+    if events is not None:
+        body["events"] = [e for e in events if str(e).strip()]
+    if active is not None:
+        body["active"] = active
+    if not body:
+        return {"error": "No fields to update; pass at least one field.", "status": None}
+    return _request("PATCH", f"/api/v1/webhooks/{_seg(webhook_id)}", json_body=body)
+
+
+@mcp.tool()
+def delete_webhook(webhook_id: str) -> dict[str, Any]:
+    """Remove an outbound webhook subscription (WRITE, admin-owned key).
+
+    Returns {deleted}. Maps to DELETE /api/v1/webhooks/<id>.
+    """
+    return _request("DELETE", f"/api/v1/webhooks/{_seg(webhook_id)}")
+
+
+@mcp.tool()
+def test_webhook(webhook_id: str) -> dict[str, Any]:
+    """Fire a test delivery at a webhook subscription and report the receiver's
+    HTTP status (admin-owned key).
+
+    Returns {delivered, receiverStatus}. Maps to POST /api/v1/webhooks/<id>/test.
+    """
+    return _request("POST", f"/api/v1/webhooks/{_seg(webhook_id)}/test")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

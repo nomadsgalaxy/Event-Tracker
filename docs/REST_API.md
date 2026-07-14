@@ -74,6 +74,30 @@ capability (shown), re-intersected with your role.
 | POST | `/inventory/:id/flag` | `db.write.app` | `{ note, severity }` |
 | GET | `/search?q=` | read | Cross-entity search |
 | GET | `/low-stock` · `/conflicts` | read | Reorder-point + double-booking reports |
+| GET·POST | `/webhooks` | admin-owned key (`db.write.app` for POST) | List / register webhook subscriptions |
+| DELETE | `/webhooks/:id` · POST `/webhooks/:id/test` | admin-owned key | Remove / test-ping a subscription |
+
+## Webhooks (push and get)
+
+Register endpoints to be notified when things happen — no polling. `POST /api/v1/webhooks` with
+`{ "url": "https://…", "events": ["event_state_changed", …], "method": "POST"|"GET", "secret": "…", "description": "…" }`.
+Requires a key owned by an admin. Up to 20 subscriptions; `GET /webhooks` lists them (with each
+subscription's last delivery status) plus the available event types.
+
+Event types: `item_flagged`, `flight_delay`, `severe_weather`, `ship_kit_signoff`, `low_stock`,
+`event_created`, `event_state_changed`, `feedback_submitted`. Payloads never carry staff PII.
+
+Delivery per subscription:
+
+- **POST (push)** — JSON `{ id, event, ts, summary, data }`. With a `secret` set, the request carries
+  `X-EIT-Signature: sha256=<hex HMAC-SHA256 of the exact body>` so you can verify authenticity.
+- **GET (ping)** — for simple receivers (IFTTT-style, home automation): the URL is called with
+  `?event=&ts=&summary=&payload=<compact JSON>` appended, plus `&sig=<hex HMAC of the query string
+  without sig>` when a secret is set.
+
+Deliveries are best-effort with a 5s timeout (no retries — poll the REST API for the source of
+truth). `POST /webhooks/:id/test` fires a `test` event and reports the receiver's HTTP status. The
+single-URL webhook + Slack integration in Config → Admin keeps working independently.
 
 ## The generic collection mirror
 

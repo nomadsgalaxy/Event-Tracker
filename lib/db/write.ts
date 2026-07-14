@@ -228,6 +228,16 @@ export async function saveEvent({ id, patch, actorEmail, actorRole }: SaveEventA
   set.updatedAt = Date.now();
 
   const res = await col.updateOne({ _id, ...NOT_DELETED }, { $set: set });
+
+  // Outbound: a real lifecycle transition (stored → incoming state differ) notifies subscribers.
+  const nextState = set['payload.state'];
+  if (res.matchedCount > 0 && typeof nextState === 'string' && nextState !== (stored.payload.state || '')) {
+    void dispatchOutbound({
+      type: 'event_state_changed',
+      summary: `${stored.payload.name || _id}: ${stored.payload.state || 'draft'} → ${nextState}`,
+      data: { eventId: _id, name: stored.payload.name || '', from: stored.payload.state || 'draft', to: nextState },
+    });
+  }
   return { ok: res.matchedCount > 0, matched: res.matchedCount, modified: res.modifiedCount };
 }
 
@@ -274,6 +284,12 @@ export async function createEvent({ patch, actorRole }: CreateEventArgs): Promis
   }
 
   await col.insertOne({ _id: id, payload: payload as EventDoc['payload'], createdAt: now, updatedAt: now, deletedAt: null } as EventDoc);
+  void dispatchOutbound({
+    type: 'event_created',
+    summary: `Event created — ${String(payload.name)}${payload.startDate ? ` (${payload.startDate})` : ''}`,
+    // Allow-list — no staff/PII, same rule as every outbound payload.
+    data: { eventId: id, name: payload.name, startDate: payload.startDate ?? '', city: payload.city ?? '' },
+  });
   return { ok: true, matched: 1, modified: 1, id };
 }
 
@@ -3045,6 +3061,11 @@ export async function commitEventReady({ eventId, shipping, actor }: CommitReady
   );
   const eventName = stored.payload.name || _id;
   void dispatchOutbound({
+    type: 'event_state_changed',
+    summary: `${eventName}: ${stored.payload.state || 'ready'} → in_transit`,
+    data: { eventId: _id, name: eventName, from: stored.payload.state || 'ready', to: 'in_transit' },
+  });
+  void dispatchOutbound({
     type: 'ship_kit_signoff',
     summary: `Kit shipped: ${eventName} via ${ship.carrier || 'carrier'}${ship.tracking ? ` (${ship.tracking})` : ''} — set In Transit`,
     data: { eventId: _id, eventName, carrier: ship.carrier, tracking: ship.tracking, byEmail: actor.email },
@@ -3085,6 +3106,11 @@ export async function markEventOnsite({ eventId, actor }: MarkOnsiteArgs): Promi
     { _id, ...NOT_DELETED },
     { $set: { 'payload.state': 'onsite', 'payload.audit': audit, 'payload.id': _id, updatedAt: now } }
   );
+  void dispatchOutbound({
+    type: 'event_state_changed',
+    summary: `${stored.payload.name || _id}: in_transit → onsite`,
+    data: { eventId: _id, name: stored.payload.name || '', from: 'in_transit', to: 'onsite' },
+  });
   return { ok: res.matchedCount > 0 };
 }
 
@@ -3129,6 +3155,11 @@ export async function commitEventClosed({ eventId, actor }: CommitClosedArgs): P
     { _id, ...NOT_DELETED },
     { $set: { 'payload.state': 'closed', 'payload.signoff': nextSignoff, 'payload.audit': audit, 'payload.id': _id, updatedAt: now } }
   );
+  void dispatchOutbound({
+    type: 'event_state_changed',
+    summary: `${stored.payload.name || _id}: ${stored.payload.state || 'unpacking'} → closed`,
+    data: { eventId: _id, name: stored.payload.name || '', from: stored.payload.state || 'unpacking', to: 'closed' },
+  });
   return { ok: res.matchedCount > 0 };
 }
 

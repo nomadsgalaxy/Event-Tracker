@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth/auth';
 import { rankOf } from '@/lib/auth/rbac';
 import { getDb, NOT_DELETED } from '@/lib/db/mongo';
+import { dispatchOutbound } from '@/lib/integrations/outbound';
 import type { EventDoc, StafferFeedback } from '@/lib/types/types';
 
 // app/event/feedback-actions.ts — the post-event "How was your stay?" submit.
@@ -133,6 +134,18 @@ export async function submitEventFeedbackAction(eventId: string, input: Feedback
   );
   if (res.matchedCount === 0) {
     return { ok: false, error: 'The roster changed while you were typing — reload and try again.' };
+  }
+
+  // Outbound: notify subscribers a survey landed. Counts only — no names/emails/comments (the
+  // same no-staff-PII rule every outbound payload follows). First-time submits only (an edit of an
+  // existing survey shouldn't re-ping).
+  if (!prevFb?.submittedAt) {
+    const responded = staff.filter((s, i) => (i === idx ? true : typeof s?.feedback?.submittedAt === 'number')).length;
+    void dispatchOutbound({
+      type: 'feedback_submitted',
+      summary: `Feedback submitted for ${doc.payload.name || id} (${responded}/${staff.length} responses)`,
+      data: { eventId: id, eventName: doc.payload.name || '', responses: responded, rosterSize: staff.length },
+    });
   }
 
   revalidatePath(`/event/${id}`);

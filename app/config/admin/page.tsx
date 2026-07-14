@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/auth';
-import { getBranding, envAccessPolicy, getPolicyOverlay, getTenantOverride, activeTenantId, getProviderConfigs, providerSecretStatus, getOutboundWebhookConfig, OUTBOUND_EVENT_TYPES } from '@/lib/auth/settings-store';
+import { getBranding, envAccessPolicy, getPolicyOverlay, getTenantOverride, activeTenantId, getProviderConfigs, providerSecretStatus, getOutboundWebhookConfig, getWebhookSubscriptions, OUTBOUND_EVENT_TYPES } from '@/lib/auth/settings-store';
 import { googleConfigured } from '@/lib/auth/oidc';
 import { tenantHash36 } from '@/lib/integrations/eitm';
 import { dbStatus } from '@/lib/db/mongo';
@@ -9,6 +9,7 @@ import { TenantCard } from './tenant-card';
 import { AccessPolicyCard } from './access-policy-card';
 import { SignInProvidersCard } from './sign-in-providers-card';
 import { OutboundWebhooksCard } from './outbound-webhooks-card';
+import { WebhookSubscriptionsCard, type WebhookRow } from './webhook-subscriptions-card';
 import { ServerInfraShells } from './server-infra-shells';
 
 // app/config/admin — Config > Admin. The genuinely-applicable cards are built FULLY (Company
@@ -34,6 +35,19 @@ export default async function ConfigAdminPage() {
     providerSecretStatus(),
     getOutboundWebhookConfig({ fresh: true }),
   ]);
+  // Minted webhook subscriptions (the API-key-style, per-event, EDITABLE endpoints). Secrets never
+  // reach the client - only a set/unset flag.
+  const webhookRows: WebhookRow[] = (await getWebhookSubscriptions({ fresh: true })).map((s) => ({
+    id: s.id,
+    url: s.url,
+    method: s.method,
+    events: s.events,
+    hasSecret: !!s.secret,
+    description: s.description,
+    active: s.active,
+    lastFiredAt: s.lastFiredAt ?? null,
+    lastStatus: s.lastStatus ?? null,
+  }));
 
   const envTenantDefault = String(process.env.EIT_TENANT_ID || process.env.MONGO_DB || '').trim().toLowerCase();
   const validRoles = effectiveRoles()
@@ -55,6 +69,7 @@ export default async function ConfigAdminPage() {
       <AccessPolicyCard initial={{ env, policy: overlay, validRoles }} />
       <SignInProvidersCard initialProviders={providers} initialSecretStatus={secretStatus} googleConfigured={googleConfigured()} />
       <OutboundWebhooksCard initial={{ ...outbound, eventTypes: OUTBOUND_EVENT_TYPES }} />
+      <WebhookSubscriptionsCard initial={webhookRows} eventTypes={OUTBOUND_EVENT_TYPES} />
       <ServerInfraShells dbReachable={db.reachable} dbName={db.dbName} />
     </div>
   );

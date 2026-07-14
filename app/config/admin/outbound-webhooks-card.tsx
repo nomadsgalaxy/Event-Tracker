@@ -21,6 +21,9 @@ const EVENT_LABELS: Record<string, string> = {
   severe_weather: 'Severe weather warning',
   ship_kit_signoff: 'Kit shipped (sign-off)',
   low_stock: 'Low stock (coming soon)',
+  event_created: 'Event created',
+  event_state_changed: 'Event state changed',
+  feedback_submitted: 'Post-event feedback submitted',
 };
 
 export interface OutboundWebhooksInitial {

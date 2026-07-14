@@ -86,12 +86,200 @@ export interface BrandingSettings {
 // ── Outbound notifications (webhook + Slack) ──────────────────────────────────────────────────────
 // Admin-configured: a generic JSON webhook URL and/or a Slack incoming-webhook URL, plus which event
 // types fan out. URLs are the capability (a Slack incoming webhook IS a bearer URL), stored as-is.
-export const OUTBOUND_EVENT_TYPES = ['item_flagged', 'flight_delay', 'severe_weather', 'ship_kit_signoff', 'low_stock'] as const;
+export const OUTBOUND_EVENT_TYPES = [
+  'item_flagged',
+  'flight_delay',
+  'severe_weather',
+  'ship_kit_signoff',
+  'low_stock',
+  'event_created',
+  'event_state_changed',
+  'feedback_submitted',
+] as const;
 export type OutboundEventType = (typeof OUTBOUND_EVENT_TYPES)[number];
 export interface OutboundWebhookConfig {
   webhookUrl: string;
   slackWebhookUrl: string;
   enabledEvents: string[];
+}
+
+// ── API-managed webhook SUBSCRIPTIONS (/api/v1/webhooks) ──────────────────────────────────────────
+// Multiple endpoints, each with its own event filter, delivery method (POST push / GET ping) and
+// optional HMAC secret. Stored on the settings doc (auth-plane — never reachable via the generic
+// /db surface) alongside the legacy single-URL config, which keeps working unchanged.
+export interface WebhookSubscription {
+  id: string;
+  url: string;
+  /** POST = JSON push (default). GET = query-string ping for simple receivers (IFTTT-style). */
+  method: 'POST' | 'GET';
+  /** Event types this subscription receives (validated against OUTBOUND_EVENT_TYPES). */
+  events: string[];
+  /** Optional shared secret — POST deliveries get X-EIT-Signature: sha256=hex(hmac(body)); GET
+   *  deliveries get &sig=hex(hmac(query-without-sig)). Echoed back ONLY as set/unset. */
+  secret: string;
+  description: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: number;
+  lastFiredAt?: number | null;
+  lastStatus?: number | null; // HTTP status of the last delivery (0 = network error)
+}
+
+const MAX_WEBHOOK_SUBS = 20;
+
+export async function getWebhookSubscriptions(opts: { fresh?: boolean } = {}): Promise<WebhookSubscription[]> {
+  const doc = await getSettingsDoc(opts);
+  const raw = (doc?.outboundWebhooks as { subscriptions?: unknown } | undefined)?.subscriptions;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+    .map((s) => ({
+      id: String(s.id || ''),
+      url: String(s.url || ''),
+      method: s.method === 'GET' ? 'GET' as const : 'POST' as const,
+      events: Array.isArray(s.events)
+        ? s.events.filter((e): e is string => typeof e === 'string' && (OUTBOUND_EVENT_TYPES as readonly string[]).includes(e))
+        : [],
+      secret: String(s.secret || ''),
+      description: String(s.description || ''),
+      active: s.active !== false,
+      createdBy: String(s.createdBy || ''),
+      createdAt: typeof s.createdAt === 'number' ? s.createdAt : 0,
+      lastFiredAt: typeof s.lastFiredAt === 'number' ? s.lastFiredAt : null,
+      lastStatus: typeof s.lastStatus === 'number' ? s.lastStatus : null,
+    }))
+    .filter((s) => s.id && s.url);
+}
+
+export async function addWebhookSubscription(input: {
+  url: string;
+  events: string[];
+  method?: string;
+  secret?: string;
+  description?: string;
+  actorEmail: string;
+}): Promise<{ ok: boolean; sub?: WebhookSubscription; error?: string }> {
+  if (DEMO_MODE) return demoDenied('Webhook subscriptions');
+  const url = String(input.url || '').trim().slice(0, 500);
+  if (!url || !isSafeWebhookUrl(url)) return { ok: false, error: 'url must be https and not a private/internal host.' };
+  const events = Array.isArray(input.events)
+    ? [...new Set(input.events.filter((e) => (OUTBOUND_EVENT_TYPES as readonly string[]).includes(String(e))))]
+    : [];
+  if (!events.length) return { ok: false, error: `events must include at least one of: ${OUTBOUND_EVENT_TYPES.join(', ')}.` };
+  const method = String(input.method || 'POST').toUpperCase() === 'GET' ? 'GET' as const : 'POST' as const;
+  const existing = await getWebhookSubscriptions({ fresh: true });
+  if (existing.length >= MAX_WEBHOOK_SUBS) return { ok: false, error: `Limit of ${MAX_WEBHOOK_SUBS} webhook subscriptions reached.` };
+  if (existing.some((s) => s.url === url && s.method === method)) return { ok: false, error: 'A subscription for this URL and method already exists.' };
+  const sub: WebhookSubscription = {
+    id: crypto.randomUUID(),
+    url,
+    method,
+    events,
+    secret: String(input.secret || '').trim().slice(0, 200),
+    description: String(input.description || '').trim().slice(0, 300),
+    active: true,
+    createdBy: String(input.actorEmail || '').toLowerCase(),
+    createdAt: Date.now(),
+    lastFiredAt: null,
+    lastStatus: null,
+  };
+  try {
+    const db = await getDb();
+    await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne(
+      { _id: SETTINGS_ID },
+      { $push: { 'outboundWebhooks.subscriptions': sub as unknown as Record<string, unknown> }, $set: { updatedAt: Date.now() } },
+      { upsert: true }
+    );
+    invalidateSettingsCache();
+    return { ok: true, sub };
+  } catch {
+    return { ok: false, error: 'Could not save the subscription — try again.' };
+  }
+}
+
+/** Edit a subscription in place — unlike API keys (immutable once minted), webhooks are editable:
+ *  url/method/events/description/active can change, and the secret can be replaced ('' clears it,
+ *  undefined keeps it). Same validation as create. */
+export async function updateWebhookSubscription(
+  id: string,
+  patch: {
+    url?: string;
+    events?: string[];
+    method?: string;
+    secret?: string;
+    description?: string;
+    active?: boolean;
+  }
+): Promise<{ ok: boolean; sub?: WebhookSubscription; error?: string }> {
+  if (DEMO_MODE) return demoDenied('Webhook subscriptions');
+  const sid = String(id || '').trim();
+  const existing = await getWebhookSubscriptions({ fresh: true });
+  const cur = existing.find((s) => s.id === sid);
+  if (!cur) return { ok: false, error: 'No such subscription.' };
+
+  const next: WebhookSubscription = { ...cur };
+  if (patch.url !== undefined) {
+    const url = String(patch.url).trim().slice(0, 500);
+    if (!url || !isSafeWebhookUrl(url)) return { ok: false, error: 'url must be https and not a private/internal host.' };
+    next.url = url;
+  }
+  if (patch.method !== undefined) next.method = String(patch.method).toUpperCase() === 'GET' ? 'GET' : 'POST';
+  if (patch.events !== undefined) {
+    const events = Array.isArray(patch.events)
+      ? [...new Set(patch.events.filter((e) => (OUTBOUND_EVENT_TYPES as readonly string[]).includes(String(e))))]
+      : [];
+    if (!events.length) return { ok: false, error: 'events must include at least one valid event type.' };
+    next.events = events;
+  }
+  if (patch.secret !== undefined) next.secret = String(patch.secret).trim().slice(0, 200);
+  if (patch.description !== undefined) next.description = String(patch.description).trim().slice(0, 300);
+  if (patch.active !== undefined) next.active = patch.active !== false;
+  if (existing.some((s) => s.id !== sid && s.url === next.url && s.method === next.method)) {
+    return { ok: false, error: 'A subscription for this URL and method already exists.' };
+  }
+
+  try {
+    const db = await getDb();
+    const res = await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne(
+      { _id: SETTINGS_ID, 'outboundWebhooks.subscriptions.id': sid },
+      { $set: { 'outboundWebhooks.subscriptions.$': next as unknown as Record<string, unknown>, updatedAt: Date.now() } }
+    );
+    invalidateSettingsCache();
+    return res.matchedCount > 0 ? { ok: true, sub: next } : { ok: false, error: 'No such subscription.' };
+  } catch {
+    return { ok: false, error: 'Could not update the subscription — try again.' };
+  }
+}
+
+export async function removeWebhookSubscription(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (DEMO_MODE) return demoDenied('Webhook subscriptions');
+  const sid = String(id || '').trim();
+  if (!sid) return { ok: false, error: 'Missing subscription id.' };
+  try {
+    const db = await getDb();
+    const res = await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne(
+      { _id: SETTINGS_ID },
+      { $pull: { 'outboundWebhooks.subscriptions': { id: sid } as never }, $set: { updatedAt: Date.now() } }
+    );
+    invalidateSettingsCache();
+    return res.modifiedCount > 0 ? { ok: true } : { ok: false, error: 'No such subscription.' };
+  } catch {
+    return { ok: false, error: 'Could not remove the subscription — try again.' };
+  }
+}
+
+/** Best-effort delivery stamp (lastFiredAt/lastStatus) — never throws, never blocks a dispatch. */
+export async function recordWebhookDelivery(id: string, status: number): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne(
+      { _id: SETTINGS_ID, 'outboundWebhooks.subscriptions.id': id },
+      { $set: { 'outboundWebhooks.subscriptions.$.lastFiredAt': Date.now(), 'outboundWebhooks.subscriptions.$.lastStatus': status } }
+    );
+    invalidateSettingsCache();
+  } catch {
+    /* best-effort */
+  }
 }
 
 export interface AccessPolicySettings {
@@ -176,6 +364,11 @@ function decSecret(blob: EncBlob | undefined | null): string | null {
 // ── doc read (30s TTL cache for the hot path; force-fresh for the admin screen) ──────────────────
 let _docCache: { at: number; doc: SettingsDoc | null } | null = null;
 const DOC_TTL_MS = 30_000;
+
+/** Drop the 30s settings cache after a write, so the next read sees it immediately. */
+function invalidateSettingsCache(): void {
+  _docCache = null;
+}
 
 async function getSettingsDoc(opts: { fresh?: boolean } = {}): Promise<SettingsDoc | null> {
   const now = Date.now();
