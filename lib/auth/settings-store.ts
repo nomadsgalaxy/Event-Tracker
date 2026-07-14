@@ -125,7 +125,10 @@ export interface WebhookSubscription {
   lastStatus?: number | null; // HTTP status of the last delivery (0 = network error)
 }
 
-const MAX_WEBHOOK_SUBS = 20;
+// Webhooks are PER-USER (minted alongside API keys in Account > Security); the per-owner cap is the
+// real limit, the instance cap is a sanity backstop.
+const MAX_WEBHOOK_SUBS = 50;
+const MAX_WEBHOOK_SUBS_PER_USER = 10;
 
 export async function getWebhookSubscriptions(opts: { fresh?: boolean } = {}): Promise<WebhookSubscription[]> {
   const doc = await getSettingsDoc(opts);
@@ -167,8 +170,12 @@ export async function addWebhookSubscription(input: {
     : [];
   if (!events.length) return { ok: false, error: `events must include at least one of: ${OUTBOUND_EVENT_TYPES.join(', ')}.` };
   const method = String(input.method || 'POST').toUpperCase() === 'GET' ? 'GET' as const : 'POST' as const;
+  const owner = String(input.actorEmail || '').toLowerCase();
   const existing = await getWebhookSubscriptions({ fresh: true });
   if (existing.length >= MAX_WEBHOOK_SUBS) return { ok: false, error: `Limit of ${MAX_WEBHOOK_SUBS} webhook subscriptions reached.` };
+  if (existing.filter((s) => s.createdBy === owner).length >= MAX_WEBHOOK_SUBS_PER_USER) {
+    return { ok: false, error: `Limit of ${MAX_WEBHOOK_SUBS_PER_USER} webhooks per user reached.` };
+  }
   if (existing.some((s) => s.url === url && s.method === method)) return { ok: false, error: 'A subscription for this URL and method already exists.' };
   const sub: WebhookSubscription = {
     id: crypto.randomUUID(),
@@ -209,13 +216,16 @@ export async function updateWebhookSubscription(
     secret?: string;
     description?: string;
     active?: boolean;
-  }
+  },
+  /** When set, only a subscription CREATED BY this email can be touched (per-user self-service);
+   *  a non-owned id reads as not-found so ids can't be probed. Admins pass undefined. */
+  opts: { owner?: string } = {}
 ): Promise<{ ok: boolean; sub?: WebhookSubscription; error?: string }> {
   if (DEMO_MODE) return demoDenied('Webhook subscriptions');
   const sid = String(id || '').trim();
   const existing = await getWebhookSubscriptions({ fresh: true });
   const cur = existing.find((s) => s.id === sid);
-  if (!cur) return { ok: false, error: 'No such subscription.' };
+  if (!cur || (opts.owner && cur.createdBy !== opts.owner.toLowerCase())) return { ok: false, error: 'No such subscription.' };
 
   const next: WebhookSubscription = { ...cur };
   if (patch.url !== undefined) {
@@ -251,15 +261,20 @@ export async function updateWebhookSubscription(
   }
 }
 
-export async function removeWebhookSubscription(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function removeWebhookSubscription(
+  id: string,
+  opts: { owner?: string } = {}
+): Promise<{ ok: boolean; error?: string }> {
   if (DEMO_MODE) return demoDenied('Webhook subscriptions');
   const sid = String(id || '').trim();
   if (!sid) return { ok: false, error: 'Missing subscription id.' };
   try {
     const db = await getDb();
+    const pull: Record<string, unknown> = { id: sid };
+    if (opts.owner) pull.createdBy = opts.owner.toLowerCase();
     const res = await db.collection<SettingsDoc>(AUTH_COLLECTION).updateOne(
       { _id: SETTINGS_ID },
-      { $pull: { 'outboundWebhooks.subscriptions': { id: sid } as never }, $set: { updatedAt: Date.now() } }
+      { $pull: { 'outboundWebhooks.subscriptions': pull as never }, $set: { updatedAt: Date.now() } }
     );
     invalidateSettingsCache();
     return res.modifiedCount > 0 ? { ok: true } : { ok: false, error: 'No such subscription.' };

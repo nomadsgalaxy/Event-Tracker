@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, ShieldCheck, ScrollText, UserCog, Tags, Database, RefreshCw, Settings2, Warehouse } from 'lucide-react';
+import { Users, ShieldCheck, ScrollText, UserCog, Tags, Database, RefreshCw, Settings2, Warehouse, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/util/utils';
 
 // config-nav.tsx — the Config sub-navigation (Users / Permissions / Audit) + the current admin's
@@ -17,7 +17,9 @@ const TABS = [
   // management entry point belongs in Config — matching the Python app's Config -> Warehouses tab.
   { href: '/warehouses', label: 'Warehouses', icon: Warehouse, exact: false },
   { href: '/config/permissions', label: 'Permissions', icon: ShieldCheck, exact: false },
-  { href: '/config/databases', label: 'Databases & API', icon: Database, exact: false },
+  { href: '/config/databases', label: 'Databases', icon: Database, exact: false },
+  // Oversight of the programmatic surface — every user-minted API key + webhook, and who minted them.
+  { href: '/config/api', label: 'API', icon: KeyRound, exact: false },
   { href: '/config/sync', label: 'Sync', icon: RefreshCw, exact: false },
   { href: '/config/admin', label: 'Admin', icon: Settings2, exact: false },
   { href: '/config/audit', label: 'Audit log', icon: ScrollText, exact: false },

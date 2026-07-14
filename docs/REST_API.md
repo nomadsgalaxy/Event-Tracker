@@ -74,15 +74,18 @@ capability (shown), re-intersected with your role.
 | POST | `/inventory/:id/flag` | `db.write.app` | `{ note, severity }` |
 | GET | `/search?q=` | read | Cross-entity search |
 | GET | `/low-stock` · `/conflicts` | read | Reorder-point + double-booking reports |
-| GET·POST | `/webhooks` | admin-owned key (`db.write.app` for POST) | List / register webhook subscriptions |
-| DELETE | `/webhooks/:id` · POST `/webhooks/:id/test` | admin-owned key | Remove / test-ping a subscription |
+| GET·POST | `/webhooks` | your own; admin key sees all (`db.write.app` for POST) | List / register webhook subscriptions |
+| DELETE | `/webhooks/:id` · POST `/webhooks/:id/test` | your own; admin key manages all | Remove / test-ping a subscription |
 
 ## Webhooks (push and get)
 
 Register endpoints to be notified when things happen — no polling. `POST /api/v1/webhooks` with
 `{ "url": "https://…", "events": ["event_state_changed", …], "method": "POST"|"GET", "secret": "…", "description": "…" }`.
-Requires a key owned by an admin. Up to 20 subscriptions; `GET /webhooks` lists them (with each
-subscription's last delivery status) plus the available event types.
+Webhooks are per-user (minted in Account > Security beside API keys, or via a write-scoped key
+whose owner is authorized or higher): each webhook belongs to the user who minted it, and you can
+only see and manage your own — a key owned by an admin sees and manages everyone's (the Config >
+API oversight view). Up to 10 per user; `GET /webhooks` lists yours (with each subscription's last
+delivery status) plus the available event types.
 
 Event types: `item_flagged`, `flight_delay`, `severe_weather`, `ship_kit_signoff`, `low_stock`,
 `event_created`, `event_state_changed`, `feedback_submitted`. Payloads never carry staff PII.

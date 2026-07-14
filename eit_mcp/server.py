@@ -817,8 +817,9 @@ def delete_record(collection: str, record_id: str) -> dict[str, Any]:
 def list_webhooks() -> dict[str, Any]:
     """List outbound webhook subscriptions + the available event types (READ).
 
-    Needs a key owned by an ADMIN. Each subscription shows its url, method
-    (POST push / GET ping), event filter, and last delivery status.
+    Webhooks are per-user: you see the ones owned by this key's user; a key
+    owned by an ADMIN lists everyone's. Each subscription shows its url,
+    method (POST push / GET ping), event filter, and last delivery status.
 
     Returns {webhooks, eventTypes}. Maps to GET /api/v1/webhooks.
     """
@@ -835,8 +836,9 @@ def create_webhook(
 ) -> dict[str, Any]:
     """Register an outbound webhook subscription (WRITE).
 
-    Needs a write-scope key owned by an ADMIN. Confirm with the user before
-    registering — the endpoint will receive workspace-wide notifications.
+    Needs a write-scope key (owner authorized or higher); the webhook is
+    owned by the key's user. Confirm with the user before registering — the
+    endpoint will receive workspace-wide notifications.
 
     Args:
         url: HTTPS endpoint (private/internal hosts are refused).
@@ -867,7 +869,7 @@ def update_webhook(
     description: str = "",
     active: bool | None = None,
 ) -> dict[str, Any]:
-    """Edit a webhook subscription in place (WRITE, admin-owned key).
+    """Edit one of this key owner's webhooks in place (WRITE; admin keys can edit anyone's).
 
     Unlike API keys, webhooks are editable — pass only the fields to change
     (empty string / None = leave unchanged). Secrets can only be replaced via
@@ -887,7 +889,7 @@ def update_webhook(
 
 @mcp.tool()
 def delete_webhook(webhook_id: str) -> dict[str, Any]:
-    """Remove an outbound webhook subscription (WRITE, admin-owned key).
+    """Remove one of this key owner's webhooks (WRITE; admin keys can remove anyone's).
 
     Returns {deleted}. Maps to DELETE /api/v1/webhooks/<id>.
     """
@@ -896,8 +898,8 @@ def delete_webhook(webhook_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def test_webhook(webhook_id: str) -> dict[str, Any]:
-    """Fire a test delivery at a webhook subscription and report the receiver's
-    HTTP status (admin-owned key).
+    """Fire a test delivery at one of this key owner's webhooks and report the
+    receiver's HTTP status (admin keys can test anyone's).
 
     Returns {delivered, receiverStatus}. Maps to POST /api/v1/webhooks/<id>/test.
     """

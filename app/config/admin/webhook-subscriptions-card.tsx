@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, Plus, Webhook, Pencil, Trash2, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,16 +11,21 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  listWebhooksAction,
   mintWebhookAction,
   editWebhookAction,
   deleteWebhookAction,
   testWebhookAction,
+  type WebhookRow,
 } from './webhook-subscription-actions';
 
-// webhook-subscriptions-card.tsx — Config → Admin "Webhook subscriptions". The API-managed,
-// multi-endpoint sibling of the legacy Outbound-notifications card, with an API-key-style MINT
-// flow: each new webhook picks exactly the events it wants via checkboxes. Unlike API keys,
-// minted webhooks stay EDITABLE — url, events, method, secret, description, and an active toggle.
+// webhook-subscriptions-card.tsx — the per-user webhook manager, with an API-key-style MINT flow:
+// each new webhook picks exactly the events it wants via checkboxes. Unlike API keys, minted
+// webhooks stay EDITABLE — url, events, method, secret, description, and an active toggle.
+// Two scopes: 'mine' (Account > Security, beside the API keys card — your own webhooks) and 'all'
+// (Config > API — the admin oversight view, every webhook + who minted it). Self-loading via
+// listWebhooksAction so it drops into any page without server wiring; hides itself entirely when
+// the viewer isn't allowed to mint (read-only users).
 
 const EVENT_LABELS: Record<string, string> = {
   item_flagged: 'Item flagged',
@@ -33,18 +37,7 @@ const EVENT_LABELS: Record<string, string> = {
   event_state_changed: 'Event state changed',
   feedback_submitted: 'Post-event feedback submitted',
 };
-
-export interface WebhookRow {
-  id: string;
-  url: string;
-  method: 'POST' | 'GET';
-  events: string[];
-  hasSecret: boolean;
-  description: string;
-  active: boolean;
-  lastFiredAt: number | null;
-  lastStatus: number | null;
-}
+const EVENT_TYPES = Object.keys(EVENT_LABELS);
 
 interface FormState {
   url: string;
@@ -59,7 +52,6 @@ const emptyForm = (): FormState => ({ url: '', method: 'POST', description: '', 
 
 function WebhookForm({
   initial,
-  eventTypes,
   hasSecret,
   busy,
   submitLabel,
@@ -67,7 +59,6 @@ function WebhookForm({
   onCancel,
 }: {
   initial: FormState;
-  eventTypes: readonly string[];
   /** Edit mode: whether a secret is currently set (drives the keep/clear affordance). */
   hasSecret?: boolean;
   busy: boolean;
@@ -131,7 +122,7 @@ function WebhookForm({
       <div className="grid gap-1.5">
         <Label>Events this webhook receives</Label>
         <div className="grid gap-2 sm:grid-cols-2">
-          {eventTypes.map((id) => (
+          {EVENT_TYPES.map((id) => (
             <label key={id} className="flex items-center gap-2 text-sm">
               <Checkbox checked={f.events.has(id)} onCheckedChange={(v) => toggle(id, v === true)} disabled={id === 'low_stock'} />
               <span className={id === 'low_stock' ? 'text-muted-foreground' : ''}>{EVENT_LABELS[id] ?? id}</span>
@@ -154,17 +145,24 @@ function WebhookForm({
   );
 }
 
-export function WebhookSubscriptionsCard({
-  initial,
-  eventTypes,
-}: {
-  initial: WebhookRow[];
-  eventTypes: readonly string[];
-}) {
-  const router = useRouter();
+export function WebhookSubscriptionsCard({ scope }: { scope: 'mine' | 'all' }) {
+  const [rows, setRows] = useState<WebhookRow[] | null>(null);
+  const [hidden, setHidden] = useState(false);
   const [minting, setMinting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    listWebhooksAction(scope).then((r) => {
+      if (r.ok) setRows(r.rows ?? []);
+      // Forbidden (read-only viewer) → the card simply isn't for them; disappear quietly.
+      else setHidden(true);
+    });
+  }, [scope]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const run = (p: Promise<{ ok: boolean; error?: string }>, okMsg: string) => {
     setBusy(true);
@@ -173,7 +171,7 @@ export function WebhookSubscriptionsCard({
         toast.success(okMsg);
         setMinting(false);
         setEditingId(null);
-        router.refresh();
+        load();
       } else {
         toast.error(r.error || 'That did not work.');
       }
@@ -191,118 +189,147 @@ export function WebhookSubscriptionsCard({
           : toast.error(r.error || `Endpoint answered ${r.receiverStatus ?? '—'}.`)
       )
       .catch(() => toast.error('Test failed — check your connection.'))
-      .finally(() => setBusy(false));
+      .finally(() => {
+        setBusy(false);
+        load();
+      });
   };
+
+  if (hidden) return null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Webhook className="size-4 text-primary" aria-hidden />
-          Webhook subscriptions
+          {scope === 'all' ? 'All webhooks' : 'Webhooks'}
         </CardTitle>
         <CardDescription>
-          Mint per-endpoint webhooks like API keys — each one picks exactly the events it receives —
-          but editable after creation. Deliveries are signed when a secret is set. Also manageable via
-          the REST API (<span className="font-mono">/api/v1/webhooks</span>) and the MCP tools.
+          {scope === 'all' ? (
+            <>
+              Every webhook minted on this deployment and who minted it. Each is owned and managed by
+              its user (Account &gt; Security) — as an admin you can also test, pause, edit, or delete
+              any of them here.
+            </>
+          ) : (
+            <>
+              Deliver Event Tracker events to your endpoints. Minted like API keys — each webhook picks
+              exactly the events it receives — but editable after creation. Deliveries are signed when a
+              secret is set. Also manageable via the REST API (<span className="font-mono">/api/v1/webhooks</span>)
+              and the MCP tools. Up to 10 per user.
+            </>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {initial.length === 0 && !minting && (
-          <p className="text-sm text-muted-foreground">No webhooks yet.</p>
-        )}
-        {initial.map((w) =>
-          editingId === w.id ? (
-            <WebhookForm
-              key={w.id}
-              initial={{ url: w.url, method: w.method, description: w.description, secret: undefined, events: new Set(w.events) }}
-              eventTypes={eventTypes}
-              hasSecret={w.hasSecret}
-              busy={busy}
-              submitLabel="Save changes"
-              onSubmit={(f) =>
-                run(
-                  editWebhookAction(w.id, {
-                    url: f.url,
-                    method: f.method,
-                    description: f.description,
-                    events: [...f.events],
-                    ...(f.secret !== undefined ? { secret: f.secret } : {}),
-                  }),
-                  'Webhook updated.'
-                )
-              }
-              onCancel={() => setEditingId(null)}
-            />
-          ) : (
-            <div key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border px-3 py-2.5">
-              <Badge variant="outline" className="font-mono">{w.method}</Badge>
-              <span className="min-w-0 flex-1 truncate font-mono text-sm" title={w.url}>{w.url}</span>
-              {!w.active && <Badge variant="outline" className="text-muted-foreground">Paused</Badge>}
-              <span className="text-xs text-muted-foreground">
-                {w.events.length} event{w.events.length === 1 ? '' : 's'}
-                {w.hasSecret ? ' · signed' : ''}
-                {w.lastStatus != null ? ` · last ${w.lastStatus || 'no response'}` : ''}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="ghost" onClick={() => test(w.id)} disabled={busy} title="Send a test delivery">
-                  <Radio aria-hidden />
-                  Test
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => run(editWebhookAction(w.id, { active: !w.active }), w.active ? 'Webhook paused.' : 'Webhook resumed.')}
-                  disabled={busy}
-                >
-                  {w.active ? 'Pause' : 'Resume'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setEditingId(w.id); setMinting(false); }} disabled={busy} title="Edit">
-                  <Pencil aria-hidden />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => run(deleteWebhookAction(w.id), 'Webhook deleted.')}
-                  disabled={busy}
-                  title="Delete"
-                >
-                  <Trash2 aria-hidden />
+        {rows === null ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden /> Loading…
+          </p>
+        ) : (
+          <>
+            {rows.length === 0 && !minting && (
+              <p className="text-sm text-muted-foreground">No webhooks yet.</p>
+            )}
+            {rows.map((w) =>
+              editingId === w.id ? (
+                <WebhookForm
+                  key={w.id}
+                  initial={{ url: w.url, method: w.method, description: w.description, secret: undefined, events: new Set(w.events) }}
+                  hasSecret={w.hasSecret}
+                  busy={busy}
+                  submitLabel="Save changes"
+                  onSubmit={(f) =>
+                    run(
+                      editWebhookAction(w.id, {
+                        url: f.url,
+                        method: f.method,
+                        description: f.description,
+                        events: [...f.events],
+                        ...(f.secret !== undefined ? { secret: f.secret } : {}),
+                      }),
+                      'Webhook updated.'
+                    )
+                  }
+                  onCancel={() => setEditingId(null)}
+                />
+              ) : (
+                <div key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border px-3 py-2.5">
+                  <Badge variant="outline" className="font-mono">{w.method}</Badge>
+                  <span className="min-w-0 flex-1 truncate font-mono text-sm" title={w.url}>{w.url}</span>
+                  {!w.active && <Badge variant="outline" className="text-muted-foreground">Paused</Badge>}
+                  <span className="text-xs text-muted-foreground">
+                    {w.events.length} event{w.events.length === 1 ? '' : 's'}
+                    {w.hasSecret ? ' · signed' : ''}
+                    {w.lastStatus != null ? ` · last ${w.lastStatus || 'no response'}` : ''}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => test(w.id)} disabled={busy} title="Send a test delivery">
+                      <Radio aria-hidden />
+                      Test
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => run(editWebhookAction(w.id, { active: !w.active }), w.active ? 'Webhook paused.' : 'Webhook resumed.')}
+                      disabled={busy}
+                    >
+                      {w.active ? 'Pause' : 'Resume'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setEditingId(w.id); setMinting(false); }} disabled={busy} title="Edit">
+                      <Pencil aria-hidden />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => run(deleteWebhookAction(w.id), 'Webhook deleted.')}
+                      disabled={busy}
+                      title="Delete"
+                    >
+                      <Trash2 aria-hidden />
+                    </Button>
+                  </div>
+                  {(scope === 'all' || w.description) && (
+                    <p className="w-full text-xs text-muted-foreground">
+                      {scope === 'all' && (
+                        <span className="mr-2 font-mono text-foreground/80" title="Minted by">{w.owner || 'unknown'}</span>
+                      )}
+                      {w.description}
+                    </p>
+                  )}
+                </div>
+              )
+            )}
+
+            {minting ? (
+              <WebhookForm
+                initial={emptyForm()}
+                busy={busy}
+                submitLabel="Mint webhook"
+                onSubmit={(f) =>
+                  run(
+                    mintWebhookAction({
+                      url: f.url,
+                      method: f.method,
+                      description: f.description,
+                      secret: f.secret ?? '',
+                      events: [...f.events],
+                    }),
+                    'Webhook minted.'
+                  )
+                }
+                onCancel={() => setMinting(false)}
+              />
+            ) : (
+              <div>
+                <Button variant="outline" size="sm" onClick={() => { setMinting(true); setEditingId(null); }} disabled={busy}>
+                  <Plus aria-hidden />
+                  New webhook
                 </Button>
               </div>
-              {w.description && <p className="w-full text-xs text-muted-foreground">{w.description}</p>}
-            </div>
-          )
-        )}
-
-        {minting ? (
-          <WebhookForm
-            initial={emptyForm()}
-            eventTypes={eventTypes}
-            busy={busy}
-            submitLabel="Mint webhook"
-            onSubmit={(f) =>
-              run(
-                mintWebhookAction({
-                  url: f.url,
-                  method: f.method,
-                  description: f.description,
-                  secret: f.secret ?? '',
-                  events: [...f.events],
-                }),
-                'Webhook minted.'
-              )
-            }
-            onCancel={() => setMinting(false)}
-          />
-        ) : (
-          <div>
-            <Button variant="outline" size="sm" onClick={() => { setMinting(true); setEditingId(null); }} disabled={busy}>
-              <Plus aria-hidden />
-              New webhook
-            </Button>
-          </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

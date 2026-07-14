@@ -16,14 +16,16 @@ import type { VerifiedKey } from '@/lib/api/api-keys';
 //         POST deliveries: JSON {id,event,ts,summary,data} + X-EIT-Signature sha256 HMAC when a
 //         secret is set. GET deliveries: ?event&ts&summary&payload(+sig) for simple receivers.
 //
-// GATE: the key OWNER must be an ADMIN (live role — instance-wide notification config is
-// admin-plane, like the Config → Admin card) and the key must carry a write scope. There's no
-// self-service here on purpose: a webhook receives events about the whole workspace.
+// GATE: webhooks are PER-USER — any authorized-or-higher key owner manages their OWN (writes need
+// a write-scoped key); an ADMIN-owned key sees and manages ALL of them (the Config > API view).
 export const dynamic = 'force-dynamic';
 
-function requireAdmin(vk: VerifiedKey): string | null {
-  if (rankOf(vk.role) < rankOf('admin')) return 'Webhook management requires an admin-owned key.';
+function gate(vk: VerifiedKey): string | null {
+  if (rankOf(vk.role) < rankOf('authorized')) return 'Webhook management requires an authorized-or-higher key owner.';
   return null;
+}
+function isAdmin(vk: VerifiedKey): boolean {
+  return rankOf(vk.role) >= rankOf('admin');
 }
 
 function publicSub(s: WebhookSubscription): Record<string, unknown> {
@@ -44,16 +46,17 @@ function publicSub(s: WebhookSubscription): Record<string, unknown> {
 
 export async function GET(req: NextRequest) {
   return withKey(req, async (vk) => {
-    const err = requireAdmin(vk);
+    const err = gate(vk);
     if (err) return apiErr(403, err);
-    const subs = await getWebhookSubscriptions({ fresh: true });
+    const all = await getWebhookSubscriptions({ fresh: true });
+    const subs = isAdmin(vk) ? all : all.filter((s) => s.createdBy === vk.ownerEmail.toLowerCase());
     return apiOk({ webhooks: subs.map(publicSub), eventTypes: OUTBOUND_EVENT_TYPES });
   });
 }
 
 export async function POST(req: NextRequest) {
   return withKey(req, async (vk) => {
-    const err = requireAdmin(vk);
+    const err = gate(vk);
     if (err) return apiErr(403, err);
     requireScope(vk, 'db.write.app');
     const body = await readBody(req);

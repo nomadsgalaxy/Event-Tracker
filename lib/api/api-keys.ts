@@ -126,6 +126,28 @@ export async function listApiKeys(
   };
 }
 
+/** One row of the admin Config > API oversight table: a key + who owns (minted) it. Public shape
+ *  only — never the hash. */
+export interface AdminApiKeyRow extends PublicApiKey {
+  owner: string;
+}
+
+/** Every API key on the deployment, newest first — the admin oversight read (Config > API). */
+export async function listAllApiKeys(): Promise<AdminApiKeyRow[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection<AuthDoc>(AUTH_COLLECTION)
+    .find({ 'apiKeys.0': { $exists: true } } as never)
+    .toArray();
+  const rows: AdminApiKeyRow[] = [];
+  for (const d of docs) {
+    for (const k of (d.apiKeys as StoredApiKey[] | undefined) ?? []) {
+      rows.push({ owner: String(d._id), ...publicKey(k) });
+    }
+  }
+  return rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+}
+
 export type CreateKeyResult =
   | { ok: true; id: string; label: string; scope: string; caps: string[]; token: string }
   | { ok: false; error: string; code: 400 | 404 };
