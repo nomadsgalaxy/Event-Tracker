@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { WebhookSubscriptionsCard } from '../admin/webhook-subscriptions-card';
+import { KeyCapsPopover } from './key-caps-popover';
 
 // app/config/api — Config > API: the admin OVERSIGHT view of the programmatic surface. Both API
 // keys and webhooks are minted per-user in Account > Security; this page shows all of them across
@@ -78,9 +79,7 @@ export default async function ConfigApiPage() {
                           <Badge variant={k.scope === 'write' ? 'default' : 'secondary'} className="text-[10px]">
                             {k.scope}
                           </Badge>
-                          <span className="text-xs text-muted-foreground" title={k.caps.join(', ')}>
-                            {k.caps.length} {k.caps.length === 1 ? 'capability' : 'capabilities'}
-                          </span>
+                          <KeyCapsPopover caps={k.caps} />
                         </span>
                       </TableCell>
                       <TableCell className="hidden text-xs text-muted-foreground tabular-nums md:table-cell">{fmtWhen(k.createdAt)}</TableCell>
