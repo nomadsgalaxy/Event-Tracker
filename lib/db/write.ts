@@ -6,7 +6,7 @@ import { can, VALID_ROLES, rankOf, canGrantRole } from '@/lib/auth/rbac';
 import { dispatchOutbound } from '@/lib/integrations/outbound';
 import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { resolveLiveRole } from '@/lib/auth/auth';
-import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry } from '@/lib/types/types';
+import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry, EventBol } from '@/lib/types/types';
 import type { InventoryDoc, InventoryPayload, DistributionRow, ItemUnit, ItemFlag, SkuOption, KitRequirement } from '@/lib/views/inventory-shape';
 import { addFlag as buildAddFlag } from '@/lib/views/inventory-shape';
 import { buildManifestSnapshot, buildCheckinSweep, type SnapshotCaseLite } from '@/lib/views/signoff-view';
@@ -3952,3 +3952,125 @@ export async function createInventoryItem({
   return { ok: true, matched: 1, modified: 1, id };
 }
 
+
+// ─── Bills of lading (payload.bols — server-owned, never editor-written) ─────────────────────────
+// A BOL records one freight move to ('outbound') or from ('return') the event, optionally with the
+// BOL PDF itself attached as a data URL (same in-doc storage + ceiling as the custody photo). Gated
+// exactly like saveEvent: event.edit, lead-of-event judged on the STORED doc.
+
+const MAX_EVENT_BOLS = 12;
+// ~700 KB of PDF → ~950k data-URL chars (matches the custody-photo ceiling).
+const MAX_BOL_FILE_CHARS = 950_000;
+
+const bolStr = (v: unknown, max: number): string => String(v ?? '').trim().slice(0, max);
+
+function sanitizeBol(raw: Record<string, unknown>, prev: EventBol | undefined, actorEmail: string, validPalletIds: Set<string>): EventBol | { error: string } {
+  const direction = raw.direction === 'return' ? 'return' as const : raw.direction === 'outbound' ? 'outbound' as const : null;
+  if (!direction) return { error: "direction must be 'outbound' or 'return'." };
+  const ft = String(raw.freightTerms ?? '');
+  const md = String(raw.mode ?? '');
+  const gw = Number(raw.grossWeightLbs);
+  const cnt = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n), 999) : null;
+  };
+  // Only pallets that exist on THIS event — a stale/forged id is silently dropped.
+  const palletIds = Array.isArray(raw.palletIds)
+    ? [...new Set(raw.palletIds.map((v) => String(v)).filter((v) => validPalletIds.has(v)))]
+    : [];
+  let fileName = prev?.fileName ?? '';
+  let fileDataUrl = prev?.fileDataUrl ?? '';
+  if (raw.fileDataUrl !== undefined) {
+    // '' clears the attachment; a value must be a bounded PDF data URL.
+    const f = String(raw.fileDataUrl ?? '');
+    if (f === '') {
+      fileName = '';
+      fileDataUrl = '';
+    } else if (/^data:application\/pdf;base64,[A-Za-z0-9+/=]+$/.test(f) && f.length <= MAX_BOL_FILE_CHARS) {
+      fileDataUrl = f;
+      fileName = bolStr(raw.fileName, 120) || 'bol.pdf';
+    } else {
+      return { error: 'Attachment must be a PDF up to ~700 KB.' };
+    }
+  }
+  return {
+    id: prev?.id ?? generateId(),
+    direction,
+    bolNumber: bolStr(raw.bolNumber, 60),
+    proNumber: bolStr(raw.proNumber, 60),
+    carrier: bolStr(raw.carrier, 120),
+    shipDate: bolStr(raw.shipDate, 10),
+    shipFrom: bolStr(raw.shipFrom, 600),
+    shipTo: bolStr(raw.shipTo, 600),
+    freightTerms: ft === 'prepaid' || ft === 'collect' || ft === 'third-party' ? ft : '',
+    mode: md === 'ltl' || md === 'ftl' || md === 'parcel' ? md : '',
+    palletIds,
+    palletCount: cnt(raw.palletCount),
+    boxCount: cnt(raw.boxCount),
+    pieces: bolStr(raw.pieces, 120),
+    grossWeightLbs: Number.isFinite(gw) && gw > 0 ? Math.round(gw) : null,
+    specialInstructions: bolStr(raw.specialInstructions, 600),
+    deliveryInstructions: bolStr(raw.deliveryInstructions, 600),
+    referenceNumbers: bolStr(raw.referenceNumbers, 300),
+    notes: bolStr(raw.notes, 600),
+    fileName,
+    fileDataUrl,
+    createdBy: prev?.createdBy ?? actorEmail.toLowerCase(),
+    createdAt: prev?.createdAt ?? Date.now(),
+    ...(prev ? { updatedAt: Date.now() } : {}),
+  };
+}
+
+async function loadEventForBol(eventId: string, actorEmail: string, actorRole: string): Promise<EventDoc> {
+  const _id = String(eventId);
+  const db = await getDb();
+  const stored = await db.collection<EventDoc>('events').findOne({ _id, ...NOT_DELETED });
+  if (!stored) throw new Error('Event not found (or deleted).');
+  const isLead = viewerLeadsEvent(stored.payload, actorEmail);
+  if (!can('event.edit', actorRole, { isLeadOfEvent: isLead })) {
+    throw new WriteForbiddenError('You do not have permission to edit this event.');
+  }
+  return stored;
+}
+
+export async function saveEventBol(args: {
+  eventId: string;
+  bol: Record<string, unknown>;
+  actorEmail: string;
+  actorRole: string;
+}): Promise<{ ok: boolean; error?: string; bolId?: string }> {
+  const stored = await loadEventForBol(args.eventId, args.actorEmail, args.actorRole);
+  const existing: EventBol[] = Array.isArray(stored.payload.bols) ? stored.payload.bols : [];
+  const editId = bolStr(args.bol.id, 60);
+  const prev = editId ? existing.find((b) => b.id === editId) : undefined;
+  if (editId && !prev) return { ok: false, error: 'No such BOL.' };
+  if (!prev && existing.length >= MAX_EVENT_BOLS) return { ok: false, error: `Limit of ${MAX_EVENT_BOLS} BOLs per event.` };
+  const validPalletIds = new Set((stored.payload.pallets ?? []).map((pl) => String(pl.id)));
+  const next = sanitizeBol(args.bol, prev, args.actorEmail, validPalletIds);
+  if ('error' in next) return { ok: false, error: next.error };
+  const bols = prev ? existing.map((b) => (b.id === prev.id ? next : b)) : [...existing, next];
+  const db = await getDb();
+  await db.collection<EventDoc>('events').updateOne(
+    { _id: String(args.eventId) },
+    { $set: { 'payload.bols': bols, updatedAt: Date.now() } }
+  );
+  return { ok: true, bolId: next.id };
+}
+
+export async function removeEventBol(args: {
+  eventId: string;
+  bolId: string;
+  actorEmail: string;
+  actorRole: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const stored = await loadEventForBol(args.eventId, args.actorEmail, args.actorRole);
+  const existing: EventBol[] = Array.isArray(stored.payload.bols) ? stored.payload.bols : [];
+  const bid = bolStr(args.bolId, 60);
+  if (!existing.some((b) => b.id === bid)) return { ok: false, error: 'No such BOL.' };
+  const db = await getDb();
+  await db.collection<EventDoc>('events').updateOne(
+    { _id: String(args.eventId) },
+    { $set: { 'payload.bols': existing.filter((b) => b.id !== bid), updatedAt: Date.now() } }
+  );
+  return { ok: true };
+}

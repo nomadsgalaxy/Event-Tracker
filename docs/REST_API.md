@@ -77,6 +77,15 @@ capability (shown), re-intersected with your role.
 | GET·POST | `/webhooks` | your own; admin key sees all (`db.write.app` for POST) | List / register webhook subscriptions |
 | DELETE | `/webhooks/:id` · POST `/webhooks/:id/test` | your own; admin key manages all | Remove / test-ping a subscription |
 
+## Bills of lading
+
+Events carry `payload.bols[]` — one record per freight move, `direction: "outbound" | "return"`,
+with `bolNumber`, `proNumber`, `carrier`, `shipDate`, `shipFrom`/`shipTo`, `freightTerms`
+(prepaid / collect / third-party), `mode` (`ltl` | `ftl` | `parcel`), pallet/box counts,
+`palletIds` (the event pallets it covers), instructions, and reference numbers. BOLs are managed
+from the event's Shipping tab (event.edit — manager+ or the event lead). API reads include the
+metadata but never the attached PDF (`hasFile: true` marks a stored attachment).
+
 ## Webhooks (push and get)
 
 Register endpoints to be notified when things happen — no polling. `POST /api/v1/webhooks` with

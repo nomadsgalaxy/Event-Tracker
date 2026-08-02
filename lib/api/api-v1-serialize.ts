@@ -19,10 +19,19 @@ const lc = (v: unknown): string => String(v ?? '').trim().toLowerCase();
  *  mutates the input. Identical tiering to stripEventPii but gated by keyCan (scope ∩ owner-caps). */
 export function stripEventForKey(payload: EventPayload, vk: VerifiedKey): EventPayload {
   const staff = payload.staff;
-  if (!Array.isArray(staff)) return payload;
+  const next: EventPayload = { ...payload };
+  // BOL attachments stay UI-only: API reads get the metadata (incl. fileName) but never the
+  // embedded PDF data URL — hasFile tells the client one is attached.
+  if (Array.isArray(next.bols)) {
+    next.bols = next.bols.map((b) => {
+      if (!b || typeof b !== 'object') return b;
+      const { fileDataUrl, ...rest } = b;
+      return { ...rest, ...(fileDataUrl ? { hasFile: true } : {}) } as typeof b;
+    });
+  }
+  if (!Array.isArray(staff)) return next;
   const leads = viewerLeadsEvent(payload, vk.ownerEmail);
   const me = lc(vk.ownerEmail);
-  const next: EventPayload = { ...payload };
   next.staff = staff.map((s) => {
     if (!s || typeof s !== 'object') return s;
     const se = lc(s.email);

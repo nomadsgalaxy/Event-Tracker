@@ -196,6 +196,45 @@ export interface ShipLeg {
   notes?: string;
 }
 
+// A Bill of Lading for one freight move (to or from the event) — the fields off a real LTL BOL
+// (myUnishippers/TForce shape): the BOL + PRO numbers, parties, terms, HU/weight summary, and the
+// document itself as an attached PDF (data-URL, same in-doc storage as custody photos). Lives at
+// payload.bols (NOT inside outbound/return — the editor $sets those legs wholesale and would wipe
+// nested records), server-owned like signoff: written only by the BOL actions, never the editor.
+export interface EventBol {
+  id: string;
+  direction: 'outbound' | 'return';
+  bolNumber?: string;
+  /** Assigned by the carrier at/after pickup — usually filled in later. */
+  proNumber?: string;
+  carrier?: string;
+  shipDate?: string; // YYYY-MM-DD
+  /** Multiline: name / address / contact (free text, as printed on the BOL). */
+  shipFrom?: string;
+  shipTo?: string;
+  freightTerms?: 'prepaid' | 'collect' | 'third-party' | '';
+  /** How it moves: LTL freight, a full truckload, or traditional parcel (UPS/FedEx ground). */
+  mode?: 'ltl' | 'ftl' | 'parcel' | '';
+  /** The event pallets (payload.pallets ids) this BOL covers — chips in the UI. */
+  palletIds?: string[];
+  /** Handling-unit counts as printed on the BOL. */
+  palletCount?: number | null;
+  boxCount?: number | null;
+  /** Free-text HU summary for anything the counts don't capture ("2 crates on skids"). */
+  pieces?: string;
+  grossWeightLbs?: number | null;
+  specialInstructions?: string;
+  deliveryInstructions?: string;
+  referenceNumbers?: string;
+  notes?: string;
+  fileName?: string;
+  /** The BOL PDF as a data URL (≤ ~700 KB). Stripped from API reads — UI/detail only. */
+  fileDataUrl?: string;
+  createdBy?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 // A booth setup / teardown WINDOW — a datetime-local range the Calendar renders as an hour-grid
 // block (Week view) and a logistics segment chip (Month view). The live seed (events.payload.setup
 // / .teardown) carries exactly { start, end } as datetime-local strings ("2026-06-12T12:00"); the
@@ -368,6 +407,8 @@ export interface EventPayload {
   lead?: string; // email
   outbound?: ShipLeg;
   return?: ShipLeg;
+  /** Bills of lading for this event's freight (server-owned; see EventBol). */
+  bols?: EventBol[];
   // The event WEBSITE (top-level in the live data — index.html stores event.website, EXPORTED in
   // EVENT_HEADERS). The detail's Venue card renders it as an external link; venue.website is also
   // honored as a fallback for older records.
