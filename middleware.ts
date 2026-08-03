@@ -120,6 +120,7 @@ const PUBLIC_PATHS = [
   '/api/auth/password/initial',
   '/api/auth/passkey/login',
   '/api/version', // the build-id stamp (non-sensitive) — public so the version-watcher works pre-login too
+  '/manifest.webmanifest', // the PWA manifest — Chrome fetches it without credentials; nothing sensitive in it
   '/api/demo/enter', // DEMO auto-sign-in — public so a signed-out visitor can be bounced through it
   '/t', // the NFC tag viewer — renders material data from the URL FRAGMENT only (never sent to the
         // server, no DB read, no inventory exposure), so a tag tapped on any phone (iOS/Android) opens

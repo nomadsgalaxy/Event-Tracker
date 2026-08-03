@@ -1,9 +1,11 @@
+import { headers } from 'next/headers';
 import { requireRole } from '@/lib/auth/auth';
 import { getCases, getEvents, getInventory } from '@/lib/db/data';
 import { isCaseRetired } from '@/lib/views/case-view';
 import { activeTenantHash36 } from '@/lib/auth/settings-store';
 import { scanPolicy, type ScanCaseLean, type ScanEventLean, type ScanItemLean } from '@/lib/views/scan';
 import { ScanScreen } from '../scan-screen';
+import { isMobileUa } from '@/components/hooks/use-is-mobile';
 
 // /scan[/{pack|return}[/<caseId>]] + /scan/event/<eventId> — Scan-Pack (DESIGN_ALIGNMENT.md §4.4).
 // A faithful port of the Python ScanHybrid surface, served as a CATCH-ALL so the deep-links match
@@ -71,6 +73,7 @@ export default async function ScanPage({ params, searchParams }: ScanPageProps) 
 
   return (
     <ScanScreen
+      initialIsMobile={isMobileUa(await headers())}
       cases={cases}
       events={events}
       items={items}

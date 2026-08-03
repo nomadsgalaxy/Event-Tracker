@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn } from '@/lib/util/utils';
-import { useIsMobile } from './use-is-mobile';
+import { useIsMobile } from '@/components/hooks/use-is-mobile';
 import { decodeScanPayload, findInventoryByScan } from '@/lib/views/case-view';
 import {
   caseContents,
@@ -55,6 +55,8 @@ import type { ScanResult } from './use-scan-camera';
 // UnknownScanModal adoption flow. Every WRITE goes through a gated Server Action (app/scan/actions).
 
 interface ScanScreenProps {
+  /** Server UA hint — phones get the mobile layout on the FIRST paint (no desktop flash). */
+  initialIsMobile?: boolean;
   cases: ScanCaseLean[];
   events: ScanEventLean[];
   items: ScanItemLean[];
@@ -76,9 +78,10 @@ export function ScanScreen({
   routeVariant,
   routeCaseId,
   routeLooseEventId,
+  initialIsMobile,
 }: ScanScreenProps) {
   const router = useRouter();
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(768, initialIsMobile);
   const isDesktop = !isMobile;
 
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);

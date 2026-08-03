@@ -1,5 +1,5 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist } from 'next/font/google';
 import { cn } from '@/lib/util/utils';
 import { Toaster } from '@/components/ui/sonner';
@@ -20,6 +20,16 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   openGraph: { title: 'Event Tracker', description: DESCRIPTION, siteName: 'Event Tracker', type: 'website' },
   twitter: { card: 'summary', title: 'Event Tracker', description: DESCRIPTION },
+};
+
+// viewport-fit=cover makes env(safe-area-inset-*) real on notched/edge-to-edge phones — without it
+// the MobileNavBar's safe-area padding (layout body + tab bar) computes to 0 and the bar can sit
+// under the gesture area in the installed (standalone) app. themeColor tints the Android status bar.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0b0b0d',
 };
 
 // app/layout.tsx — the ONE persistent app shell (DESIGN_ALIGNMENT §1.1). A flex column:
