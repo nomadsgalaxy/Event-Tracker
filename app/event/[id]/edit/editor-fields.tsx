@@ -11,6 +11,8 @@ import {
 } from 'react-hook-form';
 import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight, Copy, Truck, Star } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { BolManager } from '@/components/events/bol-manager';
+import type { EventBol, EventPallet } from '@/lib/types/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
@@ -2380,7 +2382,7 @@ function PalletsSection() {
 }
 
 // ── Shipping panel ────────────────────────────────────────────────────────────
-export function ShippingPanel() {
+export function ShippingPanel({ eventId, isNew, bols }: { eventId: string; isNew: boolean; bols: EventBol[] }) {
   // Soft return-shipping nudge: once outbound shipping is being entered, remind the user to verify a
   // RETURN pickup is requested (or confirm the items aren't coming back). It's advisory only — it
   // never blocks save, and it self-clears the moment any return field is filled.
@@ -2389,6 +2391,10 @@ export function ShippingPanel() {
     control,
     name: ['outbound.carrier', 'outbound.tracking', 'outbound.pickupDate', 'return.carrier', 'return.tracking', 'return.arrivalDate'],
   }) as (string | undefined)[];
+  // Pallets come from the LIVE form (a pallet added in this session is linkable right away); BOLs
+  // are server-owned so they come from the stored payload.
+  const pallets = (useWatch({ control, name: 'pallets' }) as EventPallet[] | undefined) ?? [];
+  const bolNote = 'Bills of lading save immediately — separately from this form’s Save button.';
   const filled = (...vals: (string | undefined)[]) => vals.some((v) => !!String(v ?? '').trim());
   const outboundStarted = filled(watched[0], watched[1], watched[2]);
   const returnStarted = filled(watched[3], watched[4], watched[5]);
@@ -2409,6 +2415,11 @@ export function ShippingPanel() {
           </div>
         </FormItem>
         <NotesField name="outbound.notes" placeholder="Loading dock instructions, special handling, etc." />
+        {isNew ? (
+          <p className="text-[11px] italic text-muted-foreground">Save the event first, then attach bills of lading here.</p>
+        ) : (
+          <BolManager eventId={eventId} direction="outbound" bols={bols} pallets={pallets} canEdit note={bolNote} />
+        )}
       </FieldGroup>
 
       {remindReturn ? (
@@ -2438,6 +2449,9 @@ export function ShippingPanel() {
           </div>
         </FormItem>
         <NotesField name="return.notes" placeholder="Return logistics, reconciliation deadline, etc." />
+        {isNew ? null : (
+          <BolManager eventId={eventId} direction="return" bols={bols} pallets={pallets} canEdit note={bolNote} />
+        )}
       </FieldGroup>
     </div>
   );

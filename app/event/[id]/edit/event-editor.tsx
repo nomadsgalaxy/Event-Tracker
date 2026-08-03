@@ -276,7 +276,7 @@ export function EventEditor({
               <PackingPanel />
             </TabsContent>
             <TabsContent value="shipping" forceMount className="mt-4 data-[state=inactive]:hidden">
-              <ShippingPanel />
+              <ShippingPanel eventId={id} isNew={isNew} bols={initial.bols ?? []} />
             </TabsContent>
             <TabsContent value="side" forceMount className="mt-4 data-[state=inactive]:hidden">
               <SidePanel />
