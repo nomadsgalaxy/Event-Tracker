@@ -5,7 +5,10 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/util/utils';
 import { isNavActive, mobileNav } from './nav-model';
 
-// mobile-tab-bar.tsx — the fixed bottom navigation shown BELOW the md breakpoint (it replaces the
+// mobile-tab-bar.tsx — the fixed bottom navigation for TOUCH layouts: below md always, and md–lg on
+// coarse-pointer devices (unfolded foldables / tablets report 800–1000px but are still thumb-driven —
+// width alone misclassified a Pixel Fold's inner screen as desktop). ≥lg everyone gets the top nav.
+// (It replaces the
 // hidden center TopNav on phones; the TopBar's wordmark + right cluster stay). DESIGN_ALIGNMENT §1.4:
 // the high-traffic "floor" surfaces only — Home · Calendar · Manifest · Scan · Sign-Off · Catalog
 // (the mobile-flagged subset of PRIMARY_NAV). Reports / Config / Account / Activity are deep-link /
@@ -26,7 +29,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
     <nav
       aria-label="Primary"
       className={cn(
-        'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur md:hidden',
+        'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur pointer-fine:md:hidden lg:hidden',
         'pb-[env(safe-area-inset-bottom)]'
       )}
     >

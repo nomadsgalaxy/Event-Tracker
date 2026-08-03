@@ -107,7 +107,7 @@ export function TopNav({ isAdmin }: { isAdmin: boolean }) {
     <nav
       ref={containerRef as React.RefObject<HTMLElement>}
       aria-label="Primary"
-      className="hidden min-w-0 flex-1 items-center gap-1 md:flex"
+      className="hidden min-w-0 flex-1 items-center gap-1 pointer-fine:md:flex lg:flex"
     >
       {shown.map((item) => {
         const active = isNavActive(item, pathname);

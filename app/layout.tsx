@@ -59,7 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Applies the signed-in user's saved accent theme app-wide (no FOUC, no client-only read). */}
         <ThemeStyle />
       </head>
-      <body className="flex min-h-dvh flex-col bg-background text-foreground antialiased pb-[calc(4rem_+_env(safe-area-inset-bottom))] md:pb-0">
+      <body className="flex min-h-dvh flex-col bg-background text-foreground antialiased pb-[calc(4rem_+_env(safe-area-inset-bottom))] pointer-fine:md:pb-0 lg:pb-0">
         <TooltipProvider delayDuration={200}>
           <DemoBanner />
           <TopBar />

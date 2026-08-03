@@ -59,7 +59,7 @@ export async function TopBar() {
       {/* CENTER — primary workflow nav (desktop). On mobile this collapses to the MobileTabBar; the
           spacer keeps the right cluster pinned right when the nav is hidden. */}
       <TopNav isAdmin={isAdmin} />
-      <div className="flex-1 md:hidden" />
+      <div className="flex-1 pointer-fine:md:hidden lg:hidden" />
 
       {/* RIGHT cluster */}
       <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
