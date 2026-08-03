@@ -407,7 +407,7 @@ export function DayHoursEditor() {
             const attOk = ao !== null && ac !== null && ac > ao;
             const exOk = xo !== null && xc !== null && xc > xo;
             return (
-              <div key={d.key} className="w-48 shrink-0 rounded-md border border-border bg-card/60 p-1.5">
+              <div key={d.key} className="w-56 shrink-0 rounded-md border border-border bg-card/60 p-1.5">
                 {/* Header: weekday + copy/clear controls. */}
                 <div className="mb-1 flex items-center justify-between gap-0.5">
                   <span className={cn('text-[11px] font-semibold', hasOverride ? 'text-foreground' : 'text-muted-foreground')}>
@@ -503,9 +503,11 @@ export function DayHoursEditor() {
                 </div>
 
                 {/* Per-day time inputs: attendee doors + exhibitor access. The card is w-48 and the
-                    labels sit ABOVE each pair — a native <input type="time"> needs ~88px to render
-                    "12:00 PM" plus its picker icon, and the old 8.25rem card with inline labels
-                    squeezed each field to ~55px (unreadable). */}
+                    labels sit ABOVE each pair. A native <input type="time"> needs ~100px to render
+                    "09:00 AM" plus its picker icon: the old 8.25rem card with inline labels gave each
+                    field ~55px and even 8.25rem→12rem still cut the AM/PM. NOTE the truncation is
+                    invisible to scrollWidth (it happens inside the input's shadow DOM) — check it by
+                    eye/screenshot, not by measuring overflow. */}
                 <div className="mt-1.5 flex flex-col gap-1.5">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Doors</span>
