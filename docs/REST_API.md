@@ -64,6 +64,8 @@ capability (shown), re-intersected with your role.
 | POST·PATCH | `/events/:id` | `event.edit` (other fields), `pallets.edit` (`cases`) | Partial update; `brief` is the Event Brief / planning notes (free text — the field AI agents write via the MCP `update_event`) |
 | DELETE | `/events/:id` | `event.delete` | Soft-delete |
 | POST | `/events/:id/shipment` | `event.edit` | Outbound/return leg |
+| GET·POST | `/events/:id/bols` | `db.read.session` · `event.edit` | List / add-or-update a bill of lading |
+| PATCH·DELETE | `/events/:id/bols/:bolId` | `event.edit` | Edit / remove one BOL |
 | POST | `/events/:id/travel` · `/events/:id/lodging` | `staff.pii.view` | Defaults to the key owner |
 | GET | `/cases` · `/cases/:id` | read | `:id` includes the packed manifest |
 | POST | `/cases` · POST·PATCH `/cases/:id` | `pallets.edit` | Create / edit |
@@ -81,10 +83,30 @@ capability (shown), re-intersected with your role.
 
 Events carry `payload.bols[]` — one record per freight move, `direction: "outbound" | "return"`,
 with `bolNumber`, `proNumber`, `carrier`, `shipDate`, `shipFrom`/`shipTo`, `freightTerms`
-(prepaid / collect / third-party), `mode` (`ltl` | `ftl` | `parcel`), pallet/box counts,
-`palletIds` (the event pallets it covers), instructions, and reference numbers. BOLs are managed
-from the event's Shipping tab (event.edit — manager+ or the event lead). API reads include the
-metadata but never the attached PDF (`hasFile: true` marks a stored attachment).
+(prepaid / collect / third-party), `mode` (`ltl` | `ftl` | `parcel`), `palletCount`/`boxCount`,
+`pieces` (other handling units), `grossWeightLbs`, `palletIds` (the event pallets it covers),
+`specialInstructions`, `deliveryInstructions`, `referenceNumbers`, and `notes`. Manage them from the
+event's Shipping tab, the editor's Shipping step, or this API — all need `event.edit` (manager+ or
+the event's lead). Reads return the metadata but never the attached PDF (`hasFile: true` marks one).
+
+**Document entry (what an AI agent does):** read the BOL, then `POST /api/v1/events/:id/bols` with
+the fields you extracted. Include `id` to update an existing record instead of adding one. Attach
+the document itself with `fileDataUrl` — a `data:application/pdf;base64,…` URL up to ~700 KB — and
+`fileName`. Unknown fields can be omitted and filled in later (a PRO number usually arrives after
+pickup). `PATCH /events/:id/bols/:bolId` merges onto the stored record, so a partial patch never
+blanks the other fields; `fileDataUrl: ""` clears the attachment.
+
+```
+POST /api/v1/events/HopTLu/bols
+{ "direction": "return", "bolNumber": "SLL37588633", "carrier": "(UPGF) TForce Freight",
+  "shipDate": "2026-07-27", "mode": "ltl", "freightTerms": "third-party",
+  "palletCount": 5, "grossWeightLbs": 1400,
+  "specialInstructions": "Do not stack some items - see descriptions, commercial pickup",
+  "deliveryInstructions": "Access Crowell Rd via MacArthur Dr. -- Dropoff at door #4" }
+```
+
+The MCP server wraps this as `list_bols` / `save_bol` / `delete_bol`; `save_bol` also takes a
+`pdf_path` and base64-encodes the local file for you.
 
 ## Webhooks (push and get)
 

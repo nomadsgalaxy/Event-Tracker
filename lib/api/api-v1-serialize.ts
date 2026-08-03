@@ -4,7 +4,7 @@ import { keyCan } from '@/lib/api/api-v1';
 import type { VerifiedKey } from '@/lib/api/api-keys';
 import { buildCaseManifest } from '@/lib/views/case-view';
 import { itemInStorage, itemStockTotal, itemTotalQty, itemRollupState, type InventoryPayload } from '@/lib/views/inventory-shape';
-import type { EventPayload, CasePayload } from '@/lib/types/types';
+import type { EventPayload, CasePayload, EventBol } from '@/lib/types/types';
 
 // lib/api/api-v1-serialize.ts — wire shapes for the /api/v1 surface.
 //
@@ -23,11 +23,7 @@ export function stripEventForKey(payload: EventPayload, vk: VerifiedKey): EventP
   // BOL attachments stay UI-only: API reads get the metadata (incl. fileName) but never the
   // embedded PDF data URL — hasFile tells the client one is attached.
   if (Array.isArray(next.bols)) {
-    next.bols = next.bols.map((b) => {
-      if (!b || typeof b !== 'object') return b;
-      const { fileDataUrl, ...rest } = b;
-      return { ...rest, ...(fileDataUrl ? { hasFile: true } : {}) } as typeof b;
-    });
+    next.bols = next.bols.map((b) => (b && typeof b === 'object' ? (publicBol(b) as unknown as EventBol) : b));
   }
   if (!Array.isArray(staff)) return next;
   const leads = viewerLeadsEvent(payload, vk.ownerEmail);
@@ -51,6 +47,13 @@ export function stripEventForKey(payload: EventPayload, vk: VerifiedKey): EventP
     return out;
   });
   return next;
+}
+
+/** A BOL as the API returns it: everything EXCEPT the embedded PDF (`hasFile` says whether one is
+ *  attached — fetch/replace it through the UI or by POSTing a new fileDataUrl). */
+export function publicBol(b: EventBol): Record<string, unknown> {
+  const { fileDataUrl, ...rest } = b;
+  return { ...rest, hasFile: !!fileDataUrl };
 }
 
 /** A flat inventory item with resolved stock figures (the shape the MCP get_item expects). */

@@ -20,6 +20,7 @@ Transport: stdio.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -811,6 +812,128 @@ def delete_record(collection: str, record_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Webhooks (push/get notifications for external systems and agents)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Bills of lading
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_bols(event_id: str) -> dict[str, Any]:
+    """List an event's bills of lading (READ).
+
+    Each BOL covers one freight move: direction ('outbound' or 'return'),
+    BOL/PRO numbers, carrier, ship date, parties, freight terms, shipment mode
+    (ltl/ftl/parcel), pallet + box counts, linked event pallets, instructions,
+    and whether a PDF is attached (hasFile). The PDF itself is never returned.
+
+    Returns {eventId, bols}. Maps to GET /api/v1/events/<id>/bols.
+    """
+    return _request("GET", f"/api/v1/events/{_seg(event_id)}/bols")
+
+
+@mcp.tool()
+def save_bol(
+    event_id: str,
+    direction: str,
+    bol_id: str = "",
+    bol_number: str = "",
+    pro_number: str = "",
+    carrier: str = "",
+    ship_date: str = "",
+    ship_from: str = "",
+    ship_to: str = "",
+    freight_terms: str = "",
+    mode: str = "",
+    pallet_count: int | None = None,
+    box_count: int | None = None,
+    pieces: str = "",
+    gross_weight_lbs: int | None = None,
+    special_instructions: str = "",
+    delivery_instructions: str = "",
+    reference_numbers: str = "",
+    notes: str = "",
+    pdf_path: str = "",
+) -> dict[str, Any]:
+    """Record a bill of lading on an event (WRITE, needs event.edit).
+
+    THE DOCUMENT-ENTRY TOOL: read a BOL (PDF/scan/photo), then call this once
+    with the fields you extracted. Pass bol_id to update an existing record
+    instead of adding one. Confirm the values with the user before writing if
+    anything was ambiguous in the document.
+
+    Args:
+        event_id: The event this freight belongs to.
+        direction: 'outbound' (to the event) or 'return' (back home).
+        bol_id: Existing BOL id → update it; omit to create a new one.
+        bol_number: The carrier's BOL number (e.g. SLL37588633).
+        pro_number: The PRO number, if already assigned.
+        carrier: Carrier name as printed (e.g. '(UPGF) TForce Freight').
+        ship_date: YYYY-MM-DD.
+        ship_from / ship_to: Name / address / contact, newlines allowed.
+        freight_terms: 'prepaid', 'collect', or 'third-party'.
+        mode: 'ltl' (LTL freight), 'ftl' (full truckload), or 'parcel'.
+        pallet_count / box_count: Handling-unit counts.
+        pieces: Free text for other handling units ('2 crates on skids').
+        gross_weight_lbs: Total gross weight.
+        special_instructions: e.g. 'Do not stack — see descriptions'.
+        delivery_instructions: e.g. 'Access via MacArthur Dr, door #4'.
+        reference_numbers: Any reference/PO numbers on the BOL.
+        notes: Anything else worth keeping.
+        pdf_path: Local path to the BOL PDF — it is base64-encoded and attached
+            to the record (~700 KB max) so the crew has the document in-app.
+
+    Returns {bol}. Maps to POST /api/v1/events/<id>/bols.
+    """
+    body: dict[str, Any] = _compact(
+        {
+            "direction": direction,
+            "id": bol_id,
+            "bolNumber": bol_number,
+            "proNumber": pro_number,
+            "carrier": carrier,
+            "shipDate": ship_date,
+            "shipFrom": ship_from,
+            "shipTo": ship_to,
+            "freightTerms": freight_terms,
+            "mode": mode,
+            "pieces": pieces,
+            "specialInstructions": special_instructions,
+            "deliveryInstructions": delivery_instructions,
+            "referenceNumbers": reference_numbers,
+            "notes": notes,
+        }
+    )
+    for key, val in (
+        ("palletCount", pallet_count),
+        ("boxCount", box_count),
+        ("grossWeightLbs", gross_weight_lbs),
+    ):
+        if val is not None:
+            body[key] = val
+    if pdf_path:
+        try:
+            with open(pdf_path, "rb") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            return {"error": f"Could not read {pdf_path}: {exc}", "status": None}
+        if len(raw) > 700_000:
+            return {"error": "PDF is larger than 700 KB — attach a smaller scan.", "status": None}
+        if not raw.startswith(b"%PDF"):
+            return {"error": "That file is not a PDF.", "status": None}
+        body["fileDataUrl"] = "data:application/pdf;base64," + base64.b64encode(raw).decode("ascii")
+        body["fileName"] = os.path.basename(pdf_path)[:120]
+    return _request("POST", f"/api/v1/events/{_seg(event_id)}/bols", json_body=body)
+
+
+@mcp.tool()
+def delete_bol(event_id: str, bol_id: str) -> dict[str, Any]:
+    """Remove a bill of lading from an event (WRITE, needs event.edit).
+
+    Returns {deleted}. Maps to DELETE /api/v1/events/<id>/bols/<bolId>.
+    """
+    return _request("DELETE", f"/api/v1/events/{_seg(event_id)}/bols/{_seg(bol_id)}")
 
 
 @mcp.tool()
