@@ -407,7 +407,7 @@ export function DayHoursEditor() {
             const attOk = ao !== null && ac !== null && ac > ao;
             const exOk = xo !== null && xc !== null && xc > xo;
             return (
-              <div key={d.key} className="w-[8.25rem] shrink-0 rounded-md border border-border bg-card/60 p-1.5">
+              <div key={d.key} className="w-48 shrink-0 rounded-md border border-border bg-card/60 p-1.5">
                 {/* Header: weekday + copy/clear controls. */}
                 <div className="mb-1 flex items-center justify-between gap-0.5">
                   <span className={cn('text-[11px] font-semibold', hasOverride ? 'text-foreground' : 'text-muted-foreground')}>
@@ -502,43 +502,50 @@ export function DayHoursEditor() {
                   )}
                 </div>
 
-                {/* Compact per-day time inputs: attendee doors + exhibitor access. */}
-                <div className="mt-1.5 flex flex-col gap-1">
-                  <div className="flex items-center gap-1">
-                    <span className="w-8 shrink-0 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Doors</span>
-                    <input
-                      type="time"
-                      value={e.open}
-                      aria-label={`${d.label} doors open`}
-                      onChange={(ev) => setDay(d.key, { open: ev.target.value })}
-                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    />
-                    <input
-                      type="time"
-                      value={e.close}
-                      aria-label={`${d.label} doors close`}
-                      onChange={(ev) => setDay(d.key, { close: ev.target.value })}
-                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    />
+                {/* Per-day time inputs: attendee doors + exhibitor access. The card is w-48 and the
+                    labels sit ABOVE each pair — a native <input type="time"> needs ~88px to render
+                    "12:00 PM" plus its picker icon, and the old 8.25rem card with inline labels
+                    squeezed each field to ~55px (unreadable). */}
+                <div className="mt-1.5 flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Doors</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="time"
+                        value={e.open}
+                        aria-label={`${d.label} doors open`}
+                        onChange={(ev) => setDay(d.key, { open: ev.target.value })}
+                        className="h-7 w-full min-w-0 rounded border border-input bg-transparent px-1.5 font-mono text-[11px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      />
+                      <input
+                        type="time"
+                        value={e.close}
+                        aria-label={`${d.label} doors close`}
+                        onChange={(ev) => setDay(d.key, { close: ev.target.value })}
+                        className="h-7 w-full min-w-0 rounded border border-input bg-transparent px-1.5 font-mono text-[11px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-8 shrink-0 text-[9px] font-bold uppercase tracking-wide" style={{ color: 'var(--st-upcoming)' }}>
-                      Exhib
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: 'var(--st-upcoming)' }}>
+                      Exhibitor
                     </span>
-                    <input
-                      type="time"
-                      value={e.exOpen}
-                      aria-label={`${d.label} exhibitor access from`}
-                      onChange={(ev) => setDay(d.key, { exOpen: ev.target.value })}
-                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    />
-                    <input
-                      type="time"
-                      value={e.exClose}
-                      aria-label={`${d.label} exhibitor access until`}
-                      onChange={(ev) => setDay(d.key, { exClose: ev.target.value })}
-                      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1 font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="time"
+                        value={e.exOpen}
+                        aria-label={`${d.label} exhibitor access from`}
+                        onChange={(ev) => setDay(d.key, { exOpen: ev.target.value })}
+                        className="h-7 w-full min-w-0 rounded border border-input bg-transparent px-1.5 font-mono text-[11px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      />
+                      <input
+                        type="time"
+                        value={e.exClose}
+                        aria-label={`${d.label} exhibitor access until`}
+                        onChange={(ev) => setDay(d.key, { exClose: ev.target.value })}
+                        className="h-7 w-full min-w-0 rounded border border-input bg-transparent px-1.5 font-mono text-[11px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
