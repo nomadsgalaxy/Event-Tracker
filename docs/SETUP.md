@@ -79,6 +79,7 @@ and the absolute calendar-feed URLs.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `EIT_TENANT_ID` | `MONGO_DB` | Tenant id hashed into every Data Matrix code. See [below](#deployment-tenant--data-matrix). |
+| `EIT_EXPENSES_URL` | unset | ExpenseReporter base URL, e.g. `/expenses` when it is served under this origin (`[tenant].eventtracker.dev/expenses`). Adds an **Expenses** item to the account menu (top right). Unset hides it. |
 
 ### Integration keys (all optional)
 

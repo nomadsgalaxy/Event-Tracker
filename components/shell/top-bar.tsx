@@ -45,6 +45,9 @@ export async function TopBar() {
   // server-side here so the chip needs no client-only fetch (the mount-gate rule).
   const company = (await companyForEmail(user?.email)) || undefined;
 
+  // Expense Reporter (the daughter app, usually mounted at /expenses on this host). Unset ⇒ no menu item.
+  const expensesUrl = (process.env.EIT_EXPENSES_URL || '').trim().replace(/\/+$/, '') || undefined;
+
   return (
     <header className="sticky top-0 z-50 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur md:px-6">
       {/* LEFT — wordmark / Home */}
@@ -90,6 +93,7 @@ export async function TopBar() {
             roleColor={roleDef?.color ?? 'var(--primary)'}
             displayName={chrome?.displayName || undefined}
             picture={chrome?.picture || undefined}
+            expensesUrl={expensesUrl}
           />
         ) : (
           <Button asChild size="sm">
