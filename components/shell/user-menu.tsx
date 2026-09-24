@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { LogOut, Settings2, ScrollText, ChevronDown } from 'lucide-react';
+import { LogOut, Settings2, ScrollText, ChevronDown, Receipt } from 'lucide-react';
 import { cn } from '@/lib/util/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -18,7 +18,7 @@ import { USER_MENU_NAV } from './nav-model';
 
 // user-menu.tsx — the RIGHT-cluster identity trigger + dropdown. The trigger is an avatar + display
 // name + an ORANGE role badge (admin/manager/etc.). Opening it reveals the MENU-ONLY destinations:
-//   Account & Preferences (/account) · Activity log (/activity) · ─── · Log Off
+//   Account & Preferences (/account) · Activity log (/activity) · Expenses (EIT_EXPENSES_URL) · ─── · Log Off
 //
 // Account & Activity live ONLY here — they are intentionally absent from the primary nav
 // (DESIGN_ALIGNMENT §1.3 / §2.1, NAV_EXCLUDED). Log Off posts the existing logoutAction Server
@@ -39,6 +39,8 @@ interface UserMenuProps {
   displayName?: string;
   /** Profile picture (an Account data-URL upload or the OAuth provider photo URL). */
   picture?: string;
+  /** Expense Reporter base URL (EIT_EXPENSES_URL). A separate app, so a plain <a>, not a <Link>. */
+  expensesUrl?: string;
 }
 
 /** Derive a friendly display name from an email local-part: "ada.lovelace@x" → "Ada Lovelace". */
@@ -60,7 +62,7 @@ function initials(name: string): string {
 
 const MENU_ICON = { account: Settings2, activity: ScrollText } as const;
 
-export function UserMenu({ email, role, roleLabel, roleColor, displayName, picture }: UserMenuProps) {
+export function UserMenu({ email, role, roleLabel, roleColor, displayName, picture, expensesUrl }: UserMenuProps) {
   const name = displayName || displayNameFromEmail(email);
 
   return (
@@ -108,6 +110,15 @@ export function UserMenu({ email, role, roleLabel, roleColor, displayName, pictu
             </DropdownMenuItem>
           );
         })}
+
+        {expensesUrl && (
+          <DropdownMenuItem asChild>
+            <a href={`${expensesUrl}/`} className="gap-2">
+              <Receipt size={16} aria-hidden />
+              Expenses
+            </a>
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator />
 
