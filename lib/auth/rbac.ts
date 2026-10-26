@@ -249,6 +249,10 @@ export const CAP_LIST: readonly CapDef[] = [
     note: 'Admin + a fresh password step-up. Invariant.',
   }),
   cap('tls.manage', 'Manage TLS certs', 'Import/generate TLS certificates.', G_ADMIN, 5, { editable: false }),
+  cap('api.fullaccess', 'Full access (acts as you)', 'API key only: call any app action or admin setting as you, with your live role. Account credentials stay UI-only.', G_ADMIN, 5, {
+    enforced: 'server',
+    note: 'Gates /api/v1/actions and /api/v1/admin. Never widens the owner: each action re-checks the live role.',
+  }),
 
   // ── Self-service (always granted to the caller's own record; not role-editable) ──
   cap('account.self', 'Own account screen', 'Profile / security / prefs / own accommodations self-edit.', G_SELF, 0, {
@@ -322,6 +326,7 @@ const DESTRUCTIVE_CAP_IDS: ReadonlySet<string> = new Set([
   'db.write.app',
   'emergency_contact.write',
   'signoff.revert',
+  'api.fullaccess',
 ]);
 
 /** True iff scoping a key to `cap` grants administrative access or the ability to delete/destroy data. */

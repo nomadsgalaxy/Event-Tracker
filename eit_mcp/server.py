@@ -1030,6 +1030,66 @@ def test_webhook(webhook_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Full access (keys scoped to api.fullaccess)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_actions() -> dict[str, Any]:
+    """List the app actions a full-access key can run (READ, needs api.fullaccess).
+
+    These are the same server actions the web UI calls: retire a case, pack
+    and scan, sign-offs, warehouses, tags, kits, users and roles, imports and
+    so on. Names look like "cases.retireOrDeleteCaseAction". Read the action's
+    source in the Event-Tracker repo (app/<module>/actions.ts) for its
+    arguments before calling it.
+
+    Returns {actions}. Maps to GET /api/v1/actions.
+    """
+    return _request("GET", "/api/v1/actions")
+
+
+@mcp.tool()
+def run_action(name: str, args: list[Any] | None = None) -> dict[str, Any]:
+    """Run one app action as this key's owner (WRITE, needs api.fullaccess).
+
+    The action runs exactly as it would from the UI, with the owner's live
+    role checks, so it can't do anything the owner couldn't. Pass positional
+    arguments in order. For an action that takes a FormData, pass
+    {"$formData": {"field": "value", ...}} in that position (a list value
+    adds the field once per entry).
+
+    Account credentials (passwords, 2FA, passkeys, API keys, logout) are not
+    reachable this way.
+
+    Args:
+        name: "<module>.<action>", from list_actions.
+        args: Positional arguments for the action.
+
+    Returns {result}: whatever the action returned, or {redirect} /
+    {notFound} when the action navigates. Maps to POST /api/v1/actions/<name>.
+    """
+    return _request("POST", f"/api/v1/actions/{_seg(name)}", json_body={"args": args or []})
+
+
+@mcp.tool()
+def admin_config(route: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Read or change an admin config surface (needs api.fullaccess + admin).
+
+    route is one of: access-policy, branding, integration-keys,
+    oidc-providers, outbound-webhooks, perms, tenant. With no settings this
+    reads the current config (GET). With settings it saves them (POST), using
+    the same body the Config screen sends, so read first and send back the
+    edited shape.
+
+    Returns the route's own response. Maps to GET/POST /api/v1/admin/<route>.
+    """
+    if settings is None:
+        return _request("GET", f"/api/v1/admin/{_seg(route)}")
+    return _request("POST", f"/api/v1/admin/{_seg(route)}", json_body=settings)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

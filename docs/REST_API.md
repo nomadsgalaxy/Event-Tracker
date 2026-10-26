@@ -148,6 +148,33 @@ only (never accommodations), and the one permitted `users` write is a role assig
 (`{ "record": { "role": "lead" } }`). `metadata` / `sync_meta` are read-only; `auth` and the audit log
 are never accessible.
 
+## Full access (everything the UI can do)
+
+Two more capabilities matter if the key should do more than the typed routes cover. Both are behind the
+"are you sure" confirmation when you create the key:
+
+- **General app writes** (`db.write.app`) is the write gate for inventory, cases and the collection
+  mirror. Without it a key can edit events but can't add an inventory item.
+- **Full access (acts as you)** (`api.fullaccess`, admin by default) lets the key run the app's own
+  server actions and admin config screens as you. That covers anything the UI does: retiring a case,
+  scanning and packing, sign-offs, warehouses, tags, kits, users and roles, imports, permissions,
+  branding, and so on.
+
+The full-access calls are:
+
+- `GET /actions` lists the action names, e.g. `cases.retireOrDeleteCaseAction`.
+- `POST /actions/:name` with `{ "args": [...] }` runs one. The arguments are the action's own positional
+  arguments (see `app/<module>/actions.ts`). For an action that takes a FormData, pass
+  `{ "$formData": { "field": "value" } }` in that position. The response is `{ result }`.
+- `GET /admin/:route` reads, and `POST /admin/:route` saves, one of `access-policy`, `branding`,
+  `integration-keys`, `oidc-providers`, `outbound-webhooks`, `perms` or `tenant`. The body is the same one
+  the Config screen sends.
+
+Each action still runs its own checks against your live role, so a full-access key can't do anything you
+couldn't do in the browser. Account credentials have no key path at all: API keys, your password,
+passkeys, 2FA, recovery codes, sign-in identities, logout, and an admin resetting another user's
+password or 2FA all stay in the UI.
+
 ## Rate limit and audit
 
 Each key is limited to 600 requests/minute by default (set `EIT_API_RATE_LIMIT` on the server to

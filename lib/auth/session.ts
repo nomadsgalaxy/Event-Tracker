@@ -1,5 +1,6 @@
 import 'server-only';
 import crypto from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/db/mongo';
@@ -154,6 +155,25 @@ export function verifyStageToken(
   return p;
 }
 
+// ── API-key sessions (full-access keys acting as their owner) ──────────────────────────────────
+// /api/v1/actions and /api/v1/admin run the app's own server actions and admin routes for a key
+// scoped to api.fullaccess. Inside runAsKeyOwner, getSession() returns this payload instead of reading
+// the cookie, so every action keeps its own live-role checks exactly as it does for the UI.
+const keySession = new AsyncLocalStorage<SessionPayload>();
+
+export function runAsKeyOwner<T>(owner: { email: string; role: Role; keyId: string }, fn: () => Promise<T>): Promise<T> {
+  const now = Math.floor(Date.now() / 1000);
+  const payload: SessionPayload = {
+    sub: owner.email,
+    role: owner.role,
+    src: `apikey:${owner.keyId}`,
+    stage: 'full',
+    iat: now,
+    exp: now + 60,
+  };
+  return keySession.run(payload, fn);
+}
+
 // ── Step-up token (re-auth for sensitive Security actions) ──────────────────────────────────────
 // A short-lived, single-purpose token minted by the step-up action after a fresh password check. The
 // sensitive action presents it; the server re-verifies stage==='stepup' AND sub===caller. Mirrors
@@ -214,6 +234,8 @@ export async function clearSessionCookie(): Promise<void> {
  * _h_session / verify_session_cookie shape.
  */
 export async function getSession(): Promise<SessionPayload | null> {
+  const keyed = keySession.getStore();
+  if (keyed) return (await isSessionRevoked(keyed.sub)) ? null : keyed;
   const jar = await cookies();
   const token = jar.get(COOKIE_NAME)?.value;
   const payload = verifySession(token);
