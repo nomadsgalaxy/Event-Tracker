@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Check, ChevronsUpDown, Loader2, Plus, Printer, ScanLine, X } from 'lucide-react';
@@ -33,7 +33,7 @@ import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
 import { formatMoney } from '@/lib/util/money';
-import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, cableEndById, cableEndRating, cableEndsCrossVoltage, isFixedCordInlet, type Region } from '@/lib/power/connectors';
+import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, CONNECTOR_GROUP_LABEL, cableEndById, cableEndRating, cableEndsCrossVoltage, isDcInlet, isFixedCordInlet, type CableEndDef, type ConnectorGroup, type Region } from '@/lib/power/connectors';
 import {
   itemTotalQty,
   itemInStorage,
@@ -472,7 +472,7 @@ export function ItemDetailsModal({
       requiresPower,
       powerWatts: requiresPower && powerWatts !== '' ? Math.max(0, Number(powerWatts)) : null,
       plugType: requiresPower ? plugType.trim() : '',
-      powerVolts: requiresPower ? powerVolts : 'auto',
+      powerVolts: requiresPower && !isDcInlet(plugType) ? powerVolts : 'auto',
       // Cable spec only travels for cable items (null clears it on a kind change away from cable).
       cable:
         kind === 'cable'
@@ -1330,65 +1330,29 @@ export function ItemDetailsModal({
               <>
               <div className="flex flex-col gap-1.5">
                 <Label>Male end (source side)</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {CABLE_MALE_ENDS.map((e) => {
-                    const on = cable.maleEnd === e.id;
-                    return (
-                      <button
-                        key={e.id}
-                        type="button"
-                        aria-pressed={on}
-                        disabled={!canEdit}
-                        onClick={() => setCable((c) => ({ ...c, maleEnd: on ? '' : e.id }))}
-                        title={`${e.label} · ${cableEndRating(e)}`}
-                        className={cn(
-                          'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                          on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                        )}
-                      >
-                        <span className="size-9 text-foreground">{e.svg}</span>
-                        <span className="text-[10px] font-medium leading-tight">{e.label}</span>
-                        <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <ConnectorGrid
+                  items={endItems(CABLE_MALE_ENDS)}
+                  isOn={(id) => cable.maleEnd === id}
+                  onPick={(id, on) => setCable((c) => ({ ...c, maleEnd: on ? '' : id }))}
+                  disabled={!canEdit}
+                />
               </div>
 
               {cable.category === 'power-strip' ? (
                 /* POWER STRIP: a MIX of female outlet types, each with a count (8× C13 + 2× C19). */
                 <div className="flex flex-col gap-1.5">
                   <Label>Outlet types (the female mix)</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {CABLE_FEMALE_ENDS.map((e) => {
-                      const on = cable.femaleEnds.some((r) => r.end === e.id);
-                      return (
-                        <button
-                          key={e.id}
-                          type="button"
-                          aria-pressed={on}
-                          disabled={!canEdit}
-                          onClick={() =>
-                            setCable((c) => ({
-                              ...c,
-                              femaleEnds: on
-                                ? c.femaleEnds.filter((r) => r.end !== e.id)
-                                : [...c.femaleEnds, { end: e.id, count: 1 }],
-                            }))
-                          }
-                          title={`${e.label} · ${cableEndRating(e)}`}
-                          className={cn(
-                            'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                            on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                          )}
-                        >
-                          <span className="size-9 text-foreground">{e.svg}</span>
-                          <span className="text-[10px] font-medium leading-tight">{e.label}</span>
-                          <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ConnectorGrid
+                    items={endItems(CABLE_FEMALE_ENDS)}
+                    isOn={(id) => cable.femaleEnds.some((r) => r.end === id)}
+                    onPick={(id, on) =>
+                      setCable((c) => ({
+                        ...c,
+                        femaleEnds: on ? c.femaleEnds.filter((r) => r.end !== id) : [...c.femaleEnds, { end: id, count: 1 }],
+                      }))
+                    }
+                    disabled={!canEdit}
+                  />
                   {cable.femaleEnds.length > 0 ? (
                     <div className="mt-1 flex flex-col gap-1.5">
                       {cable.femaleEnds.map((r, ri) => {
@@ -1425,29 +1389,12 @@ export function ItemDetailsModal({
               ) : (
               <div className="flex flex-col gap-1.5">
                 <Label>Female end (outlet side)</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {CABLE_FEMALE_ENDS.map((e) => {
-                    const on = cable.femaleEnd === e.id;
-                    return (
-                      <button
-                        key={e.id}
-                        type="button"
-                        aria-pressed={on}
-                        disabled={!canEdit}
-                        onClick={() => setCable((c) => ({ ...c, femaleEnd: on ? '' : e.id }))}
-                        title={`${e.label} · ${cableEndRating(e)}`}
-                        className={cn(
-                          'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                          on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                        )}
-                      >
-                        <span className="size-9 text-foreground">{e.svg}</span>
-                        <span className="text-[10px] font-medium leading-tight">{e.label}</span>
-                        <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <ConnectorGrid
+                  items={endItems(CABLE_FEMALE_ENDS)}
+                  isOn={(id) => cable.femaleEnd === id}
+                  onPick={(id, on) => setCable((c) => ({ ...c, femaleEnd: on ? '' : id }))}
+                  disabled={!canEdit}
+                />
               </div>
               )}
               </>
@@ -1484,34 +1431,17 @@ export function ItemDetailsModal({
                           ))}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {list.map((e) => {
-                          const on = end.id === e.id;
-                          return (
-                            <button
-                              key={e.id}
-                              type="button"
-                              aria-pressed={on}
-                              disabled={!canEdit}
-                              onClick={() =>
-                                setCable((c) => ({
-                                  ...c,
-                                  ends: c.ends.map((e2, j) => (j === ei ? { ...e2, id: on ? '' : e.id } : e2)),
-                                }))
-                              }
-                              title={`${e.label} · ${cableEndRating(e)}`}
-                              className={cn(
-                                'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                                on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                              )}
-                            >
-                              <span className="size-9 text-foreground">{e.svg}</span>
-                              <span className="text-[10px] font-medium leading-tight">{e.label}</span>
-                              <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(e)}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <ConnectorGrid
+                        items={endItems(list)}
+                        isOn={(id) => end.id === id}
+                        onPick={(id, on) =>
+                          setCable((c) => ({
+                            ...c,
+                            ends: c.ends.map((e2, j) => (j === ei ? { ...e2, id: on ? '' : id } : e2)),
+                          }))
+                        }
+                        disabled={!canEdit}
+                      />
                     </div>
                   );
                 })}
@@ -1614,6 +1544,9 @@ export function ItemDetailsModal({
                       <Label htmlFor="item-watts">Watts (ea.)</Label>
                       <Input id="item-watts" type="number" min={0} inputMode="numeric" value={powerWatts} placeholder="e.g. 350" onChange={(e) => setPowerWatts(e.target.value)} disabled={!canEdit} />
                     </div>
+                    {isDcInlet(plugType) ? (
+                      <span className="h-9 text-xs leading-9 text-muted-foreground">DC — runs off its PSU or battery</span>
+                    ) : (
                     <div className="flex flex-col gap-1.5">
                       <Label>Input voltage</Label>
                       <div className="flex overflow-hidden rounded-md border border-input" role="radiogroup" aria-label="Input voltage">
@@ -1635,80 +1568,50 @@ export function ItemDetailsModal({
                         ))}
                       </div>
                     </div>
+                    )}
                   </>
                 ) : null}
               </div>
               {requiresPower ? (
                 <div className="flex flex-col gap-1.5">
                   <Label>Power inlet (what the equipment receives)</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {INLETS.map((inlet) => {
-                      const on = inlet.id === 'FIXED' ? isFixedCordInlet(plugType) : plugType === inlet.id;
-                      return (
-                        <button
-                          key={inlet.id}
-                          type="button"
-                          aria-pressed={on}
-                          disabled={!canEdit}
-                          onClick={() => setPlugType(on ? '' : inlet.id)}
-                          title={`${inlet.label} — ${inlet.takes}`}
-                          className={cn(
-                            'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                            on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                          )}
-                        >
-                          <span className="size-9 text-foreground">{inlet.svg}</span>
-                          <span className="text-[10px] font-medium leading-tight">{inlet.label}</span>
-                          <span className="text-[9px] leading-tight">{inlet.takes}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ConnectorGrid
+                    items={INLETS.map((i) => ({ ...i, sub: i.takes, title: `${i.label} — ${i.takes}` }))}
+                    isOn={(id) => (id === 'FIXED' ? isFixedCordInlet(plugType) : plugType === id)}
+                    onPick={(id, on) => setPlugType(on ? '' : id)}
+                    disabled={!canEdit}
+                    open={['IEC', 'OTHER']}
+                  />
                   {plugType && !INLETS.some((i) => i.id === plugType) && !isFixedCordInlet(plugType) ? (
                     <span className="text-[10px] text-muted-foreground">Stored value: “{plugType}” (legacy text — pick a cell to replace it)</span>
                   ) : null}
                   {isFixedCordInlet(plugType) ? (
                     <div className="flex flex-col gap-1.5">
                       <Label>Fixed plug (what the cord ends in)</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {/* '' = follow the home warehouse's region — shown with that region's plug face. */}
-                        <button
-                          type="button"
-                          aria-pressed={fixedPlug === ''}
-                          disabled={!canEdit}
-                          onClick={() => setFixedPlug('')}
-                          title={`Default for region — ${defaultFixedPlug.label}`}
-                          className={cn(
-                            'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                            fixedPlug === '' ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                          )}
-                        >
-                          <span className="size-9 text-foreground">{cableEndById(defaultFixedPlug.id, 'male')?.svg}</span>
-                          <span className="text-[10px] font-medium leading-tight">Region default</span>
-                          <span className="text-[9px] leading-tight">{defaultFixedPlug.label}</span>
-                        </button>
-                        {WALL_PLUGS.map((w) => {
-                          const on = fixedPlug === w.id;
-                          return (
+                      <ConnectorGrid
+                        items={endItems(WALL_PLUGS)}
+                        isOn={(id) => fixedPlug === id}
+                        onPick={(id, on) => setFixedPlug(on ? '' : id)}
+                        disabled={!canEdit}
+                        open={[cableEndById(defaultFixedPlug.id, 'male')?.group ?? 'NA']}
+                        lead={
                             <button
-                              key={w.id}
                               type="button"
-                              aria-pressed={on}
+                              aria-pressed={fixedPlug === ''}
                               disabled={!canEdit}
-                              onClick={() => setFixedPlug(on ? '' : w.id)}
-                              title={`${w.label} · ${cableEndRating(w)}`}
+                              onClick={() => setFixedPlug('')}
+                              title={`Default for region — ${defaultFixedPlug.label}`}
                               className={cn(
                                 'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                                on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                                fixedPlug === '' ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
                               )}
                             >
-                              <span className="size-9 text-foreground">{w.svg}</span>
-                              <span className="text-[10px] font-medium leading-tight">{w.label}</span>
-                              <span className="text-[9px] tabular-nums leading-tight">{cableEndRating(w)}</span>
+                              <span className="size-9 text-foreground">{cableEndById(defaultFixedPlug.id, 'male')?.svg}</span>
+                              <span className="text-[10px] font-medium leading-tight">Region default</span>
+                              <span className="text-[9px] leading-tight">{defaultFixedPlug.label}</span>
                             </button>
-                          );
-                        })}
-                      </div>
+                        }
+                      />
                       {fixedPlug && !WALL_PLUGS.some((w) => w.id === fixedPlug) ? (
                         <span className="text-[10px] text-muted-foreground">Stored value: “{fixedPlug}” (legacy text — pick a cell to replace it)</span>
                       ) : null}
@@ -1759,6 +1662,70 @@ export function ItemDetailsModal({
         onOpenChange={setMatrixPrintOpen}
       />
     </>
+  );
+}
+
+type ConnectorTile = { id: string; label: string; group: ConnectorGroup; svg: ReactNode; sub: string; title?: string };
+const endItems = (ends: CableEndDef[]): ConnectorTile[] => ends.map((e) => ({ ...e, sub: cableEndRating(e) }));
+
+/** The connector tile picker, grouped by family (~120 connectors). Groups start open when they hold
+ *  the selection or are listed in `open` (default: the first); the rest collapse behind their header. */
+function ConnectorGrid({
+  items,
+  isOn,
+  onPick,
+  disabled,
+  open,
+  lead,
+}: {
+  items: ConnectorTile[];
+  isOn: (id: string) => boolean;
+  onPick: (id: string, on: boolean) => void;
+  disabled: boolean;
+  open?: ConnectorGroup[];
+  lead?: ReactNode;
+}) {
+  const groups = [...new Set(items.map((i) => i.group))];
+  // Captured once so deselecting a tile doesn't snap its group shut under the cursor.
+  const [initiallyOpen] = useState(() => new Set(groups.filter((g) => (open ?? groups.slice(0, 1)).includes(g) || items.some((i) => i.group === g && isOn(i.id)))));
+  return (
+    <div className="flex flex-col gap-2">
+      {lead ? <div className="flex flex-wrap gap-1.5">{lead}</div> : null}
+      {groups.map((g) => {
+        const list = items.filter((i) => i.group === g);
+        const picked = list.filter((i) => isOn(i.id)).length;
+        return (
+          <details key={g} open={initiallyOpen.has(g)}>
+            <summary className="cursor-pointer select-none text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {CONNECTOR_GROUP_LABEL[g]} <span className="font-normal normal-case">· {list.length}{picked ? ` · ${picked} selected` : ''}</span>
+            </summary>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {list.map((t) => {
+                const on = isOn(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={disabled}
+                    onClick={() => onPick(t.id, on)}
+                    title={t.title ?? `${t.label} · ${t.sub}`}
+                    className={cn(
+                      'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
+                      on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
+                    )}
+                  >
+                    <span className="size-9 text-foreground">{t.svg}</span>
+                    <span className="text-[10px] font-medium leading-tight">{t.label}</span>
+                    <span className="text-[9px] tabular-nums leading-tight">{t.sub}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1836,8 +1803,12 @@ function UnitServicePanel({
                       className="h-7 rounded-md border border-input bg-transparent px-1.5 text-xs outline-none dark:bg-input/30"
                     >
                       <option value="">item default</option>
-                      {WALL_PLUGS.map((w) => (
-                        <option key={w.id} value={w.id}>{w.label}</option>
+                      {[...new Set(WALL_PLUGS.map((w) => w.group))].map((g) => (
+                        <optgroup key={g} label={CONNECTOR_GROUP_LABEL[g]}>
+                          {WALL_PLUGS.filter((w) => w.group === g).map((w) => (
+                            <option key={w.id} value={w.id}>{w.label}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </label>

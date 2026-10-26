@@ -50,7 +50,7 @@ import {
   inferEventRegion,
   regionPower,
   deviceFitsVolts,
-  type Region,
+  type ReceptacleGroup,
   type VoltFamily,
   type DeviceVolts,
 } from '@/lib/power/connectors';
@@ -655,7 +655,7 @@ function PowerDropFields() {
     return [...needed].some((d) => deviceFitsVolts(d as DeviceVolts, fam));
   };
   // Inferred region first, then the rest in catalog order.
-  const regions: Region[] = [region, ...(['NA', 'EU', 'UK', 'AU'] as Region[]).filter((r) => r !== region)];
+  const regions: ReceptacleGroup[] = [region, ...(['NA', 'EU', 'UK', 'AU', 'WORLD'] as ReceptacleGroup[]).filter((r) => r !== region)];
 
   const destPower = regionPower(region);
   return (
