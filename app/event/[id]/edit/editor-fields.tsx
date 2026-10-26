@@ -12,6 +12,7 @@ import {
 import { Plus, Trash2, Lock, X, Plane, Check, ChevronsUpDown, ChevronDown, ChevronLeft, ChevronRight, Copy, Truck, Star } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { BolManager } from '@/components/events/bol-manager';
+import { ConnectorGrid } from '@/components/power/connector-grid';
 import type { EventBol, EventPallet } from '@/lib/types/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -50,7 +51,6 @@ import {
   inferEventRegion,
   regionPower,
   deviceFitsVolts,
-  type ReceptacleGroup,
   type VoltFamily,
   type DeviceVolts,
 } from '@/lib/power/connectors';
@@ -654,8 +654,6 @@ function PowerDropFields() {
     if (needed.size === 0) return true;
     return [...needed].some((d) => deviceFitsVolts(d as DeviceVolts, fam));
   };
-  // Inferred region first, then the rest in catalog order.
-  const regions: ReceptacleGroup[] = [region, ...(['NA', 'EU', 'UK', 'AU', 'WORLD'] as ReceptacleGroup[]).filter((r) => r !== region)];
 
   const destPower = regionPower(region);
   return (
@@ -704,44 +702,27 @@ function PowerDropFields() {
             return (
               <div className="flex flex-col gap-2">
                 <span className="text-xs text-muted-foreground">
-                  Receptacles at the drop — {REGION_LABEL[region]} shown first (inferred from the venue).
+                  Receptacles at the drop — the region is detected from the venue; switch it below if that&apos;s wrong.
                   Greyed types aren&apos;t usable by the assigned equipment&apos;s voltage.
                 </span>
-                {regions.map((reg) => {
-                  const recs = RECEPTACLES.filter((r) => r.region === reg);
-                  if (!recs.length) return null;
-                  return (
-                    <div key={reg} className="flex flex-col gap-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {REGION_LABEL[reg]}
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {recs.map((r) => {
-                          const on = selected.has(r.id);
-                          const ok = usable(r.volts);
-                          return (
-                            <button
-                              key={r.id}
-                              type="button"
-                              onClick={() => toggle(r.id)}
-                              aria-pressed={on}
-                              title={ok ? `${r.label} · ${r.volts === '120' ? '120 V' : '230/240 V'} ${r.amps} A` : `${r.label} — no assigned equipment uses ${r.volts === '120' ? '120 V' : '230/240 V'}`}
-                              className={cn(
-                                'flex w-[88px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                                on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50',
-                                !ok && 'opacity-40'
-                              )}
-                            >
-                              <span className="size-9 text-foreground">{r.svg}</span>
-                              <span className="text-[10px] font-medium leading-tight">{r.label}</span>
-                              <span className="text-[9px] tabular-nums">{r.volts === '120' ? '120V' : '230/240V'} · {r.amps}A</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+                <ConnectorGrid
+                  label="Region"
+                  detected={region}
+                  items={RECEPTACLES.map((r) => {
+                    const v = r.volts === '120' ? '120 V' : '230/240 V';
+                    const ok = usable(r.volts);
+                    return {
+                      ...r,
+                      group: r.region,
+                      sub: `${r.volts === '120' ? '120V' : '230/240V'} · ${r.amps}A`,
+                      title: ok ? `${r.label} · ${v} ${r.amps} A` : `${r.label} — no assigned equipment uses ${v}`,
+                      dim: !ok,
+                    };
+                  })}
+                  isOn={(id) => selected.has(id)}
+                  onPick={(id) => toggle(id)}
+                  disabled={false}
+                />
               </div>
             );
           }}

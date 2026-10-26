@@ -32,8 +32,9 @@ import { TagChip } from '@/components/ui/tag-chip';
 import { ItemMatrixModal } from './item-matrix-modal';
 import { ConsumableNfcPanel } from './consumable-nfc-panel';
 import { cn } from '@/lib/util/utils';
+import { ConnectorGrid, ConnectorTileButton, type ConnectorTile } from '@/components/power/connector-grid';
 import { formatMoney } from '@/lib/util/money';
-import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, CONNECTOR_GROUP_LABEL, cableEndById, cableEndRating, cableEndsCrossVoltage, isDcInlet, isFixedCordInlet, type CableEndDef, type ConnectorGroup, type Region } from '@/lib/power/connectors';
+import { INLETS, CABLE_MALE_ENDS, CABLE_FEMALE_ENDS, WALL_PLUGS, REGION_DEFAULT_PLUG, CONNECTOR_GROUP_LABEL, cableEndById, cableEndRating, cableEndsCrossVoltage, isDcInlet, isFixedCordInlet, type CableEndDef, type Region } from '@/lib/power/connectors';
 import {
   itemTotalQty,
   itemInStorage,
@@ -301,12 +302,16 @@ export function ItemDetailsModal({
   const [fixedPlug, setFixedPlug] = useState(item.fixedPlug || '');
   // The regional default for an unset fixed plug — from the FIRST case this item routes into (its
   // home warehouse's region, threaded by the catalog host); NA otherwise. Per-serial overrides below.
+  const homeRegion = useMemo(
+    () => (cases.find((c) => c.id === itemCaseIds(item)[0])?.region as Region | undefined) ?? 'NA',
+    [item, cases]
+  );
   const defaultFixedPlug = useMemo(() => {
-    const firstCase = itemCaseIds(item)[0];
-    const region = (cases.find((c) => c.id === firstCase)?.region as Region | undefined) ?? 'NA';
-    const id = REGION_DEFAULT_PLUG[region] ?? 'NEMA 5-15P';
-    return { id, label: `${id} (${region})` };
-  }, [item, cases]);
+    const id = REGION_DEFAULT_PLUG[homeRegion] ?? 'NEMA 5-15P';
+    return { id, label: `${id} (${homeRegion})` };
+  }, [homeRegion]);
+  // A picker opens on the group of what's picked, else the home region (the dropdown overrides).
+  const endGroup = (id: string, side: 'male' | 'female') => cableEndById(id, side)?.group ?? homeRegion;
   const [skuOptions, setSkuOptions] = useState(
     (Array.isArray(item.skuOptions) ? item.skuOptions : []).map((o) => ({ sku: o.sku || '', label: o.label || '' }))
   );
@@ -1332,6 +1337,7 @@ export function ItemDetailsModal({
                 <Label>Male end (source side)</Label>
                 <ConnectorGrid
                   items={endItems(CABLE_MALE_ENDS)}
+                  detected={endGroup(cable.maleEnd, 'male')}
                   isOn={(id) => cable.maleEnd === id}
                   onPick={(id, on) => setCable((c) => ({ ...c, maleEnd: on ? '' : id }))}
                   disabled={!canEdit}
@@ -1344,6 +1350,7 @@ export function ItemDetailsModal({
                   <Label>Outlet types (the female mix)</Label>
                   <ConnectorGrid
                     items={endItems(CABLE_FEMALE_ENDS)}
+                    detected={endGroup(cable.femaleEnds[0]?.end ?? '', 'female')}
                     isOn={(id) => cable.femaleEnds.some((r) => r.end === id)}
                     onPick={(id, on) =>
                       setCable((c) => ({
@@ -1391,6 +1398,7 @@ export function ItemDetailsModal({
                 <Label>Female end (outlet side)</Label>
                 <ConnectorGrid
                   items={endItems(CABLE_FEMALE_ENDS)}
+                  detected={endGroup(cable.femaleEnd, 'female')}
                   isOn={(id) => cable.femaleEnd === id}
                   onPick={(id, on) => setCable((c) => ({ ...c, femaleEnd: on ? '' : id }))}
                   disabled={!canEdit}
@@ -1433,6 +1441,7 @@ export function ItemDetailsModal({
                       </div>
                       <ConnectorGrid
                         items={endItems(list)}
+                        detected={endGroup(end.id, end.gender)}
                         isOn={(id) => end.id === id}
                         onPick={(id, on) =>
                           setCable((c) => ({
@@ -1576,11 +1585,18 @@ export function ItemDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <Label>Power inlet (what the equipment receives)</Label>
                   <ConnectorGrid
-                    items={INLETS.map((i) => ({ ...i, sub: i.takes, title: `${i.label} — ${i.takes}` }))}
-                    isOn={(id) => (id === 'FIXED' ? isFixedCordInlet(plugType) : plugType === id)}
+                    items={inletTiles.filter((t) => t.group !== 'OTHER')}
+                    detected={INLETS.find((i) => i.id === plugType && i.group !== 'OTHER')?.group ?? 'IEC'}
+                    label="Type"
+                    isOn={(id) => plugType === id}
                     onPick={(id, on) => setPlugType(on ? '' : id)}
                     disabled={!canEdit}
-                    open={['IEC', 'OTHER']}
+                    lead={inletTiles
+                      .filter((t) => t.group === 'OTHER')
+                      .map((t) => {
+                        const on = t.id === 'FIXED' ? isFixedCordInlet(plugType) : plugType === t.id;
+                        return <ConnectorTileButton key={t.id} tile={t} on={on} disabled={!canEdit} onClick={() => setPlugType(on ? '' : t.id)} />;
+                      })}
                   />
                   {plugType && !INLETS.some((i) => i.id === plugType) && !isFixedCordInlet(plugType) ? (
                     <span className="text-[10px] text-muted-foreground">Stored value: “{plugType}” (legacy text — pick a cell to replace it)</span>
@@ -1593,7 +1609,7 @@ export function ItemDetailsModal({
                         isOn={(id) => fixedPlug === id}
                         onPick={(id, on) => setFixedPlug(on ? '' : id)}
                         disabled={!canEdit}
-                        open={[cableEndById(defaultFixedPlug.id, 'male')?.group ?? 'NA']}
+                        detected={endGroup(fixedPlug || defaultFixedPlug.id, 'male')}
                         lead={
                             <button
                               type="button"
@@ -1665,69 +1681,8 @@ export function ItemDetailsModal({
   );
 }
 
-type ConnectorTile = { id: string; label: string; group: ConnectorGroup; svg: ReactNode; sub: string; title?: string };
+const inletTiles: ConnectorTile[] = INLETS.map((i) => ({ ...i, sub: i.takes, title: `${i.label} — ${i.takes}` }));
 const endItems = (ends: CableEndDef[]): ConnectorTile[] => ends.map((e) => ({ ...e, sub: cableEndRating(e) }));
-
-/** The connector tile picker, grouped by family (~120 connectors). Groups start open when they hold
- *  the selection or are listed in `open` (default: the first); the rest collapse behind their header. */
-function ConnectorGrid({
-  items,
-  isOn,
-  onPick,
-  disabled,
-  open,
-  lead,
-}: {
-  items: ConnectorTile[];
-  isOn: (id: string) => boolean;
-  onPick: (id: string, on: boolean) => void;
-  disabled: boolean;
-  open?: ConnectorGroup[];
-  lead?: ReactNode;
-}) {
-  const groups = [...new Set(items.map((i) => i.group))];
-  // Captured once so deselecting a tile doesn't snap its group shut under the cursor.
-  const [initiallyOpen] = useState(() => new Set(groups.filter((g) => (open ?? groups.slice(0, 1)).includes(g) || items.some((i) => i.group === g && isOn(i.id)))));
-  return (
-    <div className="flex flex-col gap-2">
-      {lead ? <div className="flex flex-wrap gap-1.5">{lead}</div> : null}
-      {groups.map((g) => {
-        const list = items.filter((i) => i.group === g);
-        const picked = list.filter((i) => isOn(i.id)).length;
-        return (
-          <details key={g} open={initiallyOpen.has(g)}>
-            <summary className="cursor-pointer select-none text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {CONNECTOR_GROUP_LABEL[g]} <span className="font-normal normal-case">· {list.length}{picked ? ` · ${picked} selected` : ''}</span>
-            </summary>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {list.map((t) => {
-                const on = isOn(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    aria-pressed={on}
-                    disabled={disabled}
-                    onClick={() => onPick(t.id, on)}
-                    title={t.title ?? `${t.label} · ${t.sub}`}
-                    className={cn(
-                      'flex w-[84px] flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-center transition-colors',
-                      on ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-accent/50'
-                    )}
-                  >
-                    <span className="size-9 text-foreground">{t.svg}</span>
-                    <span className="text-[10px] font-medium leading-tight">{t.label}</span>
-                    <span className="text-[9px] tabular-nums leading-tight">{t.sub}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </details>
-        );
-      })}
-    </div>
-  );
-}
 
 function SummaryStat({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
   return (
