@@ -43,6 +43,8 @@ export interface DistributionRow {
   variantSku?: string;
   signoff?: RowSignoff | null;
   looseAttach?: { by?: string; at?: number; reason?: string } | null;
+  // The event pallet a loose row rides on (types EventPallet). Null/absent = loose, not palletized.
+  palletId?: string | null;
   // Legacy flat return disposition (cleared alongside signoff on un-sign). rowDispositionKind reads it.
   returnDisposition?: string | null;
   returnedBy?: string | null;
@@ -60,7 +62,7 @@ export interface DistributionRow {
 export interface ItemUnit {
   id?: string;
   serial?: string;
-  location?: string | null; // caseId | 'storage'
+  location?: string | null; // caseId | palletId ('pallet-…') | 'storage'
   storageNote?: string;
   state?: ItemState;
   sku?: string;
@@ -232,6 +234,11 @@ export function itemUnits(item: InventoryPayload): ItemUnit[] {
   return Array.isArray(item?.units) ? item.units.filter((u) => u && !u.deletedAt) : [];
 }
 
+/** Pallet ids are minted as 'pallet-…' (event editor newPalletId), never a caseId. */
+export function isPalletId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith('pallet-');
+}
+
 export function unitIsDeployed(u: ItemUnit | null | undefined): boolean {
   return !!(u && u.location && u.location !== 'storage');
 }
@@ -247,7 +254,7 @@ export function itemTotalQty(item: InventoryPayload): number {
 export function itemCaseIds(item: InventoryPayload): string[] {
   if (itemIsSerial(item)) {
     return Array.from(
-      new Set(itemUnits(item).filter(unitIsDeployed).map((u) => u.location as string))
+      new Set(itemUnits(item).filter(unitIsDeployed).map((u) => u.location as string).filter((l) => !isPalletId(l)))
     );
   }
   return Array.from(new Set((item.distribution || []).map((d) => d.caseId).filter(Boolean) as string[]));

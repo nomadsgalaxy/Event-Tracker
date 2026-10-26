@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/util/utils';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -479,7 +480,7 @@ function SignoffDetail({
           <div className="flex flex-wrap items-baseline gap-2">
             <Eyebrow>
               {isPacking
-                ? `Event manifest · ${d.caseGroups.length} cases`
+                ? `Event manifest · ${d.caseGroups.length} cases${d.palletPack.length ? ` · ${d.palletPack.length} pallets` : ''}`
                 : `Event manifest · ${d.caseReturnRows.length + d.looseReturnRows.length} items`}
             </Eyebrow>
           </div>
@@ -521,11 +522,29 @@ function SignoffDetail({
         </div>
 
         {/* PACKING — per-case cards with a Mark-boxed action + boxed-by stamp. */}
+        {isPacking && d.palletPack.length > 0 ? (
+          <div className="flex flex-col gap-1.5 border-b border-border p-3.5">
+            {d.palletPack.map((pl) => (
+              <div key={pl.id} className="flex items-center justify-between gap-2 rounded border border-border bg-muted/30 px-3 py-2 text-sm">
+                <span className="font-medium text-foreground">{pl.label}</span>
+                <span className={cn('font-mono text-xs tabular-nums', pl.total > 0 && pl.packed === pl.total ? 'text-primary' : 'text-muted-foreground')}>
+                  {pl.total === 0 ? 'empty' : `${pl.packed}/${pl.total} packed`}
+                </span>
+              </div>
+            ))}
+            <Link href={`/event/${encodeURIComponent(d.id)}`} className="text-xs text-primary underline-offset-2 hover:underline">
+              Load and pack pallets on the event page
+            </Link>
+          </div>
+        ) : null}
+
         {isPacking ? (
           d.caseGroups.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm italic text-muted-foreground">
-              No road cases assigned to this event yet.
-            </p>
+            d.palletPack.length > 0 ? null : (
+              <p className="px-4 py-8 text-center text-sm italic text-muted-foreground">
+                No cases or pallets on this event yet.
+              </p>
+            )
           ) : (
             <div className="flex flex-col gap-3 p-3.5">
               {d.caseGroups.map((g) => (

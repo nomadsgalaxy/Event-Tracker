@@ -48,6 +48,7 @@ import {
   unitIsOutOfService,
   unitIsDueForService,
   itemIsSerial,
+  isPalletId,
   evaluateModelRequirements,
   partRefLabel,
   ITEM_KINDS,
@@ -83,6 +84,8 @@ interface DistFormRow {
   serialsCsv: string;
   variantSku: string;
   state: string;
+  // Placement + sign-off fields the form doesn't edit (loose/pallet event, stamps), carried through a save.
+  keep?: Pick<DistributionRow, 'eventId' | 'palletId' | 'looseAttach' | 'signoff' | 'packedBy' | 'packedAt'>;
 }
 
 interface UnitFormRow {
@@ -313,6 +316,14 @@ export function ItemDetailsModal({
           serialsCsv: Array.isArray(d.serials) ? d.serials.join(', ') : '',
           variantSku: d.variantSku || '',
           state: d.state || 'pending',
+          keep: {
+            eventId: d.eventId ?? null,
+            palletId: d.palletId ?? null,
+            looseAttach: d.looseAttach ?? null,
+            signoff: d.signoff ?? null,
+            packedBy: d.packedBy ?? null,
+            packedAt: d.packedAt ?? null,
+          },
         }))
       : [{ caseId: '', qty: 1, serialsCsv: '', variantSku: '', state: 'pending' }]
   );
@@ -527,6 +538,8 @@ export function ItemDetailsModal({
       };
     }
     const distribution: DistributionRow[] = dist.map((d) => ({
+      // A row moved into a case stops being loose / on a pallet.
+      ...(d.keep && !d.caseId ? d.keep : {}),
       caseId: d.caseId || null,
       qty: parseInt(String(d.qty), 10) || 1,
       serials: d.serialsCsv.trim() ? d.serialsCsv.split(',').map((s) => s.trim()).filter(Boolean) : [],
@@ -1034,10 +1047,12 @@ export function ItemDetailsModal({
                         />
                         <select
                           value={u.location}
-                          disabled={!canEdit}
+                          disabled={!canEdit || isPalletId(u.location)}
+                          title={isPalletId(u.location) ? 'On a show pallet: take it off from the event page' : undefined}
                           onChange={(e) => setUnits((s) => s.map((x, j) => (j === i ? { ...x, location: e.target.value } : x)))}
                           className="h-7 rounded-md border border-input bg-transparent px-1.5 text-xs outline-none dark:bg-input/30"
                         >
+                          {isPalletId(u.location) && <option value={u.location}>On a pallet</option>}
                           <option value="storage">— In storage —</option>
                           {cases.map((c) => (
                             <option key={c.id} value={c.id}>

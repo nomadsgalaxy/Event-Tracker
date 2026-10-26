@@ -2,7 +2,17 @@ import 'server-only';
 import { buildEventManifest } from '@/lib/views/manifest-view';
 import { computeEventReadiness, eventPallets, eventLooseCaseIds, palletWeightKg, getCaseDateConflicts } from '@/lib/views/event-readiness';
 import { canSeeAccommodations } from '@/lib/views/event-view';
-import { itemRollupState, itemQtyLooseAtEvent, type InventoryPayload } from '@/lib/views/inventory-shape';
+import {
+  itemRollupState,
+  itemIsSerial,
+  itemUnits,
+  itemInStorage,
+  itemIsOutOfService,
+  unitIsDeployed,
+  unitIsOutOfService,
+  type InventoryPayload,
+} from '@/lib/views/inventory-shape';
+import { can } from '@/lib/auth/rbac';
 import { itemQtyInCase, itemStateInCase } from '@/lib/views/case-view';
 import { formatWeight } from '@/lib/util/weight';
 import { receptacleById, inferEventRegion, regionPower, REGION_LABEL, isFixedCordInlet } from '@/lib/power/connectors';
@@ -18,6 +28,8 @@ import type {
   StaffCardView,
   CaseTileView,
   PalletView,
+  PalletItemView,
+  PalletPickItem,
   LooseItemView,
   CsvRow,
   ResolvedTag,
@@ -29,6 +41,8 @@ export type {
   StaffCardView,
   CaseTileView,
   PalletView,
+  PalletItemView,
+  PalletPickItem,
   LooseItemView,
   CsvRow,
   ResolvedTag,
@@ -257,13 +271,51 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
   // ── Pallets (read-only) — labels, case chips, resolved weight, tracking ────────────────────
   const palletList = eventPallets(safePayload);
   const caseLabelOf = (cid: string) => casesById[cid]?.label || cid;
+  const palletItems = (pid: string): PalletItemView[] => {
+    const out: PalletItemView[] = [];
+    for (const it of inventory) {
+      const base = { itemId: it.id ?? '', name: it.name ?? '(unnamed)', kind: it.kind ?? 'other', flagged: itemRollupState(it) === 'flagged' };
+      if (itemIsSerial(it)) {
+        for (const u of itemUnits(it)) {
+          if (u.location === pid) out.push({ ...base, unitId: u.id ?? null, qty: 1, serial: u.serial ?? '', packed: u.state === 'packed' });
+        }
+        continue;
+      }
+      for (const d of it.distribution ?? []) {
+        if (!d.caseId && d.eventId === eventId && d.palletId === pid) {
+          out.push({ ...base, unitId: null, qty: d.qty || 0, serial: '', packed: d.state === 'packed' });
+        }
+      }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name) || a.serial.localeCompare(b.serial));
+  };
   const pallets: PalletView[] = palletList.map((p) => ({
     id: p.id,
     label: p.label || 'Pallet',
     caseChips: (p.caseIds ?? []).map((cid) => ({ id: cid, label: caseLabelOf(cid) })),
+    items: palletItems(p.id),
     weight: formatWeight(palletWeightKg(p, casesById, inventory), weightUnit),
     tracking: p.tracking || '',
   }));
+  const canLoadPallets =
+    can('pallets.edit', viewerRole) && ['draft', 'upcoming', 'packing'].includes(String(safePayload.state ?? '')) && palletList.length > 0;
+  const palletPick: PalletPickItem[] = canLoadPallets
+    ? inventory
+        .filter((it) => !itemIsOutOfService(it) && itemInStorage(it) > 0)
+        .map((it) => ({
+          itemId: it.id ?? '',
+          name: it.name ?? '(unnamed)',
+          kind: it.kind ?? 'other',
+          serial: itemIsSerial(it),
+          inStorage: itemInStorage(it),
+          units: itemIsSerial(it)
+            ? itemUnits(it)
+                .filter((u) => !unitIsDeployed(u) && !unitIsOutOfService(u))
+                .map((u) => ({ id: u.id ?? '', serial: u.serial ?? '' }))
+            : [],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
   const palletLooseChips =
     palletList.length > 0
       ? eventLooseCaseIds(safePayload).map((cid) => ({ id: cid, label: caseLabelOf(cid) }))
@@ -272,11 +324,12 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
   // ── Loose inventory (bulk loose rows at this event) ────────────────────────────────────────
   const loose: LooseItemView[] = [];
   for (const it of inventory) {
-    const qty = itemQtyLooseAtEvent(it, eventId);
+    // Loose = at the event but not on a pallet (pallet lines show under their pallet).
+    const qty = (it.distribution ?? []).filter((d) => !d.caseId && d.eventId === eventId && !d.palletId).reduce((n, d) => n + (d.qty || 0), 0);
     if (qty <= 0) continue;
     const serials: string[] = [];
     for (const d of it.distribution ?? []) {
-      if (d.caseId || d.eventId !== eventId) continue;
+      if (d.caseId || d.eventId !== eventId || d.palletId) continue;
       for (const sn of d.serials ?? []) if (sn) serials.push(sn);
     }
     loose.push({
@@ -335,6 +388,8 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     caseTiles,
     pallets,
     palletLooseChips,
+    palletPick,
+    canLoadPallets,
     loose,
     tags,
     csvRows,

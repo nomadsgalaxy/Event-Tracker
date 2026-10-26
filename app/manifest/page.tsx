@@ -7,7 +7,7 @@ import {
   type ManifestEventListRow,
   type ManifestRowTag,
 } from '@/lib/views/manifest-view';
-import { itemQtyLooseAtEvent, itemOpenFlag, type InventoryPayload } from '@/lib/views/inventory-shape';
+import { itemOpenFlag, type InventoryPayload } from '@/lib/views/inventory-shape';
 import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { getCaseAvailability, caseStatusLabel, isCaseRetired } from '@/lib/views/case-view';
 import { getCaseDateConflicts } from '@/lib/views/event-readiness';
@@ -137,7 +137,7 @@ export default async function ManifestPage({
   const listRows: ManifestEventListRow[] = sorted.map((e) => {
     const m = buildEventManifest(e.payload, e._id, inventory, casesById, roadKits);
     manifestById[e._id] = m;
-    const loose = inventory.reduce((s, it) => s + itemQtyLooseAtEvent(it, e._id), 0);
+    const loose = m.looseGroup?.total ?? 0;
     // Resolve applied tagIds → VISIBLE chips (hidden tags filtered out via tagById).
     const tagIds = Array.isArray(e.payload.tagIds) ? e.payload.tagIds : [];
     const tags: ManifestRowTag[] = tagIds
@@ -189,7 +189,7 @@ export default async function ManifestPage({
         if (r.id && !(r.id in itemSvgByItemId)) itemSvgByItemId[r.id] = encode(itemCode(r.id, tenantHash));
       }
     }
-    for (const r of selectedManifest.looseGroup?.rows ?? []) {
+    for (const r of [...selectedManifest.palletGroups.flatMap((g) => g.rows), ...(selectedManifest.looseGroup?.rows ?? [])]) {
       if (r.id && !(r.id in itemSvgByItemId)) itemSvgByItemId[r.id] = encode(itemCode(r.id, tenantHash));
     }
   }
@@ -217,6 +217,7 @@ export default async function ManifestPage({
   if (selectedManifest) {
     const rowIds = new Set<string>();
     for (const g of selectedManifest.caseGroups) for (const r of g.rows) if (r.id) rowIds.add(r.id);
+    for (const g of selectedManifest.palletGroups) for (const r of g.rows) if (r.id) rowIds.add(r.id);
     for (const r of selectedManifest.looseGroup?.rows ?? []) if (r.id) rowIds.add(r.id);
     for (const it of inventory) {
       const id = it.id ?? '';

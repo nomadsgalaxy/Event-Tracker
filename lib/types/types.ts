@@ -169,12 +169,16 @@ export interface SideEvent {
 
 // ── Pallets (#24/#62) — the logistics overlay grouping an event's cases for shipment ────────
 // Mirrors window.eventPallets shape (index.html ~L5458): { id, label, caseIds[], tracking, notes }.
+// Items ride a pallet directly too (no case): a bulk loose row carries palletId, a serial unit's
+// location is the palletId. Pallet ids always start with 'pallet-' so they never collide with a caseId.
 export interface EventPallet {
   id: string;
   label?: string;
   caseIds?: string[];
   tracking?: string;
   notes?: string;
+  /** Empty pallet + wrap weight (kg), added to the pallet's load weight. */
+  weightKg?: number | null;
 }
 
 // ── Venue point-of-contact (exhibitor-services rep) ─────────────────────────────────────────
@@ -278,6 +282,8 @@ export interface ManifestSnapshotRow {
   caseId: string | null;
   caseLabel: string;
   caseSlug?: string;
+  /** Set when the line rode a pallet directly (no case); caseLabel then carries the pallet label. */
+  palletId?: string | null;
   qty: number;
   serials: string[];
   state: string;
@@ -298,6 +304,7 @@ export interface ManifestSnapshot {
   venue: { name: string; city: string; address: string; booth: string };
   shipping: { carrier: string; tracking: string; pickupDate: string; notes: string; custodyCapture?: CustodyCapture };
   cases: { id: string; label: string; slug: string }[];
+  pallets?: { id: string; label: string; tracking: string; weightKg: number | null; caseIds: string[] }[];
   rows: ManifestSnapshotRow[];
   totals: { rows: number; qty: number; cases: number; looseQty: number };
 }

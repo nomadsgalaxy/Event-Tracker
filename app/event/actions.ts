@@ -92,6 +92,7 @@ const pallet = z
     caseIds: z.array(z.string()).optional(),
     tracking: z.string().optional(),
     notes: z.string().optional(),
+    weightKg: z.number().nonnegative().nullable().optional(),
   })
   .passthrough();
 

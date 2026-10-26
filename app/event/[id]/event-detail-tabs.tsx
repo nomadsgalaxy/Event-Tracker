@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TagChip } from '@/components/ui/tag-chip';
 import { TrackingBadge } from '@/components/ui/tracking-badge';
+import { PalletLoader } from '@/components/events/pallet-loader';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
@@ -1189,36 +1190,7 @@ function PackingPanel({ eventId, view }: { eventId: string; view: EventDetailVie
       {pallets.length > 0 && (
         <FieldGroup title={`Pallets · ${pallets.length}`}>
           <div className="flex flex-col gap-2">
-            {pallets.map((p) => (
-              <div key={p.id} className="rounded bg-muted/40 p-2.5">
-                <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                  <span className="text-[13px] font-semibold text-foreground">{p.label}</span>
-                  <span className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
-                    {p.caseChips.length} {p.caseChips.length === 1 ? 'case' : 'cases'} · {p.weight}
-                  </span>
-                </div>
-                {p.tracking && (
-                  <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[11px] text-muted-foreground">Tracking # {p.tracking}</span>
-                    <TrackingBadge number={p.tracking} />
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-1.5">
-                  {p.caseChips.length === 0 ? (
-                    <span className="text-[11px] italic text-muted-foreground">No cases assigned.</span>
-                  ) : (
-                    p.caseChips.map((c) => (
-                      <span
-                        key={c.id}
-                        className="rounded border border-border bg-background px-2 py-0.5 text-[11px] text-foreground"
-                      >
-                        {c.label}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-            ))}
+            <PalletLoader eventId={eventId} pallets={pallets} pick={view.palletPick} canLoad={view.canLoadPallets} />
             {view.palletLooseChips.length > 0 && (
               <div className="rounded border border-dashed border-border bg-muted/40 p-2.5">
                 <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">

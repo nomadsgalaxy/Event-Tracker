@@ -19,6 +19,7 @@ import {
   itemIsOutOfService,
   itemHasOpenServiceFlag,
   rowDispositionKind,
+  type DistributionRow,
   type InventoryPayload,
 } from '@/lib/views/inventory-shape';
 import type {
@@ -68,6 +69,7 @@ export interface ItemSignoffProgress {
   looseTotal: number;
   looseSigned: number;
   byCase: Record<string, { total: number; signed: number }>;
+  byPallet: Record<string, { total: number; signed: number }>;
 }
 
 /**
@@ -94,9 +96,13 @@ export function eventSignoffProgress(
     looseTotal: 0,
     looseSigned: 0,
     byCase: {},
+    byPallet: {},
   };
   if (!event) return empty;
   const eventCases = new Set(event.cases || []);
+  const eventPallets = new Set((event.pallets || []).map((p) => p && p.id).filter(Boolean) as string[]);
+  const byPallet: Record<string, { total: number; signed: number }> = {};
+  for (const pid of eventPallets) byPallet[pid] = { total: 0, signed: 0 };
   const eventId = event.id;
   let total = 0;
   let signed = 0;
@@ -120,13 +126,16 @@ export function eventSignoffProgress(
     const itFlagged = (it.flags || []).some((f) => f && f.status === 'open');
     if (itemIsSerial(it)) {
       for (const u of itemUnits(it)) {
-        if (!u || !u.location || u.location === 'storage' || !eventCases.has(u.location)) continue;
+        if (!u || !u.location || u.location === 'storage') continue;
+        if (!eventCases.has(u.location) && !eventPallets.has(u.location)) continue;
         total++;
         if (byCase[u.location]) byCase[u.location].total++;
+        if (byPallet[u.location]) byPallet[u.location].total++;
         const s = u.signoff;
         if (s) {
           signed++;
           if (byCase[u.location]) byCase[u.location].signed++;
+          if (byPallet[u.location]) byPallet[u.location].signed++;
           const k = kindOf(s);
           if (k === 'damaged') damaged++;
           if (k === 'missing') missing++;
@@ -142,16 +151,19 @@ export function eventSignoffProgress(
       const matchedByEvent = !d.caseId && !!eventId && d.eventId === eventId;
       if (!matchedByCase && !matchedByEvent) continue;
       total++;
+      const pal = !matchedByCase && d.palletId ? byPallet[d.palletId] : undefined;
       if (matchedByCase && d.caseId) {
         byCase[d.caseId].total++;
       } else {
         looseTotal++;
+        if (pal) pal.total++;
       }
       const s = d.signoff;
       if (s) {
         signed++;
         if (matchedByCase && d.caseId) byCase[d.caseId].signed++;
         else looseSigned++;
+        if (pal) pal.signed++;
         const k = kindOf(s);
         if (k === 'damaged') damaged++;
         if (k === 'missing') missing++;
@@ -162,7 +174,7 @@ export function eventSignoffProgress(
     }
   }
 
-  return { total, signed, flagged, damaged, missing, consumed, sold, byCase, looseTotal, looseSigned };
+  return { total, signed, flagged, damaged, missing, consumed, sold, byCase, byPallet, looseTotal, looseSigned };
 }
 
 // ── Per-case manifest group for the checklist (packing + unpacking) ──────────────────────
@@ -226,6 +238,46 @@ export function buildCaseGroups(
   });
 }
 
+// ── Pallet packing progress (items riding a pallet directly) ─────────────────────────────
+export interface PalletPackProgress {
+  total: number; // item lines on the event's pallets (bulk rows + serial units)
+  packed: number;
+  byPallet: Record<string, { total: number; packed: number }>;
+}
+
+/** Outbound progress for items placed straight on the event's pallets (no case). */
+export function eventPalletPackProgress(
+  event: EventPayload | null | undefined,
+  items: InventoryPayload[] | null | undefined
+): PalletPackProgress {
+  const byPallet: Record<string, { total: number; packed: number }> = {};
+  for (const p of (event && event.pallets) || []) if (p && p.id) byPallet[p.id] = { total: 0, packed: 0 };
+  let total = 0;
+  let packed = 0;
+  const hit = (pid: string | null | undefined, isPacked: boolean) => {
+    const g = pid ? byPallet[pid] : undefined;
+    if (!g) return;
+    g.total++;
+    total++;
+    if (isPacked) {
+      g.packed++;
+      packed++;
+    }
+  };
+  if (event) {
+    for (const it of items || []) {
+      if (itemIsSerial(it)) {
+        for (const u of itemUnits(it)) hit(u.location, u.state === 'packed');
+        continue;
+      }
+      for (const d of it.distribution || []) {
+        if (!d.caseId && d.eventId === event.id) hit(d.palletId, d.state === 'packed');
+      }
+    }
+  }
+  return { total, packed, byPallet };
+}
+
 // ── Readiness gates (the "can ship / can close" tests) ────────────────────────────────────
 /**
  * Outbound readiness (#28): the event is in 'packing', EVERY assigned case is boxed, and there are
@@ -237,8 +289,10 @@ export function eventCanCommitReady(
   items: InventoryPayload[] | null | undefined
 ): boolean {
   if (!event || event.state !== 'packing') return false;
+  // Something has to ship: boxed cases, packed pallet items, or both.
   const cp = eventCaseSignoffProgress(event);
-  if (cp.total === 0 || cp.signed !== cp.total) return false;
+  const pp = eventPalletPackProgress(event, items);
+  if (cp.total + pp.total === 0 || cp.signed !== cp.total || pp.packed !== pp.total) return false;
   const ip = eventSignoffProgress(event, items);
   return (ip.flagged || 0) === 0;
 }
@@ -268,10 +322,15 @@ export function packingBlockReason(
     return 'Outbound sign-off is only available while the event is in Packing.';
   }
   const cp = eventCaseSignoffProgress(event);
-  if (cp.total === 0) return 'Assign cases to this event first.';
+  const pp = eventPalletPackProgress(event, items);
+  if (cp.total + pp.total === 0) return 'Assign cases or put items on a pallet first.';
   if (cp.signed !== cp.total) {
     const left = cp.total - cp.signed;
     return `${left} of ${cp.total} case${cp.total === 1 ? '' : 's'} still need boxing.`;
+  }
+  if (pp.packed !== pp.total) {
+    const left = pp.total - pp.packed;
+    return `${left} of ${pp.total} pallet item${pp.total === 1 ? '' : 's'} still need packing.`;
   }
   return 'Resolve the open flag(s) before this kit is ready.';
 }
@@ -298,6 +357,8 @@ export function buildManifestSnapshot(
 ): ManifestSnapshot {
   const o = opts || {};
   const eventCases = new Set(event.cases || []);
+  const palletById: Record<string, { label: string }> = {};
+  for (const p of event.pallets || []) if (p && p.id) palletById[p.id] = { label: p.label || 'Pallet' };
   const caseById: Record<string, SnapshotCaseLite> = {};
   for (const c of cases || []) caseById[c.id] = c;
   const ship = (o.shipping || event.outbound || {}) as Record<string, unknown>;
@@ -326,11 +387,12 @@ export function buildManifestSnapshot(
       const groups: Record<string, NonNullable<typeof item.units>> = {};
       for (const u of Array.isArray(item.units) ? item.units : []) {
         if (!u || u.deletedAt || !u.location || u.location === 'storage') continue;
-        if (!eventCases.has(u.location)) continue;
+        if (!eventCases.has(u.location) && !palletById[u.location]) continue;
         (groups[u.location] = groups[u.location] || []).push(u);
       }
       for (const cid of Object.keys(groups)) {
-        const c: SnapshotCaseLite = caseById[cid] || { id: cid };
+        const pallet = palletById[cid];
+        const c: SnapshotCaseLite = pallet ? { id: cid, label: pallet.label } : caseById[cid] || { id: cid };
         const us = groups[cid];
         const qty = us.length;
         totalQty += qty;
@@ -343,9 +405,10 @@ export function buildManifestSnapshot(
           qr: item.qr || '',
           kind: item.kind || '',
           loose: false,
-          caseId: cid,
+          caseId: pallet ? null : cid,
           caseLabel: c.label || c.slug || cid,
           caseSlug: c.slug || '',
+          palletId: pallet ? cid : null,
           qty,
           serials: us.map((u) => u.serial).filter(Boolean) as string[],
           state: us.every((u) => u.state === 'packed') ? 'packed' : 'pending',
@@ -364,9 +427,11 @@ export function buildManifestSnapshot(
       const matchedByEvent = !d.caseId && d.eventId === event.id;
       if (!matchedByCase && !matchedByEvent) continue;
       const c: SnapshotCaseLite = matchedByCase ? caseById[d.caseId as string] || { id: d.caseId as string } : { id: '' };
+      const pallet = matchedByEvent && d.palletId ? palletById[d.palletId] : undefined;
+      const loose = matchedByEvent && !pallet;
       const qty = Number(d.qty || 0);
       totalQty += qty;
-      if (matchedByEvent) looseQty += qty;
+      if (loose) looseQty += qty;
       rows.push({
         itemId: item.id || '',
         itemName: item.name || item.slug || item.id || '',
@@ -374,10 +439,11 @@ export function buildManifestSnapshot(
         sku: item.sku || '',
         qr: item.qr || '',
         kind: item.kind || '',
-        loose: matchedByEvent,
+        loose,
         caseId: matchedByCase ? (d.caseId as string) : null,
-        caseLabel: matchedByCase ? c.label || c.slug || (d.caseId as string) : 'Loose',
+        caseLabel: matchedByCase ? c.label || c.slug || (d.caseId as string) : pallet ? pallet.label : 'Loose',
         caseSlug: matchedByCase ? c.slug || '' : '',
+        palletId: pallet ? (d.palletId as string) : null,
         qty,
         serials: Array.isArray(d.serials) ? d.serials.slice() : [],
         state: d.state || '',
@@ -428,6 +494,15 @@ export function buildManifestSnapshot(
         : {}),
     },
     cases: caseList,
+    pallets: (event.pallets || [])
+      .filter((p) => p && p.id)
+      .map((p) => ({
+        id: p.id,
+        label: p.label || 'Pallet',
+        tracking: p.tracking || '',
+        weightKg: typeof p.weightKg === 'number' ? p.weightKg : null,
+        caseIds: (p.caseIds || []).slice(),
+      })),
     rows,
     totals: { rows: rows.length, qty: totalQty, cases: caseList.length, looseQty },
   };
@@ -477,7 +552,8 @@ export function buildCheckinSweep(
     tally.total += qty;
     const item = itemById[row.itemId];
     let dist = null as ReturnType<typeof findDist>;
-    if (item && Array.isArray(item.distribution)) dist = findDist(item, row.caseId, !!row.loose, event!.id);
+    if (item && itemIsSerial(item)) dist = serialLine(item, row.caseId || row.palletId || null);
+    else if (item && Array.isArray(item.distribution)) dist = findDist(item, row, event!.id);
     const dispKind = rowDispositionKind(dist);
     const openDamageFlag = item ? (item.flags || []).some((f) => f && f.status === 'open' && f.category === 'damage') : false;
     const openServiceFlag = item ? itemHasOpenServiceFlag(item) : false;
@@ -517,12 +593,26 @@ export function buildCheckinSweep(
   return { hasSnapshot: true, tally, discrepancies, capturedAt: snap.capturedAt || null };
 }
 
-// Locate the live distribution row a snapshot line maps to (case match, then loose, then case again).
-function findDist(item: InventoryPayload, caseId: string | null, loose: boolean, eventId?: string) {
+// Locate the live distribution row a snapshot line maps to (case match, then pallet, then loose, then case again).
+function findDist(item: InventoryPayload, row: ManifestSnapshotRow, eventId?: string) {
+  const { caseId, palletId, loose } = row;
   const dist = Array.isArray(item.distribution) ? item.distribution : [];
   let d: (typeof dist)[number] | null = null;
   if (caseId) d = dist.find((x) => x && x.caseId === caseId) || null;
-  if (!d && loose) d = dist.find((x) => x && !x.caseId && x.eventId === eventId) || null;
+  if (!d && palletId) d = dist.find((x) => x && !x.caseId && x.eventId === eventId && x.palletId === palletId) || null;
+  if (!d && loose) d = dist.find((x) => x && !x.caseId && x.eventId === eventId && !x.palletId) || null;
   if (!d) d = dist.find((x) => x && x.caseId === caseId) || null;
   return d;
+}
+
+// A serial line's units (in that case or on that pallet) read as one row: the worst disposition wins
+// (damaged > missing > any other), and it's 'packed' only when every unit is.
+function serialLine(item: InventoryPayload, location: string | null): DistributionRow | null {
+  if (!location) return null;
+  const us = itemUnits(item).filter((u) => u.location === location);
+  if (us.length === 0) return null;
+  const kinds = us.map((u) => (u.signoff && (u.signoff as { kind?: string }).kind) || '');
+  const kind =
+    kinds.find((k) => DAMAGED_KINDS.has(k)) || kinds.find((k) => MISSING_KINDS.has(k)) || (kinds.every(Boolean) ? kinds[0] : '');
+  return { signoff: kind ? { kind } : null, state: us.every((u) => u.state === 'packed') ? 'packed' : 'pending' };
 }

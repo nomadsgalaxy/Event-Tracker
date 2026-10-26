@@ -2184,7 +2184,7 @@ function PalletsSection() {
   const addPallet = () => {
     writePallets([
       ...pallets,
-      { id: newPalletId(), label: `Pallet ${pallets.length + 1}`, caseIds: [], tracking: '', notes: '' },
+      { id: newPalletId(), label: `Pallet ${pallets.length + 1}`, caseIds: [], tracking: '', notes: '', weightKg: '' },
     ]);
   };
   const removePallet = (id: string) => writePallets(pallets.filter((p) => p.id !== id));
@@ -2192,6 +2192,8 @@ function PalletsSection() {
     writePallets(pallets.map((p) => (p.id === id ? { ...p, label } : p)));
   const setTracking = (id: string, tracking: string) =>
     writePallets(pallets.map((p) => (p.id === id ? { ...p, tracking } : p)));
+  const setWeight = (id: string, weightKg: string) =>
+    writePallets(pallets.map((p) => (p.id === id ? { ...p, weightKg } : p)));
   const assignCaseToPallet = (cid: string, palletId: string | null) => {
     const next = pallets.map((p) => ({ ...p, caseIds: (p.caseIds || []).filter((x) => x !== cid) }));
     if (palletId) {
@@ -2234,22 +2236,21 @@ function PalletsSection() {
       action={
         <div className="flex items-center gap-3">
           <span className="text-[11px] text-muted-foreground">{summary}</span>
-          {cases.length > 0 && (
-            <Button type="button" size="sm" variant="secondary" onClick={addPallet}>
-              <Plus aria-hidden />
-              Add pallet
-            </Button>
-          )}
+          <Button type="button" size="sm" variant="secondary" onClick={addPallet}>
+            <Plus aria-hidden />
+            Add pallet
+          </Button>
         </div>
       }
     >
       <FormDescription>
-        Group roadcases into pallets for the carrier. Logistics only — item contents are unchanged. Unpalletized cases
-        ship loose. Drag a case chip between pallets (desktop), or use the menus below.
+        Pallets are built per show. Load items onto them from the event&apos;s Pallets tab (save the event first so a new
+        pallet shows up there). If the event has cases, drag a case chip onto a pallet, or use the menus below. A pallet
+        with items on it can&apos;t be removed until they&apos;re taken off.
       </FormDescription>
 
-      {cases.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Assign roadcases to this event first, then group them into pallets here.</p>
+      {pallets.length === 0 && cases.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No pallets yet. Add one to start loading this show.</p>
       ) : (
         <div className="grid gap-2">
           {pallets.map((p) => (
@@ -2269,7 +2270,7 @@ function PalletsSection() {
                   onChange={(e) => renamePallet(p.id, e.target.value)}
                 />
                 <span className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
-                  {(p.caseIds || []).length} {(p.caseIds || []).length === 1 ? 'case' : 'cases'}
+                  {cases.length > 0 ? `${(p.caseIds || []).length} ${(p.caseIds || []).length === 1 ? 'case' : 'cases'}` : ''}
                 </span>
                 <Button
                   type="button"
@@ -2283,16 +2284,29 @@ function PalletsSection() {
                   <Trash2 aria-hidden />
                 </Button>
               </div>
-              <FormItem>
-                <FormLabel className="text-[11px]">Tracking #</FormLabel>
-                <Input
-                  value={p.tracking}
-                  placeholder="Optional — per-pallet LTL / freight #"
-                  aria-label="Pallet tracking number"
-                  className="font-mono"
-                  onChange={(e) => setTracking(p.id, e.target.value)}
-                />
-              </FormItem>
+              <div className="grid gap-2 sm:grid-cols-[1fr_140px]">
+                <FormItem>
+                  <FormLabel className="text-[11px]">Tracking #</FormLabel>
+                  <Input
+                    value={p.tracking}
+                    placeholder="Optional — per-pallet LTL / freight #"
+                    aria-label="Pallet tracking number"
+                    className="font-mono"
+                    onChange={(e) => setTracking(p.id, e.target.value)}
+                  />
+                </FormItem>
+                <FormItem>
+                  <FormLabel className="text-[11px]">Pallet weight (kg)</FormLabel>
+                  <Input
+                    value={p.weightKg}
+                    inputMode="decimal"
+                    placeholder="Empty + wrap"
+                    aria-label="Empty pallet weight in kg"
+                    onChange={(e) => setWeight(p.id, e.target.value)}
+                  />
+                </FormItem>
+              </div>
+              {cases.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {(p.caseIds || []).length === 0 ? (
                   <span className="text-[11px] italic text-muted-foreground">No cases yet — assign below.</span>
@@ -2320,10 +2334,12 @@ function PalletsSection() {
                   ))
                 )}
               </div>
+              )}
             </div>
           ))}
 
           {/* Loose drop zone */}
+          {cases.length > 0 && (
           <div
             onDragOver={dragOver}
             onDragEnter={dragEnter}
@@ -2351,8 +2367,10 @@ function PalletsSection() {
               </div>
             )}
           </div>
+          )}
 
           {/* Menu fallback (keyboard / touch) — assign each case to a pallet via a select. */}
+          {cases.length > 0 && (
           <details className="mt-1">
             <summary className="cursor-pointer text-[11px] text-muted-foreground">
               Assign cases with menus (keyboard / no-drag)
@@ -2384,6 +2402,7 @@ function PalletsSection() {
               })}
             </div>
           </details>
+          )}
         </div>
       )}
     </FieldGroup>
@@ -2402,7 +2421,7 @@ export function ShippingPanel({ eventId, isNew, bols }: { eventId: string; isNew
   }) as (string | undefined)[];
   // Pallets come from the LIVE form (a pallet added in this session is linkable right away); BOLs
   // are server-owned so they come from the stored payload.
-  const pallets = (useWatch({ control, name: 'pallets' }) as EventPallet[] | undefined) ?? [];
+  const pallets = (useWatch({ control, name: 'pallets' }) as unknown as EventPallet[] | undefined) ?? [];
   const bolNote = 'Bills of lading save immediately — separately from this form’s Save button.';
   const filled = (...vals: (string | undefined)[]) => vals.some((v) => !!String(v ?? '').trim());
   const outboundStarted = filled(watched[0], watched[1], watched[2]);

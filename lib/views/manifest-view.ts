@@ -83,6 +83,17 @@ export interface ManifestCaseGroup {
   flagged: number;
 }
 
+/** One event pallet on the manifest — the items riding it directly (cases on it keep their own groups). */
+export interface ManifestPalletGroup {
+  palletId: string;
+  label: string;
+  rows: ManifestItemRow[];
+  total: number;
+  packed: number;
+  pending: number;
+  flagged: number;
+}
+
 /** The loose-inventory group — items attached to the event with no case (carry-on / hand-carried). */
 export interface ManifestLooseGroup {
   rows: ManifestItemRow[];
@@ -130,18 +141,65 @@ export interface EventManifest {
   /** Per-kit sections (event.roadKitIds → its present cases + an "Other cases" catch-all). EMPTY
    *  when the event has no assigned kits — render the flat caseGroups in that case. */
   kitSections: ManifestKitSection[];
+  /** One per event pallet, in event order (an empty pallet still gets a group). */
+  palletGroups: ManifestPalletGroup[];
   looseGroup: ManifestLooseGroup | null;
   kindGroups: ManifestKindRollup[];
   totals: ManifestTotals;
 }
 
-// A bulk distribution row is LOOSE for this event iff it has no caseId and its eventId is the event.
-// Mirrors ManifestPool's `matchesEventLoose` (index.html ~L15979).
+// A bulk distribution row is LOOSE for this event iff it has no caseId, its eventId is the event, and
+// it isn't riding one of the event's pallets. Mirrors ManifestPool's `matchesEventLoose` (index.html ~L15979).
 function isLooseRow(
-  d: { caseId?: string | null; eventId?: string | null },
+  d: { caseId?: string | null; eventId?: string | null; palletId?: string | null },
   eventId: string
 ): boolean {
-  return !d.caseId && d.eventId === eventId;
+  return !d.caseId && d.eventId === eventId && !d.palletId;
+}
+
+// A bulk row riding pallet `pid` of this event.
+function isPalletRow(d: { caseId?: string | null; eventId?: string | null; palletId?: string | null }, eventId: string, pid: string): boolean {
+  return !d.caseId && d.eventId === eventId && d.palletId === pid;
+}
+
+// One ManifestItemRow for an item riding a pallet, plus the raw packed qty (flag-independent).
+function palletRow(item: InventoryPayload, eventId: string, pid: string): { row: ManifestItemRow; packedQty: number } | null {
+  const flagged = itemRollupState(item) === 'flagged';
+  let qty = 0;
+  let packedQty = 0;
+  const serials: string[] = [];
+  if (itemIsSerial(item)) {
+    for (const u of itemUnits(item)) {
+      if (u.location !== pid) continue;
+      qty += 1;
+      if (u.state === 'packed') packedQty += 1;
+      if (u.serial) serials.push(u.serial);
+    }
+  } else {
+    for (const d of item.distribution ?? []) {
+      if (!isPalletRow(d, eventId, pid)) continue;
+      const q = d.qty || 1;
+      qty += q;
+      if (d.state === 'packed') packedQty += q;
+      for (const sn of d.serials ?? []) if (sn) serials.push(sn);
+    }
+  }
+  if (qty === 0) return null;
+  const state: RowState = flagged ? 'flagged' : packedQty === qty ? 'packed' : 'pending';
+  return {
+    row: {
+      id: item.id ?? '',
+      name: item.name ?? '(unnamed)',
+      kind: item.kind ?? item.type ?? 'other',
+      qr: item.qr ?? '',
+      sku: item.sku ?? '',
+      qty,
+      state,
+      serials,
+      flagged,
+    },
+    packedQty,
+  };
 }
 
 // Build one ManifestItemRow for an item inside a specific case. Reuses the shared per-case
@@ -197,13 +255,40 @@ export function buildEventManifest(
   roadKits?: ManifestRoadKit[]
 ): EventManifest {
   const caseIds = new Set(event.cases ?? []);
+  const palletIds = new Set((event.pallets ?? []).map((p) => p?.id).filter((x): x is string => !!x));
+  const onEventPallet = (it: InventoryPayload) =>
+    itemIsSerial(it)
+      ? itemUnits(it).some((u) => !!u.location && palletIds.has(u.location))
+      : (it.distribution ?? []).some((d) => !d.caseId && d.eventId === eventId && !!d.palletId && palletIds.has(d.palletId));
 
-  // The items in play: routed into one of the event's cases OR loose-attached to the event.
+  // The items in play: routed into one of the event's cases, riding one of its pallets, or loose.
   const items = inventory.filter(
     (it) =>
       itemCaseIds(it).some((cid) => caseIds.has(cid)) ||
+      onEventPallet(it) ||
       (it.distribution ?? []).some((d) => isLooseRow(d, eventId))
   );
+
+  // ── By pallet (items riding a pallet directly) ──────────────────────────────────────────
+  const palletGroups: ManifestPalletGroup[] = (event.pallets ?? [])
+    .filter((p) => p && p.id)
+    .map((p) => {
+      const rows: ManifestItemRow[] = [];
+      let total = 0;
+      let packed = 0;
+      let flagged = 0;
+      for (const it of items) {
+        const r = palletRow(it, eventId, p.id);
+        if (!r) continue;
+        rows.push(r.row);
+        total += r.row.qty;
+        packed += r.packedQty;
+        if (r.row.flagged) flagged += r.row.qty;
+      }
+      const rank = { flagged: 0, pending: 1, packed: 2 } as const;
+      rows.sort((a, b) => rank[a.state] - rank[b.state] || a.name.localeCompare(b.name));
+      return { palletId: p.id, label: p.label || 'Pallet', rows, total, packed, pending: total - packed, flagged };
+    });
 
   // ── By case (case-routed rows only) ─────────────────────────────────────────────────────
   const caseGroups: ManifestCaseGroup[] = (event.cases ?? []).map((cid) => {
@@ -301,7 +386,7 @@ export function buildEventManifest(
     const isFlagged = itemRollupState(it) === 'flagged';
     if (itemIsSerial(it)) {
       for (const u of itemUnits(it)) {
-        if (!u.location || u.location === 'storage' || !caseIds.has(u.location)) continue;
+        if (!u.location || u.location === 'storage' || (!caseIds.has(u.location) && !palletIds.has(u.location))) continue;
         g.total += 1;
         if (u.state === 'packed') g.packed += 1;
         else g.pending += 1;
@@ -311,7 +396,7 @@ export function buildEventManifest(
     }
     for (const d of it.distribution ?? []) {
       const matchesCase = d.caseId && caseIds.has(d.caseId);
-      const matchesLoose = isLooseRow(d, eventId);
+      const matchesLoose = !d.caseId && d.eventId === eventId && (!d.palletId || palletIds.has(d.palletId));
       if (!matchesCase && !matchesLoose) continue;
       const q = d.qty || 1;
       g.total += q;
@@ -335,7 +420,7 @@ export function buildEventManifest(
     const isFlagged = itemRollupState(it) === 'flagged';
     if (itemIsSerial(it)) {
       for (const u of itemUnits(it)) {
-        if (!u.location || u.location === 'storage' || !caseIds.has(u.location)) continue;
+        if (!u.location || u.location === 'storage' || (!caseIds.has(u.location) && !palletIds.has(u.location))) continue;
         totals.total += 1;
         if (u.state === 'packed') totals.packed += 1;
         else totals.pending += 1;
@@ -345,7 +430,7 @@ export function buildEventManifest(
     }
     for (const d of it.distribution ?? []) {
       const matchesCase = d.caseId && caseIds.has(d.caseId);
-      const matchesLoose = isLooseRow(d, eventId);
+      const matchesLoose = !d.caseId && d.eventId === eventId && (!d.palletId || palletIds.has(d.palletId));
       if (!matchesCase && !matchesLoose) continue;
       const q = d.qty || 1;
       totals.total += q;
@@ -380,7 +465,7 @@ export function buildEventManifest(
     }
   }
 
-  return { caseGroups, kitSections, looseGroup, kindGroups, totals };
+  return { caseGroups, kitSections, palletGroups, looseGroup, kindGroups, totals };
 }
 
 // ── Sidebar event-list row (lean projection) ──────────────────────────────────────────────

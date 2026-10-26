@@ -17,7 +17,7 @@
 
 import type { CasePayload, EventPallet, EventPayload } from '@/lib/types/types';
 import type { ManifestTotals } from '@/lib/views/manifest-view';
-import { caseLoadedWeightKg } from '@/lib/util/weight';
+import { caseLoadedWeightKg, palletItemsWeightKg } from '@/lib/util/weight';
 import { getCaseScheduleConflicts, type CaseScheduleConflict } from '@/lib/views/case-view';
 import type { InventoryPayload } from '@/lib/views/inventory-shape';
 
@@ -77,17 +77,19 @@ export function eventLooseCaseIds(event: EventPayload | null | undefined): strin
   return (event?.cases ?? []).filter((cid) => !assigned.has(cid));
 }
 
-/** Σ loaded weight (kg) of every case in a pallet (tare + packed contents). Mirrors
- *  window.palletWeightKg — reuses caseLoadedWeightKg so the math matches the catalog/case detail. */
+/** Loaded weight (kg) of a pallet: its own tare + every case on it (tare + packed contents) + the
+ *  items riding it directly. Reuses caseLoadedWeightKg so the case math matches the catalog/case detail. */
 export function palletWeightKg(
   pallet: EventPallet,
   casesById: Record<string, CasePayload>,
   inventory: InventoryPayload[]
 ): number {
-  return (pallet.caseIds ?? []).reduce((sum, cid) => {
+  const cases = (pallet.caseIds ?? []).reduce((sum, cid) => {
     const c = casesById[cid];
     return sum + (c ? caseLoadedWeightKg({ id: c.id ?? cid, weight: c.weight }, inventory) : 0);
   }, 0);
+  const tare = typeof pallet.weightKg === 'number' && Number.isFinite(pallet.weightKg) ? pallet.weightKg : 0;
+  return tare + cases + palletItemsWeightKg(pallet.id, inventory);
 }
 
 // ── Case date conflicts (advisory) ──────────────────────────────────────────────────────────

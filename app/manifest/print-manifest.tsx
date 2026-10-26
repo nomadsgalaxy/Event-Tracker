@@ -221,12 +221,14 @@ export function PrintManifest({
   codes?: ManifestCodes;
 }) {
   if (!manifest || !row) return null;
-  const { caseGroups, kitSections, looseGroup, totals } = manifest;
+  const { caseGroups, kitSections, palletGroups, looseGroup, totals } = manifest;
   const printedAt = new Date().toISOString().slice(0, 16).replace('T', ' ');
   const caseSvg = codes?.caseSvgByCaseId ?? {};
   const eventSvg = codes?.eventSvg ?? '';
   const rowCount =
-    caseGroups.reduce((n, g) => n + g.rows.length, 0) + (looseGroup?.rows.length ?? 0);
+    caseGroups.reduce((n, g) => n + g.rows.length, 0) +
+    palletGroups.reduce((n, g) => n + g.rows.length, 0) +
+    (looseGroup?.rows.length ?? 0);
   // Orange "Going to" banner — IDENTICAL in form to the roadcase manifest's banner: the show NAME is
   // the headline, with the dates + location (city) beneath. The name also titles the document, but we
   // lead with it here so the event banner reads the same as the per-case one. The lead still appears in
@@ -307,6 +309,20 @@ export function PrintManifest({
           return caseGroups.map(caseBlock);
         })()}
 
+        {palletGroups
+          .filter((g) => g.rows.length > 0)
+          .map((g) => (
+            <div key={g.palletId} className="case-block">
+              <div className="case-head">
+                <span className="case-head-text">
+                  <span className="name">{g.label}</span>
+                  <span className="count">{g.rows.length} {g.rows.length === 1 ? 'item' : 'items'}</span>
+                </span>
+              </div>
+              <ManifestTable rows={g.rows} />
+            </div>
+          ))}
+
         {looseGroup && looseGroup.rows.length > 0 ? (
           <div className="case-block">
             <div className="case-head">
@@ -319,7 +335,7 @@ export function PrintManifest({
           </div>
         ) : null}
 
-        {caseGroups.length === 0 && (!looseGroup || looseGroup.rows.length === 0) ? (
+        {rowCount === 0 ? (
           <p style={{ fontStyle: 'italic', color: '#777' }}>No items recorded on this manifest.</p>
         ) : null}
 

@@ -8,6 +8,7 @@ import * as admin from '@/app/config/admin-actions';
 import * as webhookSubs from '@/app/config/admin/webhook-subscription-actions';
 import * as flights from '@/app/event/flight-actions';
 import * as bols from '@/app/event/bol-actions';
+import * as pallets from '@/app/event/pallet-actions';
 import * as report from '@/app/event/[id]/report/actions';
 import * as feedback from '@/app/event/feedback-actions';
 import * as notifications from '@/app/notifications/actions';
@@ -23,7 +24,7 @@ import * as signoff from '@/app/signoff/actions';
 type Action = (...args: unknown[]) => Promise<unknown>;
 
 const MODULES: Record<string, Record<string, unknown>> = {
-  account, cases, catalog, kits, config, admin, webhookSubs, flights, bols, report, feedback,
+  account, cases, catalog, kits, config, admin, webhookSubs, flights, bols, pallets, report, feedback,
   notifications, events, scan, manifest, warehouses, signoff,
 };
 

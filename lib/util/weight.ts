@@ -79,6 +79,25 @@ export function caseContentsWeightKg(caseId: string, inventory: InventoryPayload
   return kg;
 }
 
+/** Σ weight (kg) of the items riding a pallet directly (bulk rows with that palletId + serial units
+ *  located on it). Pallet ids are unique across events, so no event match is needed. */
+export function palletItemsWeightKg(palletId: string, inventory: InventoryPayload[]): number {
+  if (!palletId || !Array.isArray(inventory)) return 0;
+  let kg = 0;
+  for (const it of inventory) {
+    const w = num(it?.weight ?? null);
+    if (!w) continue;
+    if (itemIsSerial(it)) {
+      kg += w * itemQtyInCase(it, palletId);
+      continue;
+    }
+    for (const d of it.distribution || []) {
+      if (d && !d.caseId && d.palletId === palletId) kg += w * Number(d.qty || 0);
+    }
+  }
+  return kg;
+}
+
 /** Loaded weight of a case in kg (#12): tare (case.weight) + packed contents. */
 export function caseLoadedWeightKg(
   caseObj: { id?: string; weight?: number | string } | null | undefined,

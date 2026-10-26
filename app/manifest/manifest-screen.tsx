@@ -227,11 +227,11 @@ export function ManifestScreen({
     );
   }
 
-  const { caseGroups, kitSections, looseGroup, kindGroups, totals } = manifest;
+  const { caseGroups, kitSections, palletGroups, looseGroup, kindGroups, totals } = manifest;
   const pct = totals.total > 0 ? Math.round((totals.packed / totals.total) * 100) : 0;
   const progressColor =
     totals.flagged > 0 ? 'var(--warning)' : pct === 100 ? 'var(--st-ready)' : 'var(--primary)';
-  const hasContent = caseGroups.length > 0 || !!looseGroup;
+  const hasContent = caseGroups.length > 0 || palletGroups.length > 0 || !!looseGroup;
 
   // The detail item currently open (resolved from the seeded payloads).
   const detailsItem = detailsItemId ? itemsById[detailsItemId] : null;
@@ -433,6 +433,9 @@ export function ManifestScreen({
               : caseGroups.map((g) => (
                   <ManifestCaseCard key={g.caseId} group={g} codeSvg={caseCodeSvgByCaseId?.[g.caseId]} actions={rowActions} />
                 ))}
+            {palletGroups.map((g) => (
+              <ManifestLooseCard key={g.palletId} group={g} actions={rowActions} title={g.label} subline="Items riding this pallet directly." />
+            ))}
             {looseGroup ? <ManifestLooseCard group={looseGroup} actions={rowActions} /> : null}
           </div>
         ) : (

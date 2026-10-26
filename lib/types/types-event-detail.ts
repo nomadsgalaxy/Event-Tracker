@@ -50,13 +50,36 @@ export interface CaseTileView {
   conflicts: { eventId: string; name: string; start: string; end: string }[];
 }
 
-/** One read-only Pallet: label, case chips, resolved weight, tracking number. */
+/** One line on a pallet: a bulk row (qty) or a single serial unit (unitId + serial). */
+export interface PalletItemView {
+  itemId: string;
+  unitId: string | null;
+  name: string;
+  kind: string;
+  qty: number;
+  serial: string;
+  packed: boolean;
+  flagged: boolean;
+}
+
+/** One Pallet: label, case chips, the items riding it directly, resolved weight, tracking number. */
 export interface PalletView {
   id: string;
   label: string;
   caseChips: { id: string; label: string }[];
+  items: PalletItemView[];
   weight: string; // pre-formatted loaded weight
   tracking: string;
+}
+
+/** Something in storage that can go on a pallet: a bulk item (inStorage qty) or a serial item's free units. */
+export interface PalletPickItem {
+  itemId: string;
+  name: string;
+  kind: string;
+  serial: boolean;
+  inStorage: number;
+  units: { id: string; serial: string }[];
 }
 
 /** One loose-inventory row (display only). */
@@ -90,6 +113,10 @@ export interface EventDetailView {
   caseTiles: CaseTileView[];
   pallets: PalletView[];
   palletLooseChips: { id: string; label: string }[];
+  /** Storage stock that can be loaded onto this event's pallets (empty when the viewer can't load). */
+  palletPick: PalletPickItem[];
+  /** Viewer may load/unload/pack pallets right now (pallets.edit + the event is still being built). */
+  canLoadPallets: boolean;
   loose: LooseItemView[];
   tags: ResolvedTag[];
   /** Server-built Manifest CSV rows (the "Manifest CSV" header export). */

@@ -7,6 +7,7 @@ import {
   eventCanCommitReady,
   eventCanCommitClosed,
   packingBlockReason,
+  eventPalletPackProgress,
   buildManifestSnapshot,
   buildCheckinSweep,
   type CheckinSweep,
@@ -202,6 +203,8 @@ export interface SignoffDetailSeed {
   shipDefaults: { carrier: string; tracking: string; pickupDate: string; notes: string };
   // PACKING: per-case groups (the shared ManifestCaseCard data + the boxed-by stamp + flag state)
   caseGroups: SignoffCaseGroup[];
+  // PACKING: items riding the event's pallets directly (loaded + packed on the event's Pallets section)
+  palletPack: { id: string; label: string; total: number; packed: number }[];
   // UNPACKING: per-item return rows (case rows + loose rows) + the check-in sweep
   caseReturnRows: SignoffReturnRow[];
   looseReturnRows: SignoffReturnRow[];
@@ -258,8 +261,17 @@ async function buildDetail(
     };
   });
 
+  const palletProg = eventPalletPackProgress(p, inventory);
+  const palletPack = (p.pallets || [])
+    .filter((pl) => pl && pl.id)
+    .map((pl) => ({ id: pl.id, label: pl.label || 'Pallet', ...(palletProg.byPallet[pl.id] || { total: 0, packed: 0 }) }));
+
   // ── UNPACKING: per-item return rows (one per case route / per serial-in-case / per loose row) ──
   const caseSet = new Set(eventCases);
+  // Pallet lines sign off like case lines, keyed by the pallet id and labelled with the pallet name.
+  const palletLabels: Record<string, string> = {};
+  for (const pl of p.pallets || []) if (pl && pl.id) palletLabels[pl.id] = pl.label || 'Pallet';
+  const holderLabel = (id: string) => palletLabels[id] || caseLabels[id] || id;
   const caseReturnRows: SignoffReturnRow[] = [];
   const looseReturnRows: SignoffReturnRow[] = [];
   for (const item of inventory) {
@@ -269,7 +281,8 @@ async function buildDetail(
       // One synthesized row per case carrying ≥1 unit (mirrors the manifestRows serial branch).
       const byCase: Record<string, ReturnType<typeof itemUnits>> = {};
       for (const u of itemUnits(item)) {
-        if (!u || !u.location || u.location === 'storage' || !caseSet.has(u.location)) continue;
+        if (!u || !u.location || u.location === 'storage') continue;
+        if (!caseSet.has(u.location) && !palletLabels[u.location]) continue;
         (byCase[u.location] = byCase[u.location] || []).push(u);
       }
       for (const cid of Object.keys(byCase)) {
@@ -280,7 +293,7 @@ async function buildDetail(
           itemId: item.id || '',
           name: item.name || item.slug || item.id || '',
           caseId: cid,
-          caseLabel: caseLabels[cid] || cid,
+          caseLabel: holderLabel(cid),
           loose: false,
           distIdx: 0,
           signed: allSigned,
@@ -295,15 +308,17 @@ async function buildDetail(
     }
     (item.distribution || []).forEach((d, distIdx) => {
       const matchedByCase = !!d.caseId && caseSet.has(d.caseId);
-      const matchedByEvent = !d.caseId && d.eventId === eventId;
-      if (!matchedByCase && !matchedByEvent) return;
+      const onPallet = !d.caseId && d.eventId === eventId && !!d.palletId && !!palletLabels[d.palletId];
+      const matchedByEvent = !d.caseId && d.eventId === eventId && !onPallet;
+      if (!matchedByCase && !matchedByEvent && !onPallet) return;
+      const holder = matchedByCase ? (d.caseId as string) : onPallet ? (d.palletId as string) : null;
       const kind = rowDispositionKind(d);
       const signed = !!d.signoff;
       const row: SignoffReturnRow = {
         itemId: item.id || '',
         name: item.name || item.slug || item.id || '',
-        caseId: matchedByCase ? (d.caseId as string) : null,
-        caseLabel: matchedByCase ? caseLabels[d.caseId as string] || (d.caseId as string) : 'Loose',
+        caseId: holder,
+        caseLabel: holder ? holderLabel(holder) : 'Loose',
         loose: matchedByEvent,
         distIdx,
         signed,
@@ -407,6 +422,7 @@ async function buildDetail(
       notes: p.outbound?.notes || '',
     },
     caseGroups,
+    palletPack,
     caseReturnRows,
     looseReturnRows,
     sweep,

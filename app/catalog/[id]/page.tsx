@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { requireUser } from '@/lib/auth/auth';
 import { can } from '@/lib/auth/rbac';
-import { getInventoryItem, getCaseLabels, getEventNames } from '@/lib/views/inventory';
+import { getInventoryItem, getCaseLabels, getEventNames, getPalletPlaces } from '@/lib/views/inventory';
 import { getCases, getInventory, getTags, getUserDisplayName } from '@/lib/db/data';
 import { isCaseRetired } from '@/lib/views/case-view';
 import { itemCode } from '@/lib/integrations/eitm';
@@ -101,9 +101,10 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   if (!doc) notFound();
 
   const it: InventoryPayload = doc.payload;
-  const [caseLabels, eventNames, allCaseDocs, allInvDocs, tagDocs, actorName] = await Promise.all([
+  const [caseLabels, eventNames, palletPlaces, allCaseDocs, allInvDocs, tagDocs, actorName] = await Promise.all([
     getCaseLabels(),
     getEventNames(),
+    getPalletPlaces(),
     getCases(),
     getInventory(),
     getTags(),
@@ -312,7 +313,8 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               <TableBody>
                 {units.map((u, i) => {
                   const dep = unitIsDeployed(u);
-                  const loc = dep ? caseLabels[u.location as string] || u.location : 'Storage';
+                  const pallet = dep ? palletPlaces[u.location as string] : undefined;
+                  const loc = dep ? pallet?.label || caseLabels[u.location as string] || u.location : 'Storage';
                   const uOos = unitIsOutOfService(u);
                   const uDue = unitIsDueForService(u);
                   return (
@@ -323,7 +325,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                       <TableCell className="text-sm">
                         {dep ? (
                           <Link
-                            href={`/cases/${encodeURIComponent(u.location as string)}`}
+                            href={pallet ? `/event/${encodeURIComponent(pallet.eventId)}` : `/cases/${encodeURIComponent(u.location as string)}`}
                             className="text-primary underline-offset-2 hover:underline"
                           >
                             {loc}
@@ -385,12 +387,19 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             </TableHeader>
             <TableBody>
               {distRows.map((d, i) => {
+                const pallet = !d.caseId && d.palletId ? palletPlaces[d.palletId] : undefined;
                 const where = d.caseId
                   ? caseLabels[d.caseId] || d.caseId
-                  : d.eventId
-                    ? `Loose @ ${eventNames[d.eventId] || d.eventId}`
-                    : 'Inventory';
-                const href = d.caseId ? `/cases/${encodeURIComponent(d.caseId)}` : null;
+                  : pallet
+                    ? pallet.label
+                    : d.eventId
+                      ? `Loose @ ${eventNames[d.eventId] || d.eventId}`
+                      : 'Inventory';
+                const href = d.caseId
+                  ? `/cases/${encodeURIComponent(d.caseId)}`
+                  : pallet
+                    ? `/event/${encodeURIComponent(pallet.eventId)}`
+                    : null;
                 return (
                   <TableRow key={i} className="hover:bg-muted/40">
                     <TableCell className="pl-4 text-right font-mono text-xs tabular-nums text-foreground">

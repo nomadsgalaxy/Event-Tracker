@@ -1073,6 +1073,76 @@ def run_action(name: str, args: list[Any] | None = None) -> dict[str, Any]:
 
 
 @mcp.tool()
+def set_pallets(event_id: str, pallets: list[dict[str, Any]]) -> dict[str, Any]:
+    """Replace an event's pallet list (WRITE, needs event.edit).
+
+    This REPLACES the whole list, so read the event first (get_event) and send
+    back every pallet you want to keep. Each pallet is {id, label, tracking?,
+    notes?, weightKg?, caseIds?}. New ids must start with "pallet-" (e.g.
+    "pallet-milam-1"). weightKg is the empty pallet + wrap. A pallet that still
+    has items on it can't be dropped; take them off first.
+
+    Returns {event}. Maps to POST /api/v1/events/<id> with {pallets}.
+    """
+    return _request("POST", f"/api/v1/events/{_seg(event_id)}", json_body={"pallets": pallets})
+
+
+@mcp.tool()
+def place_on_pallet(
+    event_id: str, pallet_id: str, item_id: str, qty: int | None = None, unit_id: str = ""
+) -> dict[str, Any]:
+    """Put an item from storage onto one of an event's pallets (WRITE, needs api.fullaccess).
+
+    Pallets are built per show: add the pallet to the event first
+    (set_pallets), then load it. Bulk
+    items take qty (default 1, capped at what's in storage). Serial items take
+    unit_id, or the first unit in storage. Only while the event is draft,
+    upcoming or packing. The item comes back to storage when the event closes.
+
+    Returns {result: {ok} | {error}}. Runs pallets.placeOnPalletAction.
+    """
+    opts: dict[str, Any] = {}
+    if qty is not None:
+        opts["qty"] = qty
+    if unit_id:
+        opts["unitId"] = unit_id
+    return _request("POST", "/api/v1/actions/pallets.placeOnPalletAction", json_body={"args": [event_id, pallet_id, item_id, opts]})
+
+
+@mcp.tool()
+def remove_from_pallet(
+    event_id: str, pallet_id: str, item_id: str, qty: int | None = None, unit_id: str = ""
+) -> dict[str, Any]:
+    """Take an item off a pallet, back to storage (WRITE, needs api.fullaccess).
+
+    Bulk: qty to remove (default the whole line). Serial: unit_id, or every
+    unit of that item on the pallet.
+
+    Returns {result: {ok} | {error}}. Runs pallets.removeFromPalletAction.
+    """
+    opts: dict[str, Any] = {}
+    if qty is not None:
+        opts["qty"] = qty
+    if unit_id:
+        opts["unitId"] = unit_id
+    return _request("POST", "/api/v1/actions/pallets.removeFromPalletAction", json_body={"args": [event_id, pallet_id, item_id, opts]})
+
+
+@mcp.tool()
+def pack_pallet_item(
+    event_id: str, pallet_id: str, item_id: str, packed: bool = True, unit_id: str = ""
+) -> dict[str, Any]:
+    """Mark an item on a pallet packed, or back to pending (WRITE, needs api.fullaccess).
+
+    Ship Kit needs every pallet line packed (and every case boxed). Serial:
+    unit_id for one unit, or omit for every unit of that item on the pallet.
+
+    Returns {result: {ok} | {error}}. Runs pallets.setPalletItemPackedAction.
+    """
+    return _request("POST", "/api/v1/actions/pallets.setPalletItemPackedAction", json_body={"args": [event_id, pallet_id, item_id, packed, unit_id or None]})
+
+
+@mcp.tool()
 def admin_config(route: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
     """Read or change an admin config surface (needs api.fullaccess + admin).
 

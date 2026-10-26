@@ -302,7 +302,17 @@ export function ManifestCaseCard({
   );
 }
 
-export function ManifestLooseCard({ group, actions }: { group: ManifestLooseGroup; actions?: ManifestRowActions }) {
+export function ManifestLooseCard({
+  group,
+  actions,
+  title = 'Loose Inventory',
+  subline = 'Items brought to the event outside of a roadcase.',
+}: {
+  group: ManifestLooseGroup;
+  actions?: ManifestRowActions;
+  title?: string;
+  subline?: string;
+}) {
   const pct = group.total > 0 ? Math.round((group.packed / group.total) * 100) : 0;
   const accent = accentVar(group.flagged, pct);
   const hasRows = group.rows.length > 0;
@@ -316,8 +326,8 @@ export function ManifestLooseCard({ group, actions }: { group: ManifestLooseGrou
       <CardHeader
         Icon={Layers}
         accent={accent}
-        title="Loose Inventory"
-        subline="Items brought to the event outside of a roadcase."
+        title={title}
+        subline={subline}
         packed={group.packed}
         total={group.total}
         flagged={group.flagged}

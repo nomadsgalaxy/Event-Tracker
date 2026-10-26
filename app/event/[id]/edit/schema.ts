@@ -68,6 +68,8 @@ const palletSchema = z.object({
   caseIds: z.array(z.string()),
   tracking: z.string(),
   notes: z.string(),
+  // Empty pallet + wrap weight in kg, as typed ('' = not set).
+  weightKg: z.string(),
 });
 
 const venueContactSchema = z.object({
@@ -277,6 +279,7 @@ export function toFormValues(initial: EventPayload, piiEditable: boolean): Event
         caseIds: strArr(pr.caseIds),
         tracking: s(pr.tracking),
         notes: s(pr.notes),
+        weightKg: pr.weightKg != null && pr.weightKg !== '' ? String(pr.weightKg) : '',
       };
     }),
     outbound: { ...EMPTY_SHIP_LEG, ...legFrom(initial.outbound) },
@@ -346,7 +349,7 @@ export function toPatch(values: EventFormValues): Record<string, unknown> {
     lead: values.lead,
     staff,
     cases: values.cases,
-    pallets: values.pallets,
+    pallets: values.pallets.map(({ weightKg, ...p }) => ({ ...p, weightKg: weightKg.trim() !== '' && Number.isFinite(Number(weightKg)) ? Number(weightKg) : null })),
     outbound: values.outbound,
     return: values.return,
     sideEvents: values.sideEvents,

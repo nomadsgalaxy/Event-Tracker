@@ -46,6 +46,23 @@ export async function getCaseLabels(): Promise<Record<string, string>> {
 }
 
 /** A { eventId -> name } map for resolving loose-attachment summaries. */
+/** palletId -> where it is: "<pallet> @ <event>" and the event id to link to. Pallets live on events. */
+export async function getPalletPlaces(): Promise<Record<string, { eventId: string; label: string }>> {
+  const db = await getDb();
+  const rows = await db
+    .collection<{ _id: string; payload?: { name?: string; pallets?: { id?: string; label?: string }[] } }>('events')
+    .find({ ...NOT_DELETED, 'payload.pallets.0': { $exists: true } })
+    .project({ 'payload.name': 1, 'payload.pallets': 1 })
+    .toArray();
+  const map: Record<string, { eventId: string; label: string }> = {};
+  for (const e of rows) {
+    for (const p of e.payload?.pallets ?? []) {
+      if (p?.id) map[p.id] = { eventId: e._id, label: `${p.label || 'Pallet'} @ ${e.payload?.name || e._id}` };
+    }
+  }
+  return map;
+}
+
 export async function getEventNames(): Promise<Record<string, string>> {
   const db = await getDb();
   const rows = await db
