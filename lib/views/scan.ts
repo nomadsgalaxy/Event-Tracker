@@ -14,6 +14,7 @@ import {
   itemIsSerial,
   itemUnits,
   unitIsDeployed,
+  isPalletId,
   type InventoryPayload,
   type DistributionRow,
   type ItemUnit,
@@ -210,7 +211,8 @@ export interface ItemCaseResolution {
  */
 export function itemCurrentOrLastCase(item: InventoryPayload): ItemCaseResolution {
   if (itemIsSerial(item)) {
-    const deployed = itemUnits(item).filter(unitIsDeployed);
+    // A unit on a show pallet isn't in a case (pallet ids never resolve to /cases/…).
+    const deployed = itemUnits(item).filter((u) => unitIsDeployed(u) && !isPalletId(u.location));
     if (deployed.length > 0) {
       const packed = deployed.find((u) => u.state === 'packed');
       return { caseId: ((packed || deployed[0]).location as string) ?? null, status: 'current' };

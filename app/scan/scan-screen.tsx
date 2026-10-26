@@ -24,7 +24,7 @@ import {
   type ScanItemLean,
   type ScanPolicy,
 } from '@/lib/views/scan';
-import type { InventoryPayload } from '@/lib/views/inventory-shape';
+import { isPalletId, type InventoryPayload } from '@/lib/views/inventory-shape';
 import type { NfcTagEntry } from '@/lib/integrations/nfc-decoders';
 import { ScannerView } from './scanner-view';
 import { useNfcReader } from './use-nfc-reader';
@@ -831,7 +831,7 @@ export function ScanScreen({
   // Route an item picked from the UnknownScanModal with NO active case → its first case detail.
   function routeItemToCase(item: InventoryPayload) {
     const cids = item.tracking === 'serial'
-      ? Array.from(new Set((item.units || []).filter((u) => u && !u.deletedAt && u.location && u.location !== 'storage').map((u) => u.location as string)))
+      ? Array.from(new Set((item.units || []).filter((u) => u && !u.deletedAt && u.location && u.location !== 'storage' && !isPalletId(u.location)).map((u) => u.location as string)))
       : Array.from(new Set((item.distribution || []).map((d) => d.caseId).filter((c): c is string => !!c)));
     if (cids[0]) window.location.href = '/cases/' + cids[0];
   }

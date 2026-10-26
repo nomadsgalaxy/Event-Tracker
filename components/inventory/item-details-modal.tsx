@@ -104,6 +104,8 @@ interface UnitFormRow {
   status?: 'out_of_service' | null;
   nextServiceDate?: string | null;
   serviceIntervalDays?: number | null;
+  // Pack + return stamps (written by the pack / sign-off flows), carried through a save untouched.
+  keep?: Pick<ItemUnit, 'signoff' | 'packedBy' | 'packedAt'>;
   /** Per-unit fixed-cord plug override (a EU-spec serial vs a US-spec one). */
   fixedPlug?: string;
 }
@@ -336,6 +338,7 @@ export function ItemDetailsModal({
       state: u.state || 'draft',
       tagUid: u.tagUid,
       remainingWeight: u.remainingWeight,
+      keep: { signoff: u.signoff ?? null, packedBy: u.packedBy ?? null, packedAt: u.packedAt ?? null },
       flags: Array.isArray(u.flags) ? u.flags : [],
       status: u.status ?? null,
       nextServiceDate: u.nextServiceDate ?? '',
@@ -518,6 +521,7 @@ export function ItemDetailsModal({
         ...base,
         tracking: 'serial',
         units: units.map<ItemUnit>((u) => ({
+          ...(u.keep || {}),
           id: u.id || uid(),
           serial: (u.serial || '').trim(),
           location: u.location || 'storage',

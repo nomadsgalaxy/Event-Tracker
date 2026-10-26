@@ -8,6 +8,7 @@ import {
   itemUnits,
   itemInStorage,
   itemIsOutOfService,
+  itemHasOpenServiceFlag,
   unitIsDeployed,
   unitIsOutOfService,
   type InventoryPayload,
@@ -301,19 +302,20 @@ export function assembleEventDetailView(args: AssembleArgs): EventDetailView {
     can('pallets.edit', viewerRole) && ['draft', 'upcoming', 'packing'].includes(String(safePayload.state ?? '')) && palletList.length > 0;
   const palletPick: PalletPickItem[] = canLoadPallets
     ? inventory
-        .filter((it) => !itemIsOutOfService(it) && itemInStorage(it) > 0)
-        .map((it) => ({
-          itemId: it.id ?? '',
-          name: it.name ?? '(unnamed)',
-          kind: it.kind ?? 'other',
-          serial: itemIsSerial(it),
-          inStorage: itemInStorage(it),
-          units: itemIsSerial(it)
+        .map((it) => {
+          const serial = itemIsSerial(it);
+          // Serial: one unit in repair doesn't block the rest, so judge the type, then each free unit.
+          const typeDown = serial ? it.status === 'out_of_service' || itemHasOpenServiceFlag(it) : itemIsOutOfService(it);
+          const units = serial
             ? itemUnits(it)
                 .filter((u) => !unitIsDeployed(u) && !unitIsOutOfService(u))
                 .map((u) => ({ id: u.id ?? '', serial: u.serial ?? '' }))
-            : [],
-        }))
+            : [];
+          return typeDown
+            ? null
+            : { itemId: it.id ?? '', name: it.name ?? '(unnamed)', kind: it.kind ?? 'other', serial, inStorage: serial ? units.length : itemInStorage(it), units };
+        })
+        .filter((x): x is PalletPickItem => !!x && x.inStorage > 0)
         .sort((a, b) => a.name.localeCompare(b.name))
     : [];
   const palletLooseChips =

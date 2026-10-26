@@ -8,7 +8,7 @@ import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry, EventBol } from '@/lib/types/types';
 import type { InventoryDoc, InventoryPayload, DistributionRow, ItemUnit, ItemFlag, SkuOption, KitRequirement } from '@/lib/views/inventory-shape';
-import { addFlag as buildAddFlag, isPalletId, itemInStorage, itemIsOutOfService, itemIsSerial, rowDispositionKind, unitIsOutOfService } from '@/lib/views/inventory-shape';
+import { addFlag as buildAddFlag, isPalletId, itemHasOpenServiceFlag, itemInStorage, itemIsOutOfService, itemIsSerial, rowDispositionKind, unitIsOutOfService } from '@/lib/views/inventory-shape';
 import { buildManifestSnapshot, buildCheckinSweep, type SnapshotCaseLite } from '@/lib/views/signoff-view';
 import type { TagDoc, TagPayload, RoadKitDoc, RoadKitPayload } from '@/lib/db/data';
 
@@ -187,8 +187,10 @@ export async function saveEvent({ id, patch, actorEmail, actorRole }: SaveEventA
       ).map((c) => String(c))
     );
     const incomingPallets = Array.isArray(set['payload.pallets']) ? (set['payload.pallets'] as Record<string, unknown>[]) : [];
-    // Item rows and serial locations point at pallet ids, so they must stay distinguishable from case ids.
-    if (incomingPallets.some((p) => !isPalletId(String(p?.id ?? '')))) {
+    // Item rows and serial locations point at pallet ids, so NEW ones must stay distinguishable from
+    // case ids (an older stored pallet keeps whatever id it had).
+    const storedIds = new Set((stored.payload.pallets || []).map((p) => p && p.id));
+    if (incomingPallets.some((p) => !storedIds.has(String(p?.id ?? '')) && !isPalletId(String(p?.id ?? '')))) {
       throw new Error("Pallet ids must start with 'pallet-'.");
     }
     // A pallet with items still on it can't be dropped (they'd be stranded off-storage). Take them off first.
@@ -249,6 +251,11 @@ export async function saveEvent({ id, patch, actorEmail, actorRole }: SaveEventA
 
   // Outbound: a real lifecycle transition (stored → incoming state differ) notifies subscribers.
   const nextState = set['payload.state'];
+  // Closing by a plain state edit (editor / API) releases pallet contents the same as Unpack complete.
+  if (res.matchedCount > 0 && nextState === 'closed' && stored.payload.state !== 'closed') {
+    const pallets = (set['payload.pallets'] as EventPayload['pallets'] | undefined) ?? stored.payload.pallets;
+    await releasePalletItems({ ...stored.payload, pallets, id: _id });
+  }
   if (res.matchedCount > 0 && typeof nextState === 'string' && nextState !== (stored.payload.state || '')) {
     void dispatchOutbound({
       type: 'event_state_changed',
@@ -342,6 +349,8 @@ export async function softDeleteEvent({
   if (!can('event.delete', actorRole, { isLeadOfEvent: isLead })) {
     throw new WriteForbiddenError('You do not have permission to delete this event.');
   }
+  // A deleted show can't hold stock: put anything on its pallets back in storage first.
+  await releasePalletItems({ ...stored.payload, id: _id });
 
   const now = Date.now();
   const res = await col.updateOne({ _id, ...NOT_DELETED }, { $set: { deletedAt: now, updatedAt: now } });
@@ -1441,6 +1450,10 @@ function cleanUnit(u: ItemUnit): ItemUnit {
     // read flow; the editor never authors them, but it must not strip them either).
     ...(u.tagUid ? { tagUid: String(u.tagUid) } : {}),
     ...(typeof u.remainingWeight === 'number' ? { remainingWeight: u.remainingWeight } : {}),
+    // Pack + return stamps are written by the pack/sign-off flows; a full editor save must keep them.
+    ...(u.signoff ? { signoff: u.signoff } : {}),
+    ...(u.packedBy ? { packedBy: u.packedBy } : {}),
+    ...(u.packedAt != null ? { packedAt: u.packedAt } : {}),
   };
 }
 
@@ -2208,7 +2221,8 @@ export async function bulkReassignToCase({
     const set: Record<string, unknown> = {};
     if (item.tracking === 'serial') {
       const loc = cId || 'storage';
-      const units = (Array.isArray(item.units) ? item.units : []).map((u) => ({
+      // Units on a show pallet stay there (take them off from the event page).
+      const units = (Array.isArray(item.units) ? item.units : []).map((u) => isPalletId(u?.location) ? u : ({
         ...u,
         location: loc,
         storageNote: loc === 'storage' ? u.storageNote || '' : '',
@@ -2216,11 +2230,13 @@ export async function bulkReassignToCase({
       }));
       set['payload.units'] = units;
     } else {
-      const dist = Array.isArray(item.distribution) ? item.distribution : [];
+      const all = Array.isArray(item.distribution) ? item.distribution : [];
+      const palletRows = all.filter((d) => !d.caseId && !!d.palletId);
+      const dist = all.filter((d) => !(!d.caseId && !!d.palletId));
       const totalQty = dist.reduce((s, d) => s + (d.qty || 0), 0) || 1;
       const allSerials = dist.flatMap((d) => (Array.isArray(d.serials) ? d.serials : []));
       const prevState = (dist[0]?.state || 'pending') as DistributionRow['state'];
-      set['payload.distribution'] = [{ caseId: cId, qty: totalQty, serials: allSerials, state: prevState }];
+      set['payload.distribution'] = [{ caseId: cId, qty: totalQty, serials: allSerials, state: prevState }, ...palletRows];
     }
     set['payload.id'] = _id;
     set.updatedAt = now;
@@ -3162,6 +3178,10 @@ export async function commitEventClosed({ eventId, actor }: CommitClosedArgs): P
     throw new WriteForbiddenError('Every returned item must be signed off before closing.');
   }
 
+  // Pallets are per show: their contents go back to storage. Done before the close stamp so a failure
+  // leaves the event in Unpacking where Unpack complete can simply be run again.
+  await releasePalletItems({ ...stored.payload, id: _id });
+
   const now = Date.now();
   const nextSignoff = {
     ...(stored.payload.signoff || {}),
@@ -3177,8 +3197,6 @@ export async function commitEventClosed({ eventId, actor }: CommitClosedArgs): P
     { _id, ...NOT_DELETED },
     { $set: { 'payload.state': 'closed', 'payload.signoff': nextSignoff, 'payload.audit': audit, 'payload.id': _id, updatedAt: now } }
   );
-  // Pallets are per show: their contents go back to storage once the event is closed.
-  if (res.matchedCount > 0) await releasePalletItems({ ...stored.payload, id: _id });
   void dispatchOutbound({
     type: 'event_state_changed',
     summary: `${stored.payload.name || _id}: ${stored.payload.state || 'unpacking'} → closed`,
@@ -3549,7 +3567,7 @@ interface PalletItemArgs {
   actor: ActorBy;
 }
 
-async function loadPalletTarget(eventId: string, palletId: string, itemId: string, actor: ActorBy) {
+async function loadPalletTarget(eventId: string, palletId: string, itemId: string, actor: ActorBy, opts: { allowClosed?: boolean } = {}) {
   if (!can('pallets.edit', actor.role)) {
     throw new WriteForbiddenError('You do not have permission to build pallets.');
   }
@@ -3565,7 +3583,9 @@ async function loadPalletTarget(eventId: string, palletId: string, itemId: strin
   ]);
   if (!storedEvent) throw new Error('Event not found (or deleted).');
   if (!storedItem) throw new Error('Inventory item not found (or deleted).');
-  if (!TRANSFER_TARGET_STATES.has(String(storedEvent.payload.state))) {
+  const st = String(storedEvent.payload.state);
+  // Taking things off a closed show's pallet is allowed so nothing can get stranded there.
+  if (!TRANSFER_TARGET_STATES.has(st) && !(opts.allowClosed && st === 'closed')) {
     throw new WriteForbiddenError('Pallets can only be changed while the event is in Draft, Upcoming or Packing.');
   }
   const pallet = (storedEvent.payload.pallets || []).find((p) => p && p.id === pId);
@@ -3579,7 +3599,9 @@ const isPalletRow = (d: DistributionRow | null | undefined, evId: string, pId: s
 export async function placeItemOnPallet({ eventId, palletId, itemId, unitId, qty, actor }: PalletItemArgs): Promise<SaveEventResult> {
   const t = await loadPalletTarget(eventId, palletId, itemId, actor);
   const item = t.storedItem.payload || {};
-  if (itemIsOutOfService(item)) throw new Error(`${item.name || 'This item'} is out of service.`);
+  // A serial type isn't blocked by one unit in repair: only the item-level status/flag, then the unit itself.
+  const typeDown = itemIsSerial(item) ? item.status === 'out_of_service' || itemHasOpenServiceFlag(item) : itemIsOutOfService(item);
+  if (typeDown) throw new Error(`${item.name || 'This item'} is out of service.`);
   const now = Date.now();
   const set: Record<string, unknown> = {};
   let note: string;
@@ -3587,7 +3609,7 @@ export async function placeItemOnPallet({ eventId, palletId, itemId, unitId, qty
   if (itemIsSerial(item)) {
     const units = Array.isArray(item.units) ? item.units.slice() : [];
     const inStorage = (u: ItemUnit) => !!u && !u.deletedAt && (!u.location || u.location === 'storage');
-    const idx = unitId ? units.findIndex((u) => u && u.id === unitId) : units.findIndex(inStorage);
+    const idx = unitId ? units.findIndex((u) => u && u.id === unitId) : units.findIndex((u) => inStorage(u) && !unitIsOutOfService(u));
     if (idx < 0) throw new Error(unitId ? 'That unit is not on this item.' : 'No units of this item are in storage.');
     const u = units[idx];
     if (!inStorage(u)) throw new Error(`Unit ${u.serial || u.id} is not in storage.`);
@@ -3635,7 +3657,7 @@ export async function placeItemOnPallet({ eventId, palletId, itemId, unitId, qty
 }
 
 export async function removeItemFromPallet({ eventId, palletId, itemId, unitId, qty, actor }: PalletItemArgs): Promise<SaveEventResult> {
-  const t = await loadPalletTarget(eventId, palletId, itemId, actor);
+  const t = await loadPalletTarget(eventId, palletId, itemId, actor, { allowClosed: true });
   const item = t.storedItem.payload || {};
   const now = Date.now();
   const set: Record<string, unknown> = {};
@@ -3713,34 +3735,57 @@ export async function setPalletItemPacked({
 const SPENT_KINDS: ReadonlySet<string> = new Set(['consumed', 'sold', 'missing']);
 
 /**
- * Put everything on an event's pallets back in storage (run when the event closes — pallets are per
- * show). Bulk rows are dropped (their qty frees up in storage); consumed/sold/missing qty also comes
- * off stockTotal. Serial units go back to 'storage'; a missing unit stays flagged by the check-in sweep.
+ * Put everything on an event's pallets back in storage (run when the event closes or is deleted —
+ * pallets are per show). Idempotent. Bulk rows are dropped (their qty frees up in storage);
+ * consumed/sold/missing qty also comes off stockTotal. Serial units go back to 'storage'.
  */
 async function releasePalletItems(event: EventPayload): Promise<number> {
   const palletIds = new Set((event.pallets || []).map((p) => p && p.id).filter(Boolean) as string[]);
   if (palletIds.size === 0) return 0;
   const evId = String(event.id);
+  const show = event.name || evId;
   const inv = (await getDb()).collection<InventoryDoc>('inventory');
   const docs = await inv
     .find({ ...NOT_DELETED, $or: [{ 'payload.distribution.palletId': { $in: [...palletIds] } }, { 'payload.units.location': { $in: [...palletIds] } }] })
     .toArray();
   const now = Date.now();
+  const flagAt = new Date(now).toISOString();
+  const flag = (category: 'damage' | 'maintenance' | 'general', note: string): ItemFlag => ({
+    id: 'flag-' + now + '-' + Math.random().toString(36).slice(2, 5),
+    note,
+    severity: category === 'general' ? 'low' : 'high',
+    category,
+    flaggedAt: flagAt,
+    flaggedBy: 'Pallet release',
+    status: 'open',
+  });
   for (const doc of docs) {
     const item = doc.payload || {};
     const set: Record<string, unknown> = { updatedAt: now };
     if (itemIsSerial(item)) {
-      set['payload.units'] = (item.units || []).map((u) =>
-        u && u.location && palletIds.has(u.location) ? { ...u, location: 'storage', state: 'draft' as const, signoff: null, packedBy: null, packedAt: null } : u
-      );
+      // Missing or damaged units come back flagged and out of service, so they can't be loaded again
+      // until someone resolves them.
+      set['payload.units'] = (item.units || []).map((u) => {
+        if (!(u && u.location && palletIds.has(u.location))) return u;
+        const kind = (u.signoff && u.signoff.kind) || '';
+        const back = { ...u, location: 'storage', state: 'draft' as const, signoff: null, packedBy: null, packedAt: null };
+        if (kind === 'missing') return { ...back, status: 'out_of_service' as const, flags: [...(u.flags || []), flag('maintenance', `Signed missing after ${show}`)] };
+        if (kind === 'damaged') return { ...back, flags: [...(u.flags || []), flag('damage', `Returned damaged from ${show}`)] };
+        return back;
+      });
     } else {
       const dist = item.distribution || [];
       const onPallet = (d: DistributionRow) => !d.caseId && d.eventId === evId && !!d.palletId && palletIds.has(d.palletId);
-      const spent = dist.filter((d) => onPallet(d) && SPENT_KINDS.has(rowDispositionKind(d) || '')).reduce((n, d) => n + (d.qty || 0), 0);
+      const qtyOf = (kinds: ReadonlySet<string>) =>
+        dist.filter((d) => onPallet(d) && kinds.has(rowDispositionKind(d) || '')).reduce((n, d) => n + (d.qty || 0), 0);
+      const spent = qtyOf(SPENT_KINDS);
+      const damaged = qtyOf(new Set(['damaged']));
       set['payload.distribution'] = dist.filter((d) => !onPallet(d));
       if (spent > 0 && item.stockTotal != null && String(item.stockTotal) !== '') {
         set['payload.stockTotal'] = Math.max(0, Number(item.stockTotal) - spent);
       }
+      // A note, not a service flag: one damaged line shouldn't take the rest of the stock out of service.
+      if (damaged > 0) set['payload.flags'] = [...(item.flags || []), flag('general', `${damaged} returned damaged from ${show}`)];
     }
     await inv.updateOne({ _id: doc._id, ...NOT_DELETED }, { $set: set });
   }

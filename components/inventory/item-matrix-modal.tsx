@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Printer } from 'lucide-react';
 
 import {
@@ -101,28 +101,6 @@ export function ItemMatrixModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const [size, setSize] = useState<MatrixSize>('two');
-  const [mounted, setMounted] = useState(false);
-  const [dymo, setDymo] = useState<{ available: boolean } | null>(null);
-  useEffect(() => {
-    setMounted(true);
-    const w = window as unknown as { dymoConnect?: { detect: () => Promise<{ available: boolean }> } };
-    if (!w.dymoConnect) {
-      setDymo({ available: false });
-      return;
-    }
-    let cancelled = false;
-    w.dymoConnect
-      .detect()
-      .then((r) => {
-        if (!cancelled) setDymo({ available: !!r?.available });
-      })
-      .catch(() => {
-        if (!cancelled) setDymo({ available: false });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function print() {
     document.body.setAttribute('data-print', 'item-matrix');
@@ -183,13 +161,9 @@ export function ItemMatrixModal({
           ))}
         </div>
 
-        {mounted && dymo ? (
-          <p className="text-xs text-muted-foreground">
-            {dymo.available
-              ? 'Dymo Connect detected — printing uses your browser print dialog.'
-              : 'No Dymo Connect bridge — prints via the browser print dialog at the chosen page size.'}
-          </p>
-        ) : null}
+        <p className="text-xs text-muted-foreground">
+          Prints through your browser&apos;s print dialog. Pick your label printer (e.g. the Dymo) and the label size there.
+        </p>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

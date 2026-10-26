@@ -17,7 +17,7 @@ import { cn } from '@/lib/util/utils';
 // case-matrix-modal.tsx — the CaseMatrixModal / MatrixPrintModal port (the case-label print path). A
 // faithful port of index.html MatrixPrintModal kind:'case' (~L18601): a size picker — 1″ (Matrix
 // only) · 2″ (Matrix + name, the catalog default) · 4×6″ (Shipping) — over the case's Data Matrix,
-// with a Dymo-Connect probe (mount-gated so the navigator/window read never runs during SSR), and a
+// with a print hint (the browser dialog picks the label printer and size), and a
 // Print button that drives window.print() against an off-screen, size-tagged print block.
 //
 // The Data Matrix SVG is encoded SERVER-SIDE (lib/data-matrix is server-only) and threaded in as
@@ -128,7 +128,6 @@ export function CaseMatrixModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const [size, setSize] = useState<MatrixSize>('two');
-  const [mounted, setMounted] = useState(false);
   // Remember the last-chosen label size per device (a lightweight default; no server round-trip).
   useEffect(() => {
     try {
@@ -146,27 +145,6 @@ export function CaseMatrixModal({
       /* ignore */
     }
   }
-  // Dymo-Connect probe is mount-gated (navigator only exists on the client) so the initial SSR
-  // render is deterministic — no hydration mismatch.
-  const [dymo, setDymo] = useState<{ available: boolean } | null>(null);
-  useEffect(() => {
-    setMounted(true);
-    // Probe for the Dymo Connect bridge if present; otherwise report unavailable.
-    const w = window as unknown as { dymoConnect?: { detect: () => Promise<{ available: boolean }> } };
-    if (!w.dymoConnect) {
-      setDymo({ available: false });
-      return;
-    }
-    let cancelled = false;
-    w.dymoConnect.detect().then((r) => {
-      if (!cancelled) setDymo({ available: !!r?.available });
-    }).catch(() => {
-      if (!cancelled) setDymo({ available: false });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function print() {
     document.body.setAttribute('data-print', 'case-matrix');
@@ -233,14 +211,9 @@ export function CaseMatrixModal({
           ))}
         </div>
 
-        {/* Dymo status (mount-gated). */}
-        {mounted && dymo ? (
-          <p className="text-xs text-muted-foreground">
-            {dymo.available
-              ? 'Dymo Connect detected — printing uses your browser print dialog.'
-              : 'No Dymo Connect bridge — prints via the browser print dialog at the chosen page size.'}
-          </p>
-        ) : null}
+        <p className="text-xs text-muted-foreground">
+          Prints through your browser&apos;s print dialog. Pick your label printer (e.g. the Dymo) and the label size there.
+        </p>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { getDb } from '@/lib/db/mongo';
 import {
-  createEvent, saveEvent, placeItemOnPallet, removeItemFromPallet, setPalletItemPacked,
+  createEvent, saveEvent, softDeleteEvent, setEventCases, setCaseSignoff, placeItemOnPallet, removeItemFromPallet, setPalletItemPacked,
   commitEventReady, markEventOnsite, commitEventClosed, signOffItemDisposition,
 } from '@/lib/db/write';
 import { eventCanCommitReady, packingBlockReason, eventCanCommitClosed, buildCheckinSweep } from '@/lib/views/signoff-view';
@@ -20,13 +20,13 @@ const actor = { email: 'admin@test', name: 'Admin', role: 'admin' };
 const role = 'admin';
 
 async function main() {
+  const now = Date.now();
   const db = await getDb();
   assert.match(db.databaseName, /test/, 'refusing to drop a database whose name has no "test" in it');
   await db.dropDatabase();
   const inv = () => db.collection('inventory').find({}).toArray().then((d) => d.map((x: any) => x.payload));
   const ev = async (id: string) => (await db.collection('events').findOne({ _id: id as any }))!.payload as any;
 
-  const now = Date.now();
   await db.collection('inventory').insertMany([
     { _id: 'pla', payload: { id: 'pla', name: 'PLA', kind: 'consumable', tracking: 'bulk', stockTotal: 10, weight: 1, distribution: [], flags: [] }, createdAt: now, updatedAt: now, deletedAt: null },
     { _id: 'c1', payload: { id: 'c1', name: 'Core One+', kind: 'equipment', tracking: 'serial', weight: 20, flags: [], distribution: [],
@@ -104,6 +104,68 @@ async function main() {
   const c1After = items.find((i: any) => i.id === 'c1');
   assert.ok(c1After.units.every((u: any) => u.location === 'storage'));
   assert.equal(itemInStorage(c1After), 2);
+
+  // ── Review regressions ───────────────────────────────────────────────────────────────
+  await db.dropDatabase();
+  await db.collection('inventory').insertMany([
+    { _id: 'c1', payload: { id: 'c1', name: 'Core One+', kind: 'equipment', tracking: 'serial', weight: 20, flags: [], distribution: [],
+      units: [{ id: 'u1', serial: 'SN1', location: 'storage' }, { id: 'u2', serial: 'SN2', location: 'storage', status: 'out_of_service' }, { id: 'u3', serial: 'SN3', location: 'storage' }] },
+      createdAt: now, updatedAt: now, deletedAt: null },
+    { _id: 'pla', payload: { id: 'pla', name: 'PLA', kind: 'consumable', tracking: 'bulk', stockTotal: 10, distribution: [], flags: [] }, createdAt: now, updatedAt: now, deletedAt: null },
+    { _id: 'tool', payload: { id: 'tool', name: 'Wrench', kind: 'tool', tracking: 'bulk', stockTotal: 1, distribution: [], flags: [] }, createdAt: now, updatedAt: now, deletedAt: null },
+  ] as any);
+  await db.collection('cases').insertOne({ _id: 'case1', payload: { id: 'case1', label: 'Case 1' }, createdAt: now, updatedAt: now, deletedAt: null } as any);
+  const mk = async (name: string) => {
+    const r = await createEvent({ patch: { name, pallets: [{ id: 'pallet-' + name, label: name, caseIds: [] }] } as any, actorEmail: actor.email, actorRole: role });
+    await saveEvent({ id: r.id, patch: { state: 'packing' } as any, actorEmail: actor.email, actorRole: role });
+    return r.id;
+  };
+
+  // one unit in repair doesn't block the others; the first-free pick skips it
+  const e2 = await mk('two');
+  await placeItemOnPallet({ eventId: e2, palletId: 'pallet-two', itemId: 'c1', actor });
+  await placeItemOnPallet({ eventId: e2, palletId: 'pallet-two', itemId: 'c1', actor });
+  items = await inv();
+  assert.deepEqual(items.find((i: any) => i.id === 'c1').units.map((u: any) => u.location), ['pallet-two', 'storage', 'pallet-two']);
+  // closing by a plain state edit releases the pallet
+  await saveEvent({ id: e2, patch: { state: 'closed' } as any, actorEmail: actor.email, actorRole: role });
+  items = await inv();
+  assert.ok(items.find((i: any) => i.id === 'c1').units.every((u: any) => u.location === 'storage'));
+
+  // deleting an event releases its pallet
+  const e3 = await mk('three');
+  await placeItemOnPallet({ eventId: e3, palletId: 'pallet-three', itemId: 'pla', qty: 3, actor });
+  await softDeleteEvent({ id: e3, actorEmail: actor.email, actorRole: role });
+  assert.equal(itemInStorage((await inv()).find((i: any) => i.id === 'pla')), 10);
+
+  // a unit signed missing comes back out of service + flagged; damaged comes back flagged
+  const e4 = await mk('four');
+  await placeItemOnPallet({ eventId: e4, palletId: 'pallet-four', itemId: 'c1', unitId: 'u1', actor });
+  await placeItemOnPallet({ eventId: e4, palletId: 'pallet-four', itemId: 'c1', unitId: 'u3', actor });
+  await setPalletItemPacked({ eventId: e4, palletId: 'pallet-four', itemId: 'c1', packed: true, actor });
+  await commitEventReady({ eventId: e4, shipping: { carrier: 'X' }, actor } as any);
+  await markEventOnsite({ eventId: e4, actor });
+  await saveEvent({ id: e4, patch: { state: 'unpacking' } as any, actorEmail: actor.email, actorRole: role });
+  await db.collection('inventory').updateOne({ _id: 'c1' as any }, { $set: { 'payload.units.0.signoff': { kind: 'missing' }, 'payload.units.2.signoff': { kind: 'damaged' } } });
+  await commitEventClosed({ eventId: e4, actor });
+  const units = (await inv()).find((i: any) => i.id === 'c1').units;
+  assert.equal(units[0].status, 'out_of_service');
+  assert.match(units[0].flags.at(-1).note, /missing/);
+  assert.equal(units[2].flags.at(-1).category, 'damage');
+
+  // an older stored pallet id without the prefix still saves; a new one is refused
+  const e5 = await mk('five');
+  await db.collection('events').updateOne({ _id: e5 as any }, { $set: { 'payload.pallets': [{ id: 'legacy1', label: 'Old', caseIds: [] }] } });
+  await saveEvent({ id: e5, patch: { pallets: [{ id: 'legacy1', label: 'Old renamed', caseIds: [] }] } as any, actorEmail: actor.email, actorRole: role });
+  await assert.rejects(saveEvent({ id: e5, patch: { pallets: [{ id: 'legacy1', label: 'Old', caseIds: [] }, { id: 'nope', label: 'x', caseIds: [] }] } as any, actorEmail: actor.email, actorRole: role }), /pallet-/);
+
+  // road-case flow is unchanged: a boxed case ships, an unboxed one blocks
+  const e6 = await mk('six');
+  await setEventCases({ eventId: e6, caseIds: ['case1'], actorEmail: actor.email, actorRole: role } as any);
+  await db.collection('inventory').updateOne({ _id: 'tool' as any }, { $set: { 'payload.distribution': [{ caseId: 'case1', eventId: null, qty: 1, serials: [], state: 'packed' }] } });
+  assert.match(packingBlockReason(await ev(e6), await inv())!, /case.* still need boxing/);
+  await setCaseSignoff({ eventId: e6, caseId: 'case1', boxed: true, actorEmail: actor.email, actorRole: role } as any);
+  assert.equal(eventCanCommitReady(await ev(e6), await inv()), true);
 
   await db.dropDatabase();
   console.log('pallet flow: all checks passed');
