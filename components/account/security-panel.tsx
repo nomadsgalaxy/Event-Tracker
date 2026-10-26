@@ -718,7 +718,15 @@ interface PublicApiKey {
 // the picker shows exactly what a key can be scoped to. ownerCaps (from the server) is the LIVE ceiling
 // — a cap the owner doesn't currently hold is shown disabled. Only editable caps are user-pickable
 // (structural/self-service caps like db.read.session are implied; admin-class caps are off the API).
-const PICKABLE_CAPS = effectiveTable().capabilities.filter((c) => c.editable);
+// db.write.app is structural (not role-editable) but it's the gate every inventory/case/record write
+// route checks, so a key has to be able to opt into it or no key can ever write inventory.
+const PICKABLE_CAPS = effectiveTable()
+  .capabilities.filter((c) => c.editable || c.id === 'db.write.app')
+  .map((c) =>
+    c.id === 'db.write.app'
+      ? { ...c, label: 'General app writes (inventory, cases, records)', group: 'Inventory & tags' }
+      : c
+  );
 const CAP_GROUP_ORDER = ['Events', 'Inventory & tags', 'Personal data (PII)', 'Administration'];
 const CAP_LABEL: Record<string, string> = Object.fromEntries(PICKABLE_CAPS.map((c) => [c.id, c.label]));
 function capSummary(k: PublicApiKey): string {
