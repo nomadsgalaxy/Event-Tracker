@@ -119,7 +119,7 @@ Body (only `name` required):
           contact?: {name, role, email, phone}},
  cases?: [caseId]}
 ```
-`state` must be one of: `draft`, `upcoming`, `packing`, `ready`, `onsite`,
+`state` must be one of: `draft`, `upcoming`, `staff_only` (staff attend, nothing ships), `packing`, `ready`, `onsite`,
 `returning`, `unpacking`, `closed`, `complete`, `cancelled`, `flagged`.
 Returns `{event}` (HTTP 201).
 

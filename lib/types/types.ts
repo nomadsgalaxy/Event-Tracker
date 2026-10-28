@@ -11,6 +11,7 @@ export interface Envelope<P> {
 export type EventState =
   | 'draft'
   | 'upcoming'
+  | 'staff_only'
   | 'packing'
   | 'ready'
   | 'in_transit'

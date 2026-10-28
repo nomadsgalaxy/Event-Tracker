@@ -6,6 +6,7 @@ import { cn } from '@/lib/util/utils';
 const LABELS: Record<string, string> = {
   draft: 'Draft',
   upcoming: 'Upcoming',
+  staff_only: 'Staff only',
   packing: 'Packing',
   ready: 'Ready',
   in_transit: 'In transit',

@@ -18,6 +18,7 @@ import type { EventPayload, Staffer } from '@/lib/types/types';
 export const EVENT_STATES = [
   'draft',
   'upcoming',
+  'staff_only',
   'packing',
   'ready',
   'in_transit',
