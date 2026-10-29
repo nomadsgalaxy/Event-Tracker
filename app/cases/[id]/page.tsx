@@ -22,7 +22,7 @@ import {
   caseLocationLabel,
   caseEffectiveTransit,
   caseInTransit,
-  getCaseScheduleConflicts,
+  getCaseDoubleBookings,
   classifyCaseDelete,
   isCaseRetired,
 } from '@/lib/views/case-view';
@@ -53,7 +53,7 @@ import { PrintMatrixButton } from '../case-matrix-modal';
 // inventory + warehouses + tags from Mongo on every request. Mirrors the Python CaseDetail
 // (index.html ~L14230): the owning-event assignment card, the editable contents/manifest (lib/
 // case-view cross-join), the retired banner, the legacy-slug line, the #66 location chip, the
-// double-booked badge (getCaseScheduleConflicts), the loaded-weight breakdown (#12), the case's own
+// double-booked badge (getCaseDoubleBookings), the loaded-weight breakdown (#12), the case's own
 // Data Matrix tile (+ Print Matrix), the internal manifest print, and "Pack this case". Every
 // edit/print affordance is gated on the live role server-side.
 export const dynamic = 'force-dynamic';
@@ -106,7 +106,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const transitToName = c.transit?.toWarehouseId ? warehouseNameById[c.transit.toWarehouseId] : '';
 
   // Double-booked (committed to ≥2 overlapping events).
-  const conflicts = getCaseScheduleConflicts(id, eventsForView);
+  const conflicts = getCaseDoubleBookings(id, eventsForView);
   const doubleBooked = conflicts.length >= 2;
 
   // FK classification for the Delete/Retire footer.

@@ -20,7 +20,7 @@ import {
   caseLocationLabel,
   caseEffectiveTransit,
   caseInTransit,
-  getCaseScheduleConflicts,
+  getCaseDoubleBookings,
   classifyCaseDelete,
   buildCaseManifestSnapshot,
   isCaseRetired,
@@ -107,7 +107,7 @@ export default async function CatalogPage({
     const manifest = buildCaseManifest(doc._id, inventory);
     const kitFor = Array.isArray(c.kitFor) ? c.kitFor.filter(Boolean) : [];
     const eff = caseEffectiveTransit(c, eventsForAssign);
-    const conflicts = getCaseScheduleConflicts(doc._id, eventsForAssign);
+    const conflicts = getCaseDoubleBookings(doc._id, eventsForAssign);
     return {
       id: doc._id,
       label: c.label || c.slug || doc._id,
