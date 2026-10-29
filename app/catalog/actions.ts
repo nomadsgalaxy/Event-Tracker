@@ -245,8 +245,10 @@ export async function createItemAction(name: string): Promise<CatalogActionState
       tracking: 'bulk',
       flags: [],
       units: [],
-      distribution: [{ caseId: null, qty: 1, serials: [], state: 'pending' }],
-      stockTotal: null,
+      // One unit in storage, no distribution rows: adding it to a case moves that unit out of storage.
+      // (A caseless qty-1 row here stayed behind when the item went into a case and double-counted it.)
+      distribution: [],
+      stockTotal: 1,
       reorderPoint: null,
       storageNotes: '',
       purchasePrice: null,
