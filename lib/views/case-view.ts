@@ -398,6 +398,17 @@ export function getCaseScheduleConflicts(
   return out;
 }
 
+/** The committing events that overlap ANOTHER committing event in time: the real double-bookings.
+ *  Same overlap test as GET /api/v1/conflicts, so a case on today's show and a draft months out
+ *  isn't flagged. Returns [] or ≥2 entries. */
+export function getCaseDoubleBookings(
+  caseId: string,
+  events: { _id: string; payload: EventPayload }[]
+): CaseScheduleConflict[] {
+  const all = getCaseScheduleConflicts(caseId, events);
+  return all.filter((a, i) => all.some((b, j) => i !== j && a.start <= b.end && b.start <= a.end));
+}
+
 // ── Case DELETE / RETIRE classification (FK check) ──────────────────────────────────────────
 // Faithful to caseEventReferences / caseItemReferences / classifyCaseDelete (index.html ~L5571-5609):
 //   - blocked : held by ≥1 NON-closed event (clean up first; cancel-only)
