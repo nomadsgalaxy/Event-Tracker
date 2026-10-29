@@ -76,7 +76,8 @@ export function relevantTimelineEvents(
   return events.filter((s) => {
     if (!s.startDate) return false;
     const end = endOfDayMs(s.endDate || s.startDate);
-    if (end !== null && end < today) return s.state !== 'closed';
+    // staff_only has no cases to bring back, so once it's over it drops off like a closed event
+    if (end !== null && end < today) return s.state !== 'closed' && s.state !== 'staff_only';
     return true;
   });
 }

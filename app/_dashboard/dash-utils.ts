@@ -55,7 +55,7 @@ export function isActive(s: DashEvent): boolean {
   return ACTIVE_STATES.has(s.state);
 }
 export function isUpcoming(s: DashEvent): boolean {
-  return s.state === 'upcoming';
+  return s.state === 'upcoming' || s.state === 'staff_only';
 }
 export function isDraft(s: DashEvent): boolean {
   return s.state === 'draft';

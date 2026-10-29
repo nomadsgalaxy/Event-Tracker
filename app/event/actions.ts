@@ -29,6 +29,7 @@ import type { EventState } from '@/lib/types/types';
 const EVENT_STATES: readonly EventState[] = [
   'draft',
   'upcoming',
+  'staff_only',
   'packing',
   'ready',
   'in_transit',

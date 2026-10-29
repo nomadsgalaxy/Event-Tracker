@@ -317,7 +317,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   // ── filter counts (the sidebar badges) ──────────────────────────────────────────────────
   const isDraft = (s: DashTimelineEvent) => s.state === 'draft';
   const isActive = (s: DashTimelineEvent) => ACTIVE_STATES.has(s.state);
-  const isUpcoming = (s: DashTimelineEvent) => s.state === 'upcoming';
+  const isUpcoming = (s: DashTimelineEvent) => s.state === 'upcoming' || s.state === 'staff_only';
   const isPast = (s: DashTimelineEvent) =>
     s.state === 'closed' || (!!s.endDate && endMs(s.startDate, s.endDate) < today);
 

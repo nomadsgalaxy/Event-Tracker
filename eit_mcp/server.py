@@ -164,7 +164,7 @@ def _compact(d: dict[str, Any]) -> dict[str, Any]:
 
 # Valid event states accepted by the API (used for client-side validation).
 _EVENT_STATES = (
-    "draft", "upcoming", "packing", "ready", "onsite", "returning",
+    "draft", "upcoming", "staff_only", "packing", "ready", "onsite", "returning",
     "unpacking", "closed", "complete", "cancelled", "flagged",
 )
 
@@ -377,7 +377,7 @@ def create_event(
         city: Venue city (stored under venue.city).
         booth: Booth number/label (stored under venue.booth).
         website: Event website URL.
-        state: One of draft|upcoming|packing|ready|onsite|returning|unpacking|
+        state: One of draft|upcoming|staff_only|packing|ready|onsite|returning|unpacking|
             closed|complete|cancelled|flagged. Empty = server default.
         brief: The Event Brief / planning notes (free text, markdown-friendly).
             Shown on the event page — put goals, booth plan, talking points,
