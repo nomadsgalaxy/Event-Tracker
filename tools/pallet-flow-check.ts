@@ -9,8 +9,9 @@ import assert from 'node:assert/strict';
 import { getDb } from '@/lib/db/mongo';
 import {
   createEvent, saveEvent, softDeleteEvent, setEventCases, setCaseSignoff, placeItemOnPallet, removeItemFromPallet, setPalletItemPacked,
-  commitEventReady, markEventOnsite, commitEventClosed, signOffItemDisposition,
+  commitEventReady, markEventOnsite, commitEventClosed, signOffItemDisposition, setRowDisposition, markUnscannedMissing, eventIdForPallet,
 } from '@/lib/db/write';
+import { caseContents, caseEventContext, palletAsScanCase, rowDispositionKind } from '@/lib/views/scan';
 import { eventCanCommitReady, packingBlockReason, eventCanCommitClosed, buildCheckinSweep } from '@/lib/views/signoff-view';
 import { buildEventManifest } from '@/lib/views/manifest-view';
 import { itemInStorage, unitIsOutOfService } from '@/lib/views/inventory-shape';
@@ -233,6 +234,33 @@ async function main() {
   assert.deepEqual(await lossState(), afterClose);
   await softDeleteEvent({ id: e7, actorEmail: actor.email, actorRole: role });
   assert.deepEqual(await lossState(), afterClose);
+
+  // ── Scan-to-pallet: a pallet works as the scan target, packing and returning ─────────────────
+  await db.collection('inventory').insertMany([
+    { _id: 'box', payload: { id: 'box', name: 'Box', kind: 'consumable', tracking: 'bulk', stockTotal: 3, distribution: [], flags: [] }, createdAt: now, updatedAt: now, deletedAt: null },
+    { _id: 'mon', payload: { id: 'mon', name: 'Monitor', kind: 'equipment', tracking: 'serial', flags: [], distribution: [], units: [{ id: 'w1', serial: 'MON1', location: 'storage' }] }, createdAt: now, updatedAt: now, deletedAt: null },
+  ] as any);
+  const e9 = await mk('nine');
+  const lean = async () => (await db.collection('events').find({}).toArray()).map((d: any) => ({ id: d._id, payload: d.payload }));
+  assert.equal(await eventIdForPallet('pallet-nine'), e9);
+  assert.equal(palletAsScanCase('pallet-nine', await lean())?.slug, 'nine');
+  assert.equal(caseEventContext('pallet-nine', await lean()).mode, 'pack');
+  await placeItemOnPallet({ eventId: e9, palletId: 'pallet-nine', itemId: 'box', qty: 1, actor });
+  await placeItemOnPallet({ eventId: e9, palletId: 'pallet-nine', itemId: 'box', qty: 1, actor }); // a second scan merges
+  await placeItemOnPallet({ eventId: e9, palletId: 'pallet-nine', itemId: 'mon', actor });
+  await setPalletItemPacked({ eventId: e9, palletId: 'pallet-nine', itemId: 'box', packed: true, actor });
+  let rows = caseContents('pallet-nine', await inv());
+  assert.deepEqual(rows.map((r) => `${r.itemId}:${r.dist.qty}:${r.dist.state}`).sort(), ['box:2:packed', 'mon:1:pending']);
+  await setPalletItemPacked({ eventId: e9, palletId: 'pallet-nine', itemId: 'mon', packed: true, actor });
+  await commitEventReady({ eventId: e9, shipping: { carrier: 'X' }, actor } as any);
+  await markEventOnsite({ eventId: e9, actor });
+  await saveEvent({ id: e9, patch: { state: 'unpacking' } as any, actorEmail: actor.email, actorRole: role });
+  assert.equal(caseEventContext('pallet-nine', await lean()).mode, 'unpack');
+  await setRowDisposition({ itemId: 'box', caseId: 'pallet-nine', disposition: 'ok', actorRole: role, actor });
+  assert.equal((await markUnscannedMissing({ caseId: 'pallet-nine', actorRole: role, actor })).marked, 1);
+  rows = caseContents('pallet-nine', await inv());
+  assert.deepEqual(rows.map((r) => `${r.itemId}:${rowDispositionKind(r.dist)}`).sort(), ['box:ok', 'mon:missing']);
+  assert.equal(eventCanCommitClosed(await ev(e9), await inv()), true);
 
   await db.dropDatabase();
   console.log('pallet flow: all checks passed');

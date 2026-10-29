@@ -15,6 +15,7 @@ import {
   itemUnits,
   unitIsDeployed,
   isPalletId,
+  rowInTarget,
   type InventoryPayload,
   type DistributionRow,
   type ItemUnit,
@@ -86,7 +87,7 @@ export function caseContents(caseId: string | null, inventory: InventoryPayload[
       });
       continue;
     }
-    const d = (it.distribution || []).find((dr) => dr && dr.caseId === caseId) as ScanDistRow | undefined;
+    const d = (it.distribution || []).find((dr) => rowInTarget(dr, caseId)) as ScanDistRow | undefined;
     if (d) {
       out.push({
         item: it,
@@ -138,7 +139,7 @@ const PACK_STATES: ReadonlySet<string> = new Set(['packing', 'ready', 'in_transi
 const UNPACK_STATES: ReadonlySet<string> = new Set(['returning', 'unpacking']);
 
 /**
- * Resolve the holding event + scan mode for a case. A case held (in cases[]) by an event in a
+ * Resolve the holding event + scan mode for a case (or a pallet, which an event holds the same way). A case held (in cases[]) by an event in a
  * PACK state → { mode:'pack' }; in an UNPACK state → { mode:'unpack' }; otherwise standalone.
  * Mirrors window.caseEventContext. `events` carry their envelope id so callers can navigate/sign-off.
  */
@@ -152,7 +153,7 @@ export function caseEventContext(
     // payload.deletedAt isn't on the EventPayload type (the envelope holds the tombstone) but a peer
     // / the /api path can stamp it inside payload — read it defensively via a local cast.
     if (!p || (p as { deletedAt?: number | null }).deletedAt) continue;
-    if ((p.cases || []).includes(caseId)) {
+    if ((p.cases || []).includes(caseId) || (p.pallets || []).some((pl) => pl && pl.id === caseId)) {
       const st = String(p.state);
       if (PACK_STATES.has(st)) return { event: p, eventId: e.id, isAssigned: true, mode: 'pack' };
       if (UNPACK_STATES.has(st)) return { event: p, eventId: e.id, isAssigned: true, mode: 'unpack' };
@@ -305,3 +306,13 @@ export interface ScanEventLean {
 
 // Re-exports so the client island imports the unit/row types from one place.
 export type { DistributionRow, ItemUnit };
+
+/** A pallet as the scan screen's case-shaped target (pallet ids never collide with case ids). */
+export function palletAsScanCase(id: string | null, events: ScanEventLean[]): ScanCaseLean | null {
+  if (!isPalletId(id)) return null;
+  for (const e of events) {
+    const pl = (e.payload?.pallets || []).find((p) => p && p.id === id);
+    if (pl) return { id: pl.id, slug: pl.label || 'Pallet', label: `${pl.label || 'Pallet'} · ${e.payload.name || e.id}`, zone: '', retired: false };
+  }
+  return null;
+}

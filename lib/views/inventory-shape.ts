@@ -239,6 +239,13 @@ export function isPalletId(id: string | null | undefined): boolean {
   return typeof id === 'string' && id.startsWith('pallet-');
 }
 
+/** Is this bulk row in the scan target: a case's row, or a pallet's caseless row? (Serial units
+ *  match on location either way.) */
+export function rowInTarget(d: DistributionRow | null | undefined, targetId: string): boolean {
+  if (!d) return false;
+  return isPalletId(targetId) ? !d.caseId && d.palletId === targetId : d.caseId === targetId;
+}
+
 export function unitIsDeployed(u: ItemUnit | null | undefined): boolean {
   return !!(u && u.location && u.location !== 'storage');
 }

@@ -14,8 +14,12 @@ import {
   adoptProductCode,
   updateItemTagData,
   packTaggedUnitIntoCase,
+  placeItemOnPallet,
+  setPalletItemPacked,
+  eventIdForPallet,
   WriteForbiddenError,
 } from '@/lib/db/write';
+import { isPalletId } from '@/lib/views/inventory-shape';
 
 // app/scan/actions.ts — the Server Action boundary for the Scan-Pack screen (DESIGN_ALIGNMENT.md
 // §4.4). Every action re-resolves the LIVE directory role via requireRole BEFORE any write (a
@@ -27,6 +31,8 @@ import {
 //   • pack / un-pack / disposition / mark-missing / add-to-case / tag-data → scan.pack (authorized+)
 //   • loose-add                                                            → looseitem.manage (lead+)
 //   • adopt (attach-serial / count-only / product-code)                    → scan.label (lead+)
+//   • pack / add when the scan target is a PALLET                          → pallets.edit (the pallet
+//     helpers' own gate); returns on a pallet use the same disposition path as a case.
 
 function fail(e: unknown): { error: string } {
   if (e instanceof WriteForbiddenError) return { error: e.message };
@@ -51,6 +57,13 @@ export async function packItemAction(_prev: ScanActionState, formData: FormData)
   const user = await requireRole('authorized');
   try {
     const name = await getUserDisplayName(user.email);
+    if (isPalletId(caseId)) {
+      const eventId = await eventIdForPallet(caseId);
+      if (!eventId) return { error: 'That pallet is not on an event.', itemId };
+      await setPalletItemPacked({ eventId, palletId: caseId, itemId, packed, actor: { email: user.email, name, role: user.role } });
+      revalidatePath('/scan');
+      return { ok: true, itemId, state: packed ? 'packed' : 'pending' };
+    }
     const res = await packItemIntoCase({ itemId, caseId, packed, actorRole: user.role, actor: { email: user.email, name } });
     revalidatePath('/scan');
     return { ok: true, itemId, state: res.state };
@@ -67,6 +80,16 @@ export async function addToCaseAction(input: { itemId: string; caseId: string; a
   const user = await requireRole('authorized');
   try {
     const name = await getUserDisplayName(user.email);
+    if (isPalletId(caseId)) {
+      // One more on the pallet: bulk merges into its open line, serial takes the next free unit.
+      const eventId = await eventIdForPallet(caseId);
+      if (!eventId) return { error: 'That pallet is not on an event.', itemId };
+      const actor = { email: user.email, name, role: user.role };
+      await placeItemOnPallet({ eventId, palletId: caseId, itemId, qty: 1, actor });
+      if (input.alsoPack) await setPalletItemPacked({ eventId, palletId: caseId, itemId, packed: true, actor });
+      revalidatePath('/scan');
+      return { ok: true, itemId, state: input.alsoPack ? 'packed' : 'pending' };
+    }
     const res = await addItemToCase({ itemId, caseId, alsoPack: !!input.alsoPack, actorRole: user.role, actor: { email: user.email, name } });
     revalidatePath('/scan');
     return { ok: true, itemId, state: res.state };

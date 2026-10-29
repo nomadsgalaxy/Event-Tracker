@@ -14,6 +14,7 @@ import { decodeScanPayload, findInventoryByScan } from '@/lib/views/case-view';
 import {
   caseContents,
   caseEventContext,
+  palletAsScanCase,
   dispositionCounts,
   itemCurrentOrLastCase,
   rowDispositionKind,
@@ -103,12 +104,13 @@ export function ScanScreen({
   // ── Deep-link: seed the active case from /scan/pack/<caseId> (UUID or slug), once. ─────────────
   useEffect(() => {
     if (!routeCaseId || activeCaseId) return;
-    const found = cases.find((c) => c.id === routeCaseId || c.slug === routeCaseId);
+    const found = cases.find((c) => c.id === routeCaseId || c.slug === routeCaseId) ?? palletAsScanCase(routeCaseId, events);
     if (found) setActiveCaseId(found.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeCaseId, cases.length]);
 
-  const activeCase = activeCaseId ? cases.find((c) => c.id === activeCaseId) ?? null : null;
+  // A pallet opens the same way as a case (picker or /scan/pack/<palletId>); its rows are the pallet's lines.
+  const activeCase = activeCaseId ? cases.find((c) => c.id === activeCaseId) ?? palletAsScanCase(activeCaseId, events) : null;
   const ctx = useMemo(() => caseEventContext(activeCaseId, events), [activeCaseId, events]);
   const isUnpackMode = ctx.mode === 'unpack';
 
@@ -784,6 +786,10 @@ export function ScanScreen({
           onCreateNew={() => {
             if (!unknown) return;
             setUnknown(null);
+            if (isPalletId(activeCaseId)) {
+              toast.info('Create the item in the catalog first, then scan it onto the pallet.');
+              return;
+            }
             if (activeCaseId) window.location.href = '/cases/' + activeCaseId + '?newItemQr=' + encodeURIComponent(unknown.text);
           }}
         />
@@ -813,7 +819,7 @@ export function ScanScreen({
           setActiveCaseId(caseId);
           setPending(null);
           setUnknown(null);
-          const c = cases.find((x) => x.id === caseId);
+          const c = cases.find((x) => x.id === caseId) ?? palletAsScanCase(caseId, events);
           if (c) toast.success(`Opened ${c.label || c.slug || c.id}`);
         }}
       />

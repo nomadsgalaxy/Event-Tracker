@@ -8,7 +8,7 @@ import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { resolveLiveRole } from '@/lib/auth/auth';
 import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry, EventBol, PalletReturnRecord } from '@/lib/types/types';
 import type { InventoryDoc, InventoryPayload, DistributionRow, ItemUnit, ItemFlag, SkuOption, KitRequirement } from '@/lib/views/inventory-shape';
-import { addFlag as buildAddFlag, isPalletId, itemHasOpenServiceFlag, itemInStorage, itemIsOutOfService, itemIsSerial, rowDispositionKind, unitIsOutOfService } from '@/lib/views/inventory-shape';
+import { addFlag as buildAddFlag, isPalletId, rowInTarget, itemHasOpenServiceFlag, itemInStorage, itemIsOutOfService, itemIsSerial, rowDispositionKind, unitIsOutOfService } from '@/lib/views/inventory-shape';
 import { buildManifestSnapshot, buildCheckinSweep, type SnapshotCaseLite } from '@/lib/views/signoff-view';
 import type { TagDoc, TagPayload, RoadKitDoc, RoadKitPayload } from '@/lib/db/data';
 
@@ -1913,8 +1913,15 @@ async function holdingEventForCase(caseId: string): Promise<{ id: string; payloa
   for (const e of events) {
     if (!HELD_PACK_STATES.has(String(e.payload.state))) continue;
     if ((e.payload.cases || []).includes(cId)) return { id: e._id, payload: e.payload };
+    if ((e.payload.pallets || []).some((p) => p && p.id === cId)) return { id: e._id, payload: e.payload };
   }
   return null;
+}
+
+/** The (non-deleted) event a pallet belongs to. Pallets are per show, so there's exactly one. */
+export async function eventIdForPallet(palletId: string): Promise<string | null> {
+  const ev = await (await getDb()).collection<EventDoc>('events').findOne({ ...NOT_DELETED, 'payload.pallets.id': String(palletId) });
+  return ev ? ev._id : null;
 }
 
 // ─── Scan-pack: ADD an item to the active case (+ optionally mark packed) ───────────────────────
@@ -2092,7 +2099,7 @@ export async function setRowDisposition({ itemId, caseId, disposition, actorRole
     );
   } else {
     const dist = Array.isArray(item.distribution) ? item.distribution : [];
-    const idx = dist.findIndex((d) => d && d.caseId === cId);
+    const idx = dist.findIndex((d) => rowInTarget(d, cId));
     if (idx === -1) throw new Error('That item is not routed into this case.');
     set['payload.distribution'] = dist.map((d, i) => {
       if (i !== idx) return d;
@@ -2160,7 +2167,7 @@ export async function markUnscannedMissing({ caseId, actorRole, actor }: MarkMis
       );
     } else {
       const dist = Array.isArray(item.distribution) ? item.distribution : [];
-      const idx = dist.findIndex((d) => d && d.caseId === cId);
+      const idx = dist.findIndex((d) => rowInTarget(d, cId));
       if (idx === -1) continue;
       const row = dist[idx] as Record<string, unknown>;
       const hasDisp = !!(row.signoff && (row.signoff as Record<string, unknown>).kind) || !!row.returnDisposition;

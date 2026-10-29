@@ -5,12 +5,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn } from '@/lib/util/utils';
-import type { ScanCaseLean, ScanEventLean } from '@/lib/views/scan';
+import { palletAsScanCase, type ScanCaseLean, type ScanEventLean } from '@/lib/views/scan';
 
 // app/scan/event-case-picker.tsx — the manual case picker. Faithful port of index.html
 // EventCasePicker (~L17411): a three-tab full-screen picker — Packing / Returning / Unassigned —
 // with PER-TAB COUNTS, PER-EVENT grouping (each event header + its held cases), and a per-tab empty
 // message. Packing groups events in packing/ready/in_transit/onsite; Returning groups
+// (each event lists its pallets after its cases; a pallet opens like a case)
 // returning/unpacking; Unassigned lists every live, non-retired case held by NO in-flight event.
 // Tapping a case fires onPick(caseId) and closes.
 
@@ -34,8 +35,8 @@ export function EventCasePicker({
 
   const groups = useMemo(() => {
     const caseById = new Map(cases.map((c) => [c.id, c]));
-    const packing: { event: ScanEventLean; cases: ScanCaseLean[] }[] = [];
-    const returning: { event: ScanEventLean; cases: ScanCaseLean[] }[] = [];
+    const packing: { event: ScanEventLean; cases: ScanCaseLean[]; pallets: ScanCaseLean[] }[] = [];
+    const returning: { event: ScanEventLean; cases: ScanCaseLean[]; pallets: ScanCaseLean[] }[] = [];
     const heldCaseIds = new Set<string>();
     for (const e of events) {
       const p = e.payload;
@@ -45,7 +46,8 @@ export function EventCasePicker({
       const inUnpack = UNPACK_STATES.includes(st);
       if (inPack || inUnpack) {
         const cs = (p.cases || []).map((cid) => caseById.get(cid)).filter((c): c is ScanCaseLean => !!c);
-        const entry = { event: e, cases: cs };
+        const pallets = (p.pallets || []).map((pl) => palletAsScanCase(pl?.id, [e])).filter((c): c is ScanCaseLean => !!c);
+        const entry = { event: e, cases: cs, pallets };
         if (inPack) packing.push(entry);
         else returning.push(entry);
         for (const cid of p.cases || []) heldCaseIds.add(cid);
@@ -57,8 +59,8 @@ export function EventCasePicker({
   }, [events, cases]);
 
   const tabs = [
-    { k: 'packing' as const, l: 'Packing', n: groups.packing.reduce((a, e) => a + e.cases.length, 0) },
-    { k: 'returning' as const, l: 'Returning', n: groups.returning.reduce((a, e) => a + e.cases.length, 0) },
+    { k: 'packing' as const, l: 'Packing', n: groups.packing.reduce((a, e) => a + e.cases.length + e.pallets.length, 0) },
+    { k: 'returning' as const, l: 'Returning', n: groups.returning.reduce((a, e) => a + e.cases.length + e.pallets.length, 0) },
     { k: 'unassigned' as const, l: 'Unassigned', n: groups.unassigned.length },
   ];
 
@@ -71,9 +73,9 @@ export function EventCasePicker({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[90dvh] gap-0 p-0">
         <SheetHeader className="border-b border-border">
-          <SheetTitle>Open a case</SheetTitle>
+          <SheetTitle>Open a case or pallet</SheetTitle>
           <SheetDescription className="sr-only">
-            Pick a road case to pack into, grouped by Packing, Returning, or Unassigned.
+            Pick a road case or pallet to pack into, grouped by Packing, Returning, or Unassigned.
           </SheetDescription>
           <div className="mt-2 flex gap-1">
             {tabs.map((t) => {
@@ -112,9 +114,14 @@ export function EventCasePicker({
                 </span>
                 {g.event.payload.state ? <StatusBadge state={g.event.payload.state} /> : null}
               </div>
-              {g.cases.length === 0 && <p className="px-2 py-1.5 text-[11px] text-muted-foreground">No cases on this event.</p>}
+              {g.cases.length + g.pallets.length === 0 && (
+                <p className="px-2 py-1.5 text-[11px] text-muted-foreground">No cases or pallets on this event.</p>
+              )}
               {g.cases.map((c) => (
                 <CaseRow key={c.id} c={c} onPick={pick} />
+              ))}
+              {g.pallets.map((c) => (
+                <CaseRow key={c.id} c={{ ...c, label: c.slug, slug: 'Pallet' }} onPick={pick} />
               ))}
             </div>
           ))}
