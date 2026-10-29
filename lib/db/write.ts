@@ -6,7 +6,7 @@ import { can, VALID_ROLES, rankOf, canGrantRole } from '@/lib/auth/rbac';
 import { dispatchOutbound } from '@/lib/integrations/outbound';
 import { viewerLeadsEvent } from '@/lib/views/event-view';
 import { resolveLiveRole } from '@/lib/auth/auth';
-import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry, EventBol } from '@/lib/types/types';
+import type { EventPayload, EventDoc, CasePayload, CaseDoc, CaseSize, UserDoc, Role, CaseSignoff, EventAuditEntry, EventBol, PalletReturnRecord } from '@/lib/types/types';
 import type { InventoryDoc, InventoryPayload, DistributionRow, ItemUnit, ItemFlag, SkuOption, KitRequirement } from '@/lib/views/inventory-shape';
 import { addFlag as buildAddFlag, isPalletId, itemHasOpenServiceFlag, itemInStorage, itemIsOutOfService, itemIsSerial, rowDispositionKind, unitIsOutOfService } from '@/lib/views/inventory-shape';
 import { buildManifestSnapshot, buildCheckinSweep, type SnapshotCaseLite } from '@/lib/views/signoff-view';
@@ -3737,7 +3737,11 @@ const SPENT_KINDS: ReadonlySet<string> = new Set(['consumed', 'sold', 'missing']
 /**
  * Put everything on an event's pallets back in storage (run when the event closes or is deleted —
  * pallets are per show). Idempotent. Bulk rows are dropped (their qty frees up in storage);
- * consumed/sold/missing qty also comes off stockTotal. Serial units go back to 'storage'.
+ * consumed/sold/missing/damaged qty also comes off stockTotal. Serial units go back to 'storage'
+ * (missing ones out of service, damaged ones flagged, so neither can be loaded again).
+ * Anything signed missing/damaged/consumed/sold is appended to event.palletReturns first, since the
+ * rows that carried it are gone afterwards (the shrinkage report reads it). A second run finds no
+ * pallet rows left, so it can't record twice.
  */
 async function releasePalletItems(event: EventPayload): Promise<number> {
   const palletIds = new Set((event.pallets || []).map((p) => p && p.id).filter(Boolean) as string[]);
@@ -3749,6 +3753,9 @@ async function releasePalletItems(event: EventPayload): Promise<number> {
     .find({ ...NOT_DELETED, $or: [{ 'payload.distribution.palletId': { $in: [...palletIds] } }, { 'payload.units.location': { $in: [...palletIds] } }] })
     .toArray();
   const now = Date.now();
+  const returns: PalletReturnRecord[] = [];
+  const isLoss = (k: string | null | undefined): k is PalletReturnRecord['kind'] =>
+    k === 'missing' || k === 'damaged' || k === 'consumed' || k === 'sold';
   const flagAt = new Date(now).toISOString();
   const flag = (category: 'damage' | 'maintenance' | 'general', note: string): ItemFlag => ({
     id: 'flag-' + now + '-' + Math.random().toString(36).slice(2, 5),
@@ -3768,6 +3775,9 @@ async function releasePalletItems(event: EventPayload): Promise<number> {
       set['payload.units'] = (item.units || []).map((u) => {
         if (!(u && u.location && palletIds.has(u.location))) return u;
         const kind = (u.signoff && u.signoff.kind) || '';
+        if (isLoss(kind)) {
+          returns.push({ itemId: doc._id, itemName: item.name || doc._id, unitId: u.id, serial: u.serial || '', palletId: u.location, qty: 1, kind, at: now });
+        }
         const back = { ...u, location: 'storage', state: 'draft' as const, signoff: null, packedBy: null, packedAt: null };
         if (kind === 'missing') return { ...back, status: 'out_of_service' as const, flags: [...(u.flags || []), flag('maintenance', `Signed missing after ${show}`)] };
         if (kind === 'damaged') return { ...back, flags: [...(u.flags || []), flag('damage', `Returned damaged from ${show}`)] };
@@ -3778,16 +3788,28 @@ async function releasePalletItems(event: EventPayload): Promise<number> {
       const onPallet = (d: DistributionRow) => !d.caseId && d.eventId === evId && !!d.palletId && palletIds.has(d.palletId);
       const qtyOf = (kinds: ReadonlySet<string>) =>
         dist.filter((d) => onPallet(d) && kinds.has(rowDispositionKind(d) || '')).reduce((n, d) => n + (d.qty || 0), 0);
+      for (const d of dist) {
+        const kind = onPallet(d) ? rowDispositionKind(d) : null;
+        if (isLoss(kind) && d.qty) {
+          returns.push({ itemId: doc._id, itemName: item.name || doc._id, palletId: String(d.palletId), qty: d.qty, kind, at: now });
+        }
+      }
       const spent = qtyOf(SPENT_KINDS);
       const damaged = qtyOf(new Set(['damaged']));
       set['payload.distribution'] = dist.filter((d) => !onPallet(d));
-      if (spent > 0 && item.stockTotal != null && String(item.stockTotal) !== '') {
-        set['payload.stockTotal'] = Math.max(0, Number(item.stockTotal) - spent);
+      // Damaged qty comes off stock too, so it can't be loaded onto the next show as good stock.
+      if (spent + damaged > 0 && item.stockTotal != null && String(item.stockTotal) !== '') {
+        set['payload.stockTotal'] = Math.max(0, Number(item.stockTotal) - spent - damaged);
       }
       // A note, not a service flag: one damaged line shouldn't take the rest of the stock out of service.
-      if (damaged > 0) set['payload.flags'] = [...(item.flags || []), flag('general', `${damaged} returned damaged from ${show}`)];
+      if (damaged > 0) {
+        set['payload.flags'] = [...(item.flags || []), flag('general', `${damaged} returned damaged from ${show}, taken off stock. Add them back once repaired.`)];
+      }
     }
     await inv.updateOne({ _id: doc._id, ...NOT_DELETED }, { $set: set });
+  }
+  if (returns.length) {
+    await (await getDb()).collection<EventDoc>('events').updateOne({ _id: evId }, { $push: { 'payload.palletReturns': { $each: returns } } });
   }
   return docs.length;
 }

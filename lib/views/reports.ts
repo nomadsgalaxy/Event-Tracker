@@ -325,6 +325,18 @@ export function buildConditionReport(items: ItemEntry[], events: EventEntry[]): 
     }
   };
 
+  // Pallet lines are released when their event closes, so their damaged/missing history lives on
+  // event.palletReturns instead of the item rows.
+  const palletLoss = new Map<string, { damaged: number; missing: number }>();
+  for (const { payload: e } of events) {
+    for (const r of e.palletReturns ?? []) {
+      if (r.kind !== 'damaged' && r.kind !== 'missing') continue;
+      const t = palletLoss.get(r.itemId) ?? { damaged: 0, missing: 0 };
+      t[r.kind] += Number(r.qty) || 0;
+      palletLoss.set(r.itemId, t);
+    }
+  }
+
   // Damage/loss per item: open flags + return dispositions signed damaged/missing across rows/units.
   const perItem: DamageRow[] = [];
   for (const { id, payload: it } of items) {
@@ -350,6 +362,8 @@ export function buildConditionReport(items: ItemEntry[], events: EventEntry[]): 
         if (k === 'missing' || k === 'returned_missing') missing += q;
       }
     }
+    damaged += palletLoss.get(id)?.damaged ?? 0;
+    missing += palletLoss.get(id)?.missing ?? 0;
     const incidents = openCount + damaged + missing;
     if (incidents > 0) {
       perItem.push({ name: itemName(id, it), kind: String(itemKind(it)), openFlags: openCount, damaged, missing, incidents });
@@ -373,9 +387,19 @@ export function buildConditionReport(items: ItemEntry[], events: EventEntry[]): 
     const p = it.replacementCost ?? it.purchasePrice;
     return p != null && Number.isFinite(Number(p)) ? Number(p) : 0;
   };
+  const itemById = new Map(items.map((x) => [x.id, x.payload]));
   for (const { id: eventId, payload: e } of closed) {
     const eventCases = new Set(e.cases ?? []);
     const eventName = e.name || eventId;
+    for (const r of e.palletReturns ?? []) {
+      if (r.kind !== 'missing') continue;
+      const it = itemById.get(r.itemId);
+      const qty = Number(r.qty) || 0;
+      const price = it ? unitLossPrice(it) : 0;
+      shrinkUnits += qty;
+      shrinkDollars += qty * price;
+      shrink.push({ itemName: it ? itemName(r.itemId, it) : r.itemName, qty, eventName, reason: 'Signed missing (pallet)', dollarsLost: qty * price });
+    }
     for (const { id, payload: it } of items) {
       const price = unitLossPrice(it);
       if (it.tracking === 'serial') {

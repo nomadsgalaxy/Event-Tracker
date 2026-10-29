@@ -172,6 +172,17 @@ export interface SideEvent {
 // Mirrors window.eventPallets shape (index.html ~L5458): { id, label, caseIds[], tracking, notes }.
 // Items ride a pallet directly too (no case): a bulk loose row carries palletId, a serial unit's
 // location is the palletId. Pallet ids always start with 'pallet-' so they never collide with a caseId.
+export interface PalletReturnRecord {
+  itemId: string;
+  itemName: string;
+  unitId?: string;
+  serial?: string;
+  palletId: string;
+  qty: number;
+  kind: 'missing' | 'damaged' | 'consumed' | 'sold';
+  at: number;
+}
+
 export interface EventPallet {
   id: string;
   label?: string;
@@ -433,6 +444,9 @@ export interface EventPayload {
   // The shipping-pallet overlay grouping the event's cases (read-only Pallets view on the Packing
   // tab). Written by the editor's PalletEditor via the pure pallet helpers.
   pallets?: EventPallet[];
+  // What came back off this show's pallets as missing/damaged/consumed/sold, recorded when the pallet
+  // rows were released (close or delete). The rows themselves are gone after that, so reports read this.
+  palletReturns?: PalletReturnRecord[];
   // Booth setup / teardown windows (datetime-local ranges) — drive the Calendar's hour-grid blocks
   // (Week) + logistics segment chips (Month). Present on the live seed events; optional on drafts.
   setup?: SetupWindow;

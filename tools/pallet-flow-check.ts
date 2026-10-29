@@ -13,7 +13,8 @@ import {
 } from '@/lib/db/write';
 import { eventCanCommitReady, packingBlockReason, eventCanCommitClosed, buildCheckinSweep } from '@/lib/views/signoff-view';
 import { buildEventManifest } from '@/lib/views/manifest-view';
-import { itemInStorage } from '@/lib/views/inventory-shape';
+import { itemInStorage, unitIsOutOfService } from '@/lib/views/inventory-shape';
+import { buildConditionReport } from '@/lib/views/reports';
 import { palletWeightKg } from '@/lib/views/event-readiness';
 
 const actor = { email: 'admin@test', name: 'Admin', role: 'admin' };
@@ -166,6 +167,72 @@ async function main() {
   assert.match(packingBlockReason(await ev(e6), await inv())!, /case.* still need boxing/);
   await setCaseSignoff({ eventId: e6, caseId: 'case1', boxed: true, actorEmail: actor.email, actorRole: role } as any);
   assert.equal(eventCanCommitReady(await ev(e6), await inv()), true);
+
+  // ── Pallet losses survive close (board topic 126, Nula's check) ────────────────────────────
+  // One show comes back with a returned, a damaged and a missing line (bulk and serial). Closing
+  // releases the pallet rows, so the loss history has to live on event.palletReturns.
+  await db.collection('inventory').insertMany([
+    { _id: 'cam', payload: { id: 'cam', name: 'Camera', kind: 'equipment', tracking: 'serial', flags: [], distribution: [], replacementCost: 300,
+      units: [{ id: 'v1', serial: 'CAM1', location: 'storage' }, { id: 'v2', serial: 'CAM2', location: 'storage' }, { id: 'v3', serial: 'CAM3', location: 'storage' }] },
+      createdAt: now, updatedAt: now, deletedAt: null },
+    { _id: 'tape', payload: { id: 'tape', name: 'Tape gun', kind: 'tool', tracking: 'bulk', stockTotal: 5, distribution: [], flags: [] }, createdAt: now, updatedAt: now, deletedAt: null },
+    { _id: 'cord', payload: { id: 'cord', name: 'Cord', kind: 'cable', tracking: 'bulk', stockTotal: 4, distribution: [], flags: [], purchasePrice: 10 }, createdAt: now, updatedAt: now, deletedAt: null },
+    { _id: 'mat', payload: { id: 'mat', name: 'Floor mat', kind: 'fixture', tracking: 'bulk', stockTotal: 3, distribution: [], flags: [] }, createdAt: now, updatedAt: now, deletedAt: null },
+  ] as any);
+  const e7 = await mk('seven');
+  for (const unitId of ['v1', 'v2', 'v3']) await placeItemOnPallet({ eventId: e7, palletId: 'pallet-seven', itemId: 'cam', unitId, actor });
+  await placeItemOnPallet({ eventId: e7, palletId: 'pallet-seven', itemId: 'tape', qty: 2, actor });
+  await placeItemOnPallet({ eventId: e7, palletId: 'pallet-seven', itemId: 'cord', qty: 3, actor });
+  await placeItemOnPallet({ eventId: e7, palletId: 'pallet-seven', itemId: 'mat', qty: 2, actor });
+  for (const itemId of ['cam', 'tape', 'cord', 'mat']) await setPalletItemPacked({ eventId: e7, palletId: 'pallet-seven', itemId, packed: true, actor });
+  await commitEventReady({ eventId: e7, shipping: { carrier: 'X' }, actor } as any);
+  await markEventOnsite({ eventId: e7, actor });
+  await saveEvent({ id: e7, patch: { state: 'unpacking' } as any, actorEmail: actor.email, actorRole: role });
+  await signOffItemDisposition({ eventId: e7, itemId: 'tape', caseId: 'pallet-seven', kind: 'ok', actor });
+  await signOffItemDisposition({ eventId: e7, itemId: 'cord', caseId: 'pallet-seven', kind: 'missing', actor });
+  await signOffItemDisposition({ eventId: e7, itemId: 'mat', caseId: 'pallet-seven', kind: 'damaged', actor });
+  await db.collection('inventory').updateOne({ _id: 'cam' as any }, { $set: { 'payload.units.0.signoff': { kind: 'ok' }, 'payload.units.1.signoff': { kind: 'damaged' }, 'payload.units.2.signoff': { kind: 'missing' } } });
+  await commitEventClosed({ eventId: e7, actor });
+
+  const lossState = async () => {
+    const all = await inv();
+    const by = (id: string) => all.find((i: any) => i.id === id);
+    return {
+      tape: itemInStorage(by('tape')),
+      cord: [by('cord').stockTotal, itemInStorage(by('cord'))],
+      mat: [by('mat').stockTotal, itemInStorage(by('mat'))],
+      cam: by('cam').units.map((u: any) => [u.location, unitIsOutOfService(u)]),
+      returns: ((await ev(e7)).palletReturns ?? []).map((r: any) => `${r.itemId}:${r.unitId ?? ''}:${r.kind}:${r.qty}`).sort(),
+    };
+  };
+  const afterClose = await lossState();
+  assert.equal(afterClose.tape, 5, 'returned bulk is available once');
+  assert.deepEqual(afterClose.cord, [1, 1], 'missing bulk comes off stock');
+  assert.deepEqual(afterClose.mat, [1, 1], 'damaged bulk comes off stock, not back as good stock');
+  assert.deepEqual(afterClose.cam, [['storage', false], ['storage', true], ['storage', true]], 'damaged + missing units stay unavailable');
+  assert.deepEqual(afterClose.returns, ['cam:v2:damaged:1', 'cam:v3:missing:1', 'cord::missing:3', 'mat::damaged:2']);
+  await assert.rejects(placeItemOnPallet({ eventId: await mk('eight'), palletId: 'pallet-eight', itemId: 'cam', unitId: 'v2', actor }), /out of service/);
+
+  // the report still sees the losses after the rows are gone
+  const evDocs = (await db.collection('events').find({}).toArray()).map((d: any) => ({ id: d._id, payload: d.payload }));
+  const itemDocs = (await inv()).map((p: any) => ({ id: p.id, payload: p }));
+  const report = buildConditionReport(itemDocs as any, evDocs as any);
+  const seven = report.shrink.filter((r) => r.eventName === 'seven');
+  assert.deepEqual(seven.map((r) => `${r.itemName}:${r.qty}`).sort(), ['Camera:1', 'Cord:3']);
+  assert.equal(seven.reduce((n, r) => n + r.dollarsLost, 0), 300 + 3 * 10);
+  const camRow = report.perItem.find((r) => r.name === 'Camera')!;
+  assert.equal(camRow.damaged, 1);
+  assert.equal(camRow.missing, 1);
+  assert.equal(report.perItem.find((r) => r.name === 'Floor mat')!.damaged, 2);
+
+  // closing again, reopening and closing, or deleting changes nothing and records nothing twice
+  await saveEvent({ id: e7, patch: { state: 'closed' } as any, actorEmail: actor.email, actorRole: role });
+  assert.deepEqual(await lossState(), afterClose);
+  await saveEvent({ id: e7, patch: { state: 'unpacking' } as any, actorEmail: actor.email, actorRole: role });
+  await saveEvent({ id: e7, patch: { state: 'closed' } as any, actorEmail: actor.email, actorRole: role });
+  assert.deepEqual(await lossState(), afterClose);
+  await softDeleteEvent({ id: e7, actorEmail: actor.email, actorRole: role });
+  assert.deepEqual(await lossState(), afterClose);
 
   await db.dropDatabase();
   console.log('pallet flow: all checks passed');
